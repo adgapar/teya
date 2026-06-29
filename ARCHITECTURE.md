@@ -101,6 +101,10 @@ wake word → "call Dad"
   → big on-screen End button (or programmatic end) → call ends
 ```
 
+### Safety: a contacts allowlist, not open dialing
+
+The agent places calls **only** to entries on an approved family contacts list. A spoken name ("call Dad") is resolved against that allowlist; anything not on it is refused. This *is* the security model for the feature — a child can reach the people they're allowed to and no one else, with no path to dialing arbitrary, premium, or unknown numbers. The allowlist lives on-device alongside the rest of family memory (§5) and is editable only by a parent/admin.
+
 ### Two details to design for (both easy)
 
 - **Permissions / role.** `CALL_PHONE`, `ANSWER_PHONE_CALLS`, plus the user grants the default-dialer role once at setup. Fine for a dedicated home device.

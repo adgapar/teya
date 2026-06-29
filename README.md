@@ -103,6 +103,12 @@ The face and personality should be **gender neutral** — calm, warm, wise, belo
 - Personalised bedtime stories with favourite characters
 - Screen time management and enforcement
 
+### Calling & staying in touch
+- "Call Dad", "Call Grandma" — the agent places a normal phone call to anyone on the family contacts list, completely hands-free. Especially valuable for young kids who can't (or shouldn't) navigate a dialer themselves.
+- Answering calls hands-free and putting them on speaker, so the wall device doubles as the family phone.
+
+> **Safety by design:** the agent can only call people on an approved family **contacts allowlist**. A spoken name ("call Dad") is matched against that list, and anything not on it is refused — there is no path to dialing an unknown, arbitrary, or premium number. A child can reach exactly the people they're allowed to, and no one else. The allowlist *is* the security model.
+
 ### Scheduling
 - "When is everyone free this weekend?" — checks all calendars, gives a real answer
 - Booking appointments that don't clash with school
