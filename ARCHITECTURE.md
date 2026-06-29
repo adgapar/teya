@@ -1,6 +1,6 @@
 # Architecture & Build Approach
 
-> *How we actually build the family agent described in [project-report.md](./project-report.md).*
+> *How we actually build the family agent described in the [README](./README.md).*
 
 This document records the core architectural decisions and the reasoning behind them. It is a decision record, not a spec — it explains *why* we're building it this way so future choices stay consistent.
 

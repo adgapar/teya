@@ -1,6 +1,13 @@
-# [TBD] — Project Vision & Design Report
+# teya
 
-> *A family agent harness for the home, built on Android*
+> *A family agent for the home — a warm, intelligent presence that listens, understands, remembers, and does. Built on a spare Android phone.*
+
+**Status:** Vision & design stage (June 2026). Product and harness names are still TBD; `teya` is the working repo name.
+
+### Documents
+
+- **This file** — the vision: the problem, the product, and why now.
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** — how we build it: the technical decisions and the reasoning behind them.
 
 ---
 
@@ -71,7 +78,7 @@ An animated face on the phone screen changes the relationship with the device en
   - *Alerting* — colour change, expression shift
   - *Happy to help* vs *uncertain*
 
-The face is literally a light source — warm, ambient, always present. This is both a design principle and a naming inspiration (see Section 7).
+The face is literally a light source — warm, ambient, always present. This is both a design principle and a possible naming inspiration.
 
 ### Gender
 
