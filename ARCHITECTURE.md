@@ -30,6 +30,13 @@ Rationale:
 - It matches the project's instinct that a cloud-hosted agent is undesirable: family data and device control stay local by default.
 - It is genuinely *simpler*. No server to deploy, secure, or pay for to get a working v1.
 
+### Foreground Service Management (Android 14+)
+To ensure the harness isn't killed by the OS, it runs as a persistent Foreground Service. For Android 14 (API 34) and higher, we declare specific service types:
+- `microphone`: For wake-word detection and STT.
+- `phoneCall`: For managing telephony via the `InCallService`.
+- `connectedDevice`: For Bluetooth/Matter/USB-OTG actuators.
+- `specialUse`: For the core agent loop (with a detailed explanation for Play Store review).
+
 The only mandatory cloud dependency is the **brain** (the LLM API). Everything else can be local.
 
 ### When a thin backend becomes worth it (post-v1, optional)
@@ -100,6 +107,12 @@ wake word → "call Dad"
   → humans talk
   → big on-screen End button (or programmatic end) → call ends
 ```
+
+### Tool Use Protocol
+The Brain (LLM) triggers actions via a structured Tool Use (Function Calling) protocol.
+1. **Schema Definition**: The Harness provides the Brain with a set of JSON schemas for available tools (e.g., `place_call(contact_id)`, `send_message(text, contact_id)`, `toggle_light(room, state)`).
+2. **Intent Execution**: When the Brain responds with a tool call, the Harness validates the parameters against the safety allowlist and local state before passing it to the relevant Actuator.
+3. **Feedback Loop**: The result of the Actuator's action (success/error) is fed back to the Brain as a tool response, allowing the agent to confirm or troubleshoot.
 
 ### Safety: a contacts allowlist, not open dialing
 
