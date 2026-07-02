@@ -1,17 +1,17 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.ksp)
 }
 
 android {
     namespace = "com.teya.agent"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.teya.agent"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
@@ -31,11 +31,8 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
-    kotlinOptions {
-        jvmTarget = "1.8"
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
         compose = true
@@ -58,9 +55,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
-    annotationProcessor(libs.androidx.room.compiler) // For Java
-    // Note: If using KSP (recommended), I'd add ksp, but I'll stick to kapt or annotationProcessor for simplicity in v1 initialization
-    // Actually, for Kotlin we should use kapt.
+    ksp(libs.androidx.room.compiler)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -68,5 +63,5 @@ dependencies {
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
-    debugImplementation(libs.androidx.ui.test-manifest)
+    debugImplementation(libs.androidx.ui.test.manifest)
 }

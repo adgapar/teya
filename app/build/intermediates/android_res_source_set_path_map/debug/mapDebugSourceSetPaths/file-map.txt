@@ -1,0 +1,7 @@
+com.teya.agent.app-updated_navigation_xml-0 /Users/adgapar/GitHub/teya/app/build/generated/updated_navigation_xml/debug
+com.teya.agent.app-packageDebugResources-1 /Users/adgapar/GitHub/teya/app/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+com.teya.agent.app-packageDebugResources-2 /Users/adgapar/GitHub/teya/app/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+com.teya.agent.app-debug-3 /Users/adgapar/GitHub/teya/app/build/intermediates/merged_res/debug/mergeDebugResources
+com.teya.agent.app-debug-4 /Users/adgapar/GitHub/teya/app/src/debug/res
+com.teya.agent.app-main-5 /Users/adgapar/GitHub/teya/app/src/main/res
+gradleHome-0 /Users/adgapar/.gradle

@@ -1,0 +1,4 @@
+com.teya.agent
+drawable ic_launcher_foreground
+string app_name
+style Theme_Teya
