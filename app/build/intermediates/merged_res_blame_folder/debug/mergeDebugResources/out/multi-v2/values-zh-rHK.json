@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.teya.agent.app-mergeDebugResources-42:/values-zh-rHK/values-zh-rHK.xml",
+            "outputFile": "com.teya.agent.app-mergeDebugResources-43:/values-zh-rHK/values-zh-rHK.xml",
             "map": [
                 {
-                    "source": "/Users/adgapar/.gradle/caches/9.6.1/transforms/5adb73e34b8e3fae1a46e1c0661c9b30/transformed/foundation-release/res/values-zh-rHK/values-zh-rHK.xml",
+                    "source": "/Users/adgapar/.gradle/caches/9.6.1/transforms/c79f08c5f09ce68858848de04c885a1d/transformed/foundation-release/res/values-zh-rHK/values-zh-rHK.xml",
                     "from": {
                         "startLines": "2,3",
                         "startColumns": "4,4",
@@ -21,7 +21,7 @@
                     }
                 },
                 {
-                    "source": "/Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/res/values-zh-rHK/values-zh-rHK.xml",
+                    "source": "/Users/adgapar/.gradle/caches/9.6.1/transforms/2201efa70f7647df069ac3a73ff0c22a/transformed/core-1.13.1/res/values-zh-rHK/values-zh-rHK.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9",
                         "startColumns": "4,4,4,4,4,4,4,4",
@@ -38,7 +38,7 @@
                     }
                 },
                 {
-                    "source": "/Users/adgapar/.gradle/caches/9.6.1/transforms/969002731c2fbf61a414c362a7faa865/transformed/material3-release/res/values-zh-rHK/values-zh-rHK.xml",
+                    "source": "/Users/adgapar/.gradle/caches/9.6.1/transforms/1f71f68efd5cc9d13b2dcb4b621e90ca/transformed/material3-release/res/values-zh-rHK/values-zh-rHK.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",
@@ -55,7 +55,7 @@
                     }
                 },
                 {
-                    "source": "/Users/adgapar/.gradle/caches/9.6.1/transforms/fca86229fa0bc2bf940f9fcfe070ef88/transformed/ui-release/res/values-zh-rHK/values-zh-rHK.xml",
+                    "source": "/Users/adgapar/.gradle/caches/9.6.1/transforms/d4324b65f0d9d521a777eaa9c6b906fa/transformed/ui-release/res/values-zh-rHK/values-zh-rHK.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",

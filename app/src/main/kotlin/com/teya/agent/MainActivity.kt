@@ -13,12 +13,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import com.teya.agent.harness.ConfigManager
 import com.teya.agent.harness.HarnessService
 import com.teya.agent.ui.face.AgentFace
 import com.teya.agent.ui.face.AgentState
 import com.teya.agent.ui.theme.TeyaTheme
 
 class MainActivity : ComponentActivity() {
+    private lateinit var configManager: ConfigManager
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -35,7 +37,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+        configManager = ConfigManager(this)
+
+        if (!configManager.isConfigured()) {
+            startActivity(Intent(this, SetupActivity::class.java))
+            finish()
+            return
+        }
+
         checkAndRequestPermissions()
         
         setContent {

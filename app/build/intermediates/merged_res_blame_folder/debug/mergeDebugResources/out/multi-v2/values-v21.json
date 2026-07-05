@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.teya.agent.app-mergeDebugResources-42:/values-v21/values-v21.xml",
+            "outputFile": "com.teya.agent.app-mergeDebugResources-43:/values-v21/values-v21.xml",
             "map": [
                 {
-                    "source": "/Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/res/values-v21/values-v21.xml",
+                    "source": "/Users/adgapar/.gradle/caches/9.6.1/transforms/2201efa70f7647df069ac3a73ff0c22a/transformed/core-1.13.1/res/values-v21/values-v21.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9,10,13",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4",

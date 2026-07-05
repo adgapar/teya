@@ -12,8 +12,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.teya.agent.R
-import com.teya.agent.brain.BrainClient
-import com.teya.agent.brain.BrainResponse
+import com.teya.agent.brain.*
 import com.teya.agent.safety.ContactAllowlistManager
 import com.teya.agent.telephony.TelephonyActuator
 import com.teya.agent.voice.VoicePipeline
@@ -43,21 +42,27 @@ class HarnessService : Service() {
         super.onCreate()
         createNotificationChannel()
         
+        val configManager = ConfigManager(this)
         allowlistManager = ContactAllowlistManager(this)
         telephonyActuator = TelephonyActuator(this, allowlistManager)
         voicePipeline = VoicePipeline(this)
         
-        // BrainClient stub implementation
-        brainClient = object : BrainClient {
-            override suspend fun processText(input: String): BrainResponse {
-                return if (input.contains("call", ignoreCase = true)) {
-                    val name = input.substringAfter("call ").trim()
-                    BrainResponse(
-                        speechResponse = "Calling $name",
-                        toolCall = com.teya.agent.brain.ToolCall("place_call", mapOf("name" to name))
-                    )
-                } else {
-                    BrainResponse("I didn't quite catch that.")
+        val apiKey = configManager.mistralApiKey
+        if (!apiKey.isNullOrBlank()) {
+            brainClient = MistralClient(KtorClientFactory.create(), apiKey)
+        } else {
+            // Fallback to stub if not configured
+            brainClient = object : BrainClient {
+                override suspend fun processText(input: String): BrainResponse {
+                    return if (input.contains("call", ignoreCase = true)) {
+                        val name = input.substringAfter("call ").trim()
+                        BrainResponse(
+                            speechResponse = "Calling $name",
+                            toolCall = com.teya.agent.brain.ToolCall("place_call", mapOf("name" to name))
+                        )
+                    } else {
+                        BrainResponse("I didn't quite catch that.")
+                    }
                 }
             }
         }
