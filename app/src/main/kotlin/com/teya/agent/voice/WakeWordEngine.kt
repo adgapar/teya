@@ -14,7 +14,7 @@ import java.nio.channels.FileChannel
 
 class WakeWordEngine(
     private val context: Context,
-    private val modelPath: String = "okay_nabu.tflite",
+    private val modelPath: String = "hey_jarvis.tflite",
     private val onDetected: () -> Unit
 ) {
     private var interpreter: Interpreter? = null
