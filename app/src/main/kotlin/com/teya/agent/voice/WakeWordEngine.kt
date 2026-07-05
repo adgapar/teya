@@ -6,7 +6,7 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
-import org.tensorflow.lite.Interpreter
+import com.google.ai.edge.litert.Interpreter
 import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -34,13 +34,13 @@ class WakeWordEngine(
             val declaredLength = assetFileDescriptor.length
             val modelBuffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
             
-            val options = Interpreter.Options().apply {
-                setNumThreads(2)
-            }
+            val options = Interpreter.Options()
+            options.setNumThreads(2)
+            
             interpreter = Interpreter(modelBuffer, options)
-            Log.d("WakeWordEngine", "Model loaded: $modelPath")
+            Log.d("WakeWordEngine", "Model loaded successfully: $modelPath")
         } catch (e: Exception) {
-            Log.e("WakeWordEngine", "Error loading model", e)
+            Log.e("WakeWordEngine", "Error loading model: $modelPath", e)
         }
     }
 
@@ -63,7 +63,14 @@ class WakeWordEngine(
             bufferSize
         )
 
-        audioRecord?.startRecording()
+        try {
+            audioRecord?.startRecording()
+            Log.d("WakeWordEngine", "Microphone recording started")
+        } catch (e: Exception) {
+            Log.e("WakeWordEngine", "Failed to start recording", e)
+            isRunning = false
+            return
+        }
         
         Thread {
             val audioBuffer = ShortArray(160) // 10ms of audio at 16kHz
@@ -77,21 +84,23 @@ class WakeWordEngine(
     }
 
     private fun processAudio(audio: ShortArray) {
-        // Implementation of Mel-Spectrogram features for microWakeWord
-        // For testing, we are logging the amplitude to prove the mic works
+        // Simple volume logging to verify mic is active
         val maxAmplitude = audio.maxOrNull() ?: 0
-        if (maxAmplitude > 1000) {
-            Log.v("WakeWordEngine", "Audio level: $maxAmplitude")
+        if (maxAmplitude > 1500) {
+            Log.v("WakeWordEngine", "Mic Audio Level: $maxAmplitude")
         }
 
-        // Placeholder for TFLite inference
-        // In a real implementation, we'd feed the spectrogram here
+        // TODO: Implement Mel-Spectrogram feature extraction here
     }
 
     fun stop() {
         isRunning = false
-        audioRecord?.stop()
-        audioRecord?.release()
+        try {
+            audioRecord?.stop()
+            audioRecord?.release()
+        } catch (e: Exception) {
+            Log.e("WakeWordEngine", "Error stopping audio", e)
+        }
         audioRecord = null
     }
 }

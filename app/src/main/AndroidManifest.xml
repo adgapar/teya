@@ -40,7 +40,7 @@
             android:name=".harness.HarnessService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="microphone|phoneCall|connectedDevice" />
+            android:foregroundServiceType="microphone|phoneCall" />
 
         <service
             android:name=".telephony.TeyaInCallService"

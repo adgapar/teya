@@ -175,13 +175,13 @@ ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:33:9-37:4
 	android:name
 		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:34:13-41
 service#com.teya.agent.harness.HarnessService
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:39:9-43:84
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:39:9-43:68
 	android:enabled
 		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:41:13-35
 	android:exported
 		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:42:13-37
 	android:foregroundServiceType
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:43:13-81
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:43:13-65
 	android:name
 		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:40:13-51
 service#com.teya.agent.telephony.TeyaInCallService
