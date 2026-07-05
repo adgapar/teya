@@ -19,6 +19,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.Teya">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
