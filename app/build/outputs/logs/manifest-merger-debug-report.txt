@@ -1,57 +1,59 @@
 -- Merging decision tree log ---
 manifest
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:2:1-49:12
-INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:2:1-49:12
-INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:2:1-49:12
-INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:2:1-49:12
-MERGED from [androidx.compose.material3:material3-android:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/bf88f27fa28b85be4b1341a263804054/transformed/material3-release/AndroidManifest.xml:17:1-22:12
-MERGED from [androidx.compose.material:material-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/8e620d4b93bfae01afdc8934253d7dc1/transformed/material-release/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.compose.material:material-icons-core-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/de07bfe4f96a0b7db0fa27096b1a7f88/transformed/material-icons-core-release/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.compose.material:material-ripple-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/21cfef1d2ad8b902853718f05b1c36a6/transformed/material-ripple-release/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.compose.foundation:foundation-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/7562760bad22982d4ac1d7cec1a09b9a/transformed/foundation-release/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.compose.animation:animation-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/43d917590243d2126a905bc6681c6482/transformed/animation-release/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.compose.foundation:foundation-layout-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/c98ae5601b763b63f03f9954b4ba0532/transformed/foundation-layout-release/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.compose.animation:animation-core-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/278adf93e748c8a7dc551b8982787498/transformed/animation-core-release/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.compose.ui:ui-tooling-data-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/58155c6bcd3be6fea5e0206a69f268e6/transformed/ui-tooling-data-release/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.compose.ui:ui-unit-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/1f3a5016101fb3c2ef318c352d54376d/transformed/ui-unit-release/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.compose.ui:ui-geometry-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/87519b9d559a1e1ad4d1afe897a26000/transformed/ui-geometry-release/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.compose.ui:ui-util-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/4c7bd3e26036cca20c43db5e3b82f54b/transformed/ui-util-release/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.compose.ui:ui-text-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b709c5696a70df6818abc6002bb1b2f9/transformed/ui-text-release/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.compose.ui:ui-tooling-preview-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/93a376f4d8fac2d0c9eb8eadab1c52f0/transformed/ui-tooling-preview-release/AndroidManifest.xml:17:1-22:12
-MERGED from [androidx.compose.ui:ui-graphics-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b0cb667c4956dfd43b737f02cbf057ef/transformed/ui-graphics-release/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.compose.ui:ui-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/8a5998f5a93272dd959c948b17a6132e/transformed/ui-release/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/d61727dc9d24159d6a5fad2376315a34/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:17:1-28:12
-MERGED from [androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/64a2f5ccf95ce9e89837b71226a85abf/transformed/ui-tooling-release/AndroidManifest.xml:17:1-28:12
-MERGED from [androidx.activity:activity-compose:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/ee50c54528c44535061e733f541f6dc3/transformed/activity-compose-1.9.0/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.activity:activity-ktx:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/6ba78525741d13b9e17df1d238dadc25/transformed/activity-ktx-1.9.0/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.activity:activity:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/a64ec2e3e82f2cfdb85d0928ba72d92a/transformed/activity-1.9.0/AndroidManifest.xml:17:1-22:12
-MERGED from [androidx.autofill:autofill:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/afa24bc3c28113762a00bca9fcc97187/transformed/autofill-1.0.0/AndroidManifest.xml:17:1-24:12
-MERGED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0aec448ec30532dff610109b6dc28b36/transformed/emoji2-1.3.0/AndroidManifest.xml:17:1-35:12
-MERGED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/61628a0e43a118b5def013e6b43b0013/transformed/core-1.13.1/AndroidManifest.xml:17:1-30:12
-MERGED from [androidx.savedstate:savedstate-ktx:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/9bd665e34c72670f59757584ea260381/transformed/savedstate-ktx-1.2.1/AndroidManifest.xml:17:1-22:12
-MERGED from [androidx.savedstate:savedstate:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/1705ce9902febbb5996d7b14ce1fa6a2/transformed/savedstate-1.2.1/AndroidManifest.xml:17:1-22:12
-MERGED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/8dec745ba63d2f51fdf480c698bf2430/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:17:1-35:12
-MERGED from [androidx.lifecycle:lifecycle-livedata-core:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/acd86156c2493af804e463e89d7e6f4e/transformed/lifecycle-livedata-core-2.8.2/AndroidManifest.xml:17:1-22:12
-MERGED from [androidx.lifecycle:lifecycle-viewmodel-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/8f832d7312671d4e70d3735c01f2d685/transformed/lifecycle-viewmodel-release/AndroidManifest.xml:17:1-22:12
-MERGED from [androidx.lifecycle:lifecycle-runtime-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/4e9c64221824c6a7f7d52e43d699f439/transformed/lifecycle-runtime-release/AndroidManifest.xml:17:1-22:12
-MERGED from [androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/6a7c805fcb25de58026e602664f0ca5c/transformed/lifecycle-viewmodel-ktx-2.8.2/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.lifecycle:lifecycle-runtime-ktx-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/1661bddffe9bfb5142762a3669ad5993/transformed/lifecycle-runtime-ktx-release/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.lifecycle:lifecycle-viewmodel-savedstate:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/53e84bb8e3e6674b9ae5d8b448124302/transformed/lifecycle-viewmodel-savedstate-2.8.2/AndroidManifest.xml:17:1-22:12
-MERGED from [androidx.customview:customview-poolingcontainer:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/077d9849d7f7424b43d9d3aa3ce125cb/transformed/customview-poolingcontainer-1.0.0/AndroidManifest.xml:17:1-23:12
-MERGED from [androidx.core:core-ktx:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/60ee756110c1e0e2d71bbd643dfbdb30/transformed/core-ktx-1.13.1/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/84eb1bad3be503453e2ba2d1669692d4/transformed/room-runtime/AndroidManifest.xml:17:1-31:12
-MERGED from [androidx.room:room-ktx:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/b217f1ffff26677736685271b7d195c6/transformed/room-ktx-2.8.4/AndroidManifest.xml:17:1-22:12
-MERGED from [androidx.compose.runtime:runtime-saveable-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/5bd97be4718b63db994c5348e3ed238e/transformed/runtime-saveable-release/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.compose.runtime:runtime-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b4eb2fa0cda7342ae471b00cbd32d303/transformed/runtime-release/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.annotation:annotation-experimental:1.5.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/fbdb40c76627d90ab793bb577c7fc05e/transformed/annotation-experimental-1.5.0/AndroidManifest.xml:2:1-7:12
-MERGED from [androidx.interpolator:interpolator:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/ddf3f90769165d48eb6bcad5b6f4f43a/transformed/interpolator-1.0.0/AndroidManifest.xml:17:1-22:12
-MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/6789b5d7c9153968c18cca80e240df5b/transformed/versionedparcelable-1.1.1/AndroidManifest.xml:17:1-27:12
-MERGED from [androidx.arch.core:core-runtime:2.2.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/63dea79c53208ad53febe7b5c801fd0e/transformed/core-runtime-2.2.0/AndroidManifest.xml:17:1-22:12
-MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:17:1-55:12
-MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/f0907ddd1b393d4b53f80dc13a9edecd/transformed/startup-runtime-1.1.1/AndroidManifest.xml:17:1-33:12
-MERGED from [androidx.tracing:tracing:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0f5f7eee668a2feb87523c787c7b0f93/transformed/tracing-1.0.0/AndroidManifest.xml:17:1-24:12
-MERGED from [androidx.sqlite:sqlite-framework-android:2.6.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/82a6199f9c998294071a9a1b91a74ebc/transformed/sqlite-framework/AndroidManifest.xml:17:1-22:12
-MERGED from [androidx.sqlite:sqlite-android:2.6.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/f07a7baa0bab5952780da606124e5aec/transformed/sqlite/AndroidManifest.xml:17:1-22:12
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:2:1-51:12
+INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:2:1-51:12
+INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:2:1-51:12
+INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:2:1-51:12
+MERGED from [androidx.compose.material3:material3-android:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/969002731c2fbf61a414c362a7faa865/transformed/material3-release/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.compose.material:material-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/7cf0a1e614e167dd4f4107d556c2e198/transformed/material-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.material:material-icons-core-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/086120308d63c58c2af681a21fbaf8fb/transformed/material-icons-core-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.material:material-ripple-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b11ca36439ab34441b58da225de81812/transformed/material-ripple-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.foundation:foundation-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/5adb73e34b8e3fae1a46e1c0661c9b30/transformed/foundation-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.animation:animation-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/9a82c516d09d05c2019fd0a4542f3d67/transformed/animation-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.foundation:foundation-layout-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/62b8ee328b3c3a5e1ff221476b708c62/transformed/foundation-layout-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.animation:animation-core-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/ab729e3b64cb0e8ac8352bdc2bcaa9a1/transformed/animation-core-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.ui:ui-tooling-data-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/39d8a3df3e40c6378174fb270e411f42/transformed/ui-tooling-data-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.ui:ui-unit-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/f2efa986a363fc99576dc8c405d6c5db/transformed/ui-unit-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.ui:ui-geometry-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b5f81f6a92ef313be9c4ae37edfe4830/transformed/ui-geometry-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.ui:ui-util-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/7826f3b181251a93e9322c774cf0eee9/transformed/ui-util-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.ui:ui-text-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/f9333df67ad8b044d089e947f1ddd9c7/transformed/ui-text-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.ui:ui-tooling-preview-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/ca24e9f0455a745f65c7d4a441081bed/transformed/ui-tooling-preview-release/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.compose.ui:ui-graphics-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b3323b714c95462aa394fc334b54add9/transformed/ui-graphics-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.ui:ui-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/fca86229fa0bc2bf940f9fcfe070ef88/transformed/ui-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/a8ecf215b3292409a882f27b29e5c315/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:17:1-28:12
+MERGED from [androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/598824c37021111ab12cb81df5b0971f/transformed/ui-tooling-release/AndroidManifest.xml:17:1-28:12
+MERGED from [androidx.activity:activity-compose:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/1bbd4d8ca9e2581f8820984beb6e8aab/transformed/activity-compose-1.9.0/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.activity:activity-ktx:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/6830aebd0cf826e1816c453094e05be4/transformed/activity-ktx-1.9.0/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.activity:activity:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/1305984f55b83476b90b103bf595fa69/transformed/activity-1.9.0/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.autofill:autofill:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/57da4acd5a295072a26a198ab1bcf24b/transformed/autofill-1.0.0/AndroidManifest.xml:17:1-24:12
+MERGED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/90f77dc5b1041cbe4112872e1674ea58/transformed/emoji2-1.3.0/AndroidManifest.xml:17:1-35:12
+MERGED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/AndroidManifest.xml:17:1-30:12
+MERGED from [androidx.savedstate:savedstate-ktx:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/183e5da5f09ce773f3186e794bd63641/transformed/savedstate-ktx-1.2.1/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.savedstate:savedstate:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/ce9bd7935a840ed8cf31bb936f85912b/transformed/savedstate-1.2.1/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/3539867e443d92e36899e3ce5f2aa419/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:17:1-35:12
+MERGED from [androidx.lifecycle:lifecycle-livedata-core:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/bbd8db5cd949bd0578ca589cef322690/transformed/lifecycle-livedata-core-2.8.2/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/91ae421cdf5eb196f811a9befe83a7b0/transformed/lifecycle-viewmodel-release/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.lifecycle:lifecycle-runtime-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/ba1251bec369da45e3ca7b9909740ba5/transformed/lifecycle-runtime-release/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/64710541546791a960b60cecc6aa2609/transformed/lifecycle-viewmodel-ktx-2.8.2/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.lifecycle:lifecycle-runtime-ktx-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/3389275ef12322a455c0b3ce2b7a66a6/transformed/lifecycle-runtime-ktx-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-savedstate:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/5389a63a7237b6178d7842af3429da91/transformed/lifecycle-viewmodel-savedstate-2.8.2/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.customview:customview-poolingcontainer:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/8fb1ac6eab509e44e38a4cc8b4a71179/transformed/customview-poolingcontainer-1.0.0/AndroidManifest.xml:17:1-23:12
+MERGED from [androidx.core:core-ktx:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/6ab960256dd055580e30bb75be222fe1/transformed/core-ktx-1.13.1/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/0bf47e86de707dc26fea58def7f6b453/transformed/room-runtime/AndroidManifest.xml:17:1-31:12
+MERGED from [androidx.room:room-ktx:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/9a8dd80fc5a92185492a9bca601c8e04/transformed/room-ktx-2.8.4/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.compose.runtime:runtime-saveable-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b5307a712b1441aaa50b66f7f275015/transformed/runtime-saveable-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.compose.runtime:runtime-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/0b75c4c4bc82208af327857b4002a73a/transformed/runtime-release/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.annotation:annotation-experimental:1.5.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/282cd722ac81bbd6ef8a6d93e50df7f3/transformed/annotation-experimental-1.5.0/AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.interpolator:interpolator:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/8069a2c9de5f5874675b406626cd1dce/transformed/interpolator-1.0.0/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b3ee98369ab35e08bcc84f01fbb2df28/transformed/versionedparcelable-1.1.1/AndroidManifest.xml:17:1-27:12
+MERGED from [androidx.arch.core:core-runtime:2.2.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0cb838fb0e724f82d15e062febb76571/transformed/core-runtime-2.2.0/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:17:1-55:12
+MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/529ba70837c50f61aff375bb3b190294/transformed/startup-runtime-1.1.1/AndroidManifest.xml:17:1-33:12
+MERGED from [androidx.tracing:tracing:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/9c5db33839f2008c165431d80b038f96/transformed/tracing-1.0.0/AndroidManifest.xml:17:1-24:12
+MERGED from [androidx.sqlite:sqlite-framework-android:2.6.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/1d6c26784ccc98f3a4c9f8201ac21a27/transformed/sqlite-framework/AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.sqlite:sqlite-android:2.6.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/1a2e6fa3f481e82e9c518230086a99b9/transformed/sqlite/AndroidManifest.xml:17:1-22:12
+MERGED from [org.tensorflow:tensorflow-lite:2.16.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/40d96a664ca104745c9088e633986561/transformed/tensorflow-lite-2.16.1/AndroidManifest.xml:2:1-11:12
+MERGED from [org.tensorflow:tensorflow-lite-api:2.16.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/3f0b7e2f4e129e962ea20ba3bed1fe7f/transformed/tensorflow-lite-api-2.16.1/AndroidManifest.xml:2:1-11:12
 	package
 		INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml
 	android:versionName
@@ -64,332 +66,346 @@ uses-permission#android.permission.INTERNET
 ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:4:5-67
 	android:name
 		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:4:22-64
+uses-permission#android.permission.WAKE_LOCK
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:5:5-68
+	android:name
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:5:22-65
 uses-permission#android.permission.FOREGROUND_SERVICE
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:5:5-77
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:6:5-77
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:5:22-74
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:6:22-74
 uses-permission#android.permission.FOREGROUND_SERVICE_MICROPHONE
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:6:5-88
-	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:6:22-85
-uses-permission#android.permission.FOREGROUND_SERVICE_PHONE_CALL
 ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:7:5-88
 	android:name
 		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:7:22-85
+uses-permission#android.permission.FOREGROUND_SERVICE_PHONE_CALL
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:8:5-88
+	android:name
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:8:22-85
 uses-permission#android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:8:5-94
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:9:5-94
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:8:22-91
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:9:22-91
 uses-permission#android.permission.RECORD_AUDIO
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:9:5-71
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:10:5-71
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:9:22-68
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:10:22-68
 uses-permission#android.permission.CALL_PHONE
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:10:5-69
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:11:5-69
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:10:22-66
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:11:22-66
 uses-permission#android.permission.ANSWER_PHONE_CALLS
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:11:5-77
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:12:5-77
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:11:22-74
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:12:22-74
 uses-permission#android.permission.MANAGE_OWN_CALLS
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:12:5-75
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:13:5-75
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:12:22-72
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:13:22-72
 application
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:14:5-47:19
-INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:14:5-47:19
-MERGED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/d61727dc9d24159d6a5fad2376315a34/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:22:5-26:19
-MERGED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/d61727dc9d24159d6a5fad2376315a34/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:22:5-26:19
-MERGED from [androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/64a2f5ccf95ce9e89837b71226a85abf/transformed/ui-tooling-release/AndroidManifest.xml:22:5-26:19
-MERGED from [androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/64a2f5ccf95ce9e89837b71226a85abf/transformed/ui-tooling-release/AndroidManifest.xml:22:5-26:19
-MERGED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0aec448ec30532dff610109b6dc28b36/transformed/emoji2-1.3.0/AndroidManifest.xml:23:5-33:19
-MERGED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0aec448ec30532dff610109b6dc28b36/transformed/emoji2-1.3.0/AndroidManifest.xml:23:5-33:19
-MERGED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/61628a0e43a118b5def013e6b43b0013/transformed/core-1.13.1/AndroidManifest.xml:28:5-89
-MERGED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/61628a0e43a118b5def013e6b43b0013/transformed/core-1.13.1/AndroidManifest.xml:28:5-89
-MERGED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/8dec745ba63d2f51fdf480c698bf2430/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:23:5-33:19
-MERGED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/8dec745ba63d2f51fdf480c698bf2430/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:23:5-33:19
-MERGED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/84eb1bad3be503453e2ba2d1669692d4/transformed/room-runtime/AndroidManifest.xml:23:5-29:19
-MERGED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/84eb1bad3be503453e2ba2d1669692d4/transformed/room-runtime/AndroidManifest.xml:23:5-29:19
-MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/6789b5d7c9153968c18cca80e240df5b/transformed/versionedparcelable-1.1.1/AndroidManifest.xml:24:5-25:19
-MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/6789b5d7c9153968c18cca80e240df5b/transformed/versionedparcelable-1.1.1/AndroidManifest.xml:24:5-25:19
-MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:23:5-53:19
-MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:23:5-53:19
-MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/f0907ddd1b393d4b53f80dc13a9edecd/transformed/startup-runtime-1.1.1/AndroidManifest.xml:25:5-31:19
-MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/f0907ddd1b393d4b53f80dc13a9edecd/transformed/startup-runtime-1.1.1/AndroidManifest.xml:25:5-31:19
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:15:5-49:19
+INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:15:5-49:19
+MERGED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/a8ecf215b3292409a882f27b29e5c315/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:22:5-26:19
+MERGED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/a8ecf215b3292409a882f27b29e5c315/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:22:5-26:19
+MERGED from [androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/598824c37021111ab12cb81df5b0971f/transformed/ui-tooling-release/AndroidManifest.xml:22:5-26:19
+MERGED from [androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/598824c37021111ab12cb81df5b0971f/transformed/ui-tooling-release/AndroidManifest.xml:22:5-26:19
+MERGED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/90f77dc5b1041cbe4112872e1674ea58/transformed/emoji2-1.3.0/AndroidManifest.xml:23:5-33:19
+MERGED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/90f77dc5b1041cbe4112872e1674ea58/transformed/emoji2-1.3.0/AndroidManifest.xml:23:5-33:19
+MERGED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/AndroidManifest.xml:28:5-89
+MERGED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/AndroidManifest.xml:28:5-89
+MERGED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/3539867e443d92e36899e3ce5f2aa419/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:23:5-33:19
+MERGED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/3539867e443d92e36899e3ce5f2aa419/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:23:5-33:19
+MERGED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/0bf47e86de707dc26fea58def7f6b453/transformed/room-runtime/AndroidManifest.xml:23:5-29:19
+MERGED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/0bf47e86de707dc26fea58def7f6b453/transformed/room-runtime/AndroidManifest.xml:23:5-29:19
+MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b3ee98369ab35e08bcc84f01fbb2df28/transformed/versionedparcelable-1.1.1/AndroidManifest.xml:24:5-25:19
+MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b3ee98369ab35e08bcc84f01fbb2df28/transformed/versionedparcelable-1.1.1/AndroidManifest.xml:24:5-25:19
+MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:23:5-53:19
+MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:23:5-53:19
+MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/529ba70837c50f61aff375bb3b190294/transformed/startup-runtime-1.1.1/AndroidManifest.xml:25:5-31:19
+MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/529ba70837c50f61aff375bb3b190294/transformed/startup-runtime-1.1.1/AndroidManifest.xml:25:5-31:19
+MERGED from [org.tensorflow:tensorflow-lite:2.16.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/40d96a664ca104745c9088e633986561/transformed/tensorflow-lite-2.16.1/AndroidManifest.xml:9:5-20
+MERGED from [org.tensorflow:tensorflow-lite:2.16.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/40d96a664ca104745c9088e633986561/transformed/tensorflow-lite-2.16.1/AndroidManifest.xml:9:5-20
+MERGED from [org.tensorflow:tensorflow-lite-api:2.16.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/3f0b7e2f4e129e962ea20ba3bed1fe7f/transformed/tensorflow-lite-api-2.16.1/AndroidManifest.xml:9:5-20
+MERGED from [org.tensorflow:tensorflow-lite-api:2.16.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/3f0b7e2f4e129e962ea20ba3bed1fe7f/transformed/tensorflow-lite-api-2.16.1/AndroidManifest.xml:9:5-20
 	android:extractNativeLibs
 		INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml
 	android:appComponentFactory
-		ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/61628a0e43a118b5def013e6b43b0013/transformed/core-1.13.1/AndroidManifest.xml:28:18-86
+		ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/AndroidManifest.xml:28:18-86
 	android:supportsRtl
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:17:9-35
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:18:9-35
 	android:label
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:16:9-41
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:17:9-41
 	android:allowBackup
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:15:9-35
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:16:9-35
 	android:theme
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:18:9-42
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:19:9-42
 activity#com.teya.agent.MainActivity
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:19:9-27:20
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:20:9-29:20
+	android:screenOrientation
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:23:13-50
 	android:exported
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:21:13-36
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:22:13-36
 	android:theme
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:22:13-46
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:24:13-46
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:20:13-41
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:21:13-41
 intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:23:13-26:29
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:25:13-28:29
 action#android.intent.action.MAIN
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:24:17-69
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:26:17-69
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:24:25-66
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:26:25-66
 category#android.intent.category.LAUNCHER
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:25:17-77
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:27:17-77
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:25:27-74
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:27:27-74
 service#com.teya.agent.harness.HarnessService
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:29:9-33:84
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:31:9-35:84
 	android:enabled
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:31:13-35
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:33:13-35
 	android:exported
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:32:13-37
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:34:13-37
 	android:foregroundServiceType
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:33:13-81
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:35:13-81
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:30:13-51
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:32:13-51
 service#com.teya.agent.telephony.TeyaInCallService
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:35:9-45:19
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:37:9-47:19
 	android:exported
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:38:13-36
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:40:13-36
 	android:permission
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:37:13-72
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:39:13-72
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:36:13-56
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:38:13-56
 meta-data#android.telecom.IN_CALL_SERVICE_UI
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:39:13-41:40
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:41:13-43:40
 	android:value
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:41:17-37
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:43:17-37
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:40:17-66
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:42:17-66
 intent-filter#action:name:android.telecom.InCallService
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:42:13-44:29
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:44:13-46:29
 action#android.telecom.InCallService
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:43:17-72
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:45:17-72
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:43:25-69
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:45:25-69
 uses-sdk
 INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml
 INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml
-MERGED from [androidx.compose.material3:material3-android:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/bf88f27fa28b85be4b1341a263804054/transformed/material3-release/AndroidManifest.xml:20:5-44
-MERGED from [androidx.compose.material3:material3-android:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/bf88f27fa28b85be4b1341a263804054/transformed/material3-release/AndroidManifest.xml:20:5-44
-MERGED from [androidx.compose.material:material-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/8e620d4b93bfae01afdc8934253d7dc1/transformed/material-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.material:material-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/8e620d4b93bfae01afdc8934253d7dc1/transformed/material-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.material:material-icons-core-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/de07bfe4f96a0b7db0fa27096b1a7f88/transformed/material-icons-core-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.material:material-icons-core-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/de07bfe4f96a0b7db0fa27096b1a7f88/transformed/material-icons-core-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.material:material-ripple-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/21cfef1d2ad8b902853718f05b1c36a6/transformed/material-ripple-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.material:material-ripple-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/21cfef1d2ad8b902853718f05b1c36a6/transformed/material-ripple-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.foundation:foundation-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/7562760bad22982d4ac1d7cec1a09b9a/transformed/foundation-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.foundation:foundation-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/7562760bad22982d4ac1d7cec1a09b9a/transformed/foundation-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.animation:animation-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/43d917590243d2126a905bc6681c6482/transformed/animation-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.animation:animation-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/43d917590243d2126a905bc6681c6482/transformed/animation-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.foundation:foundation-layout-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/c98ae5601b763b63f03f9954b4ba0532/transformed/foundation-layout-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.foundation:foundation-layout-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/c98ae5601b763b63f03f9954b4ba0532/transformed/foundation-layout-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.animation:animation-core-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/278adf93e748c8a7dc551b8982787498/transformed/animation-core-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.animation:animation-core-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/278adf93e748c8a7dc551b8982787498/transformed/animation-core-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.ui:ui-tooling-data-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/58155c6bcd3be6fea5e0206a69f268e6/transformed/ui-tooling-data-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.ui:ui-tooling-data-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/58155c6bcd3be6fea5e0206a69f268e6/transformed/ui-tooling-data-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.ui:ui-unit-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/1f3a5016101fb3c2ef318c352d54376d/transformed/ui-unit-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.ui:ui-unit-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/1f3a5016101fb3c2ef318c352d54376d/transformed/ui-unit-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.ui:ui-geometry-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/87519b9d559a1e1ad4d1afe897a26000/transformed/ui-geometry-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.ui:ui-geometry-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/87519b9d559a1e1ad4d1afe897a26000/transformed/ui-geometry-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.ui:ui-util-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/4c7bd3e26036cca20c43db5e3b82f54b/transformed/ui-util-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.ui:ui-util-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/4c7bd3e26036cca20c43db5e3b82f54b/transformed/ui-util-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.ui:ui-text-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b709c5696a70df6818abc6002bb1b2f9/transformed/ui-text-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.ui:ui-text-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b709c5696a70df6818abc6002bb1b2f9/transformed/ui-text-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.ui:ui-tooling-preview-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/93a376f4d8fac2d0c9eb8eadab1c52f0/transformed/ui-tooling-preview-release/AndroidManifest.xml:20:5-44
-MERGED from [androidx.compose.ui:ui-tooling-preview-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/93a376f4d8fac2d0c9eb8eadab1c52f0/transformed/ui-tooling-preview-release/AndroidManifest.xml:20:5-44
-MERGED from [androidx.compose.ui:ui-graphics-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b0cb667c4956dfd43b737f02cbf057ef/transformed/ui-graphics-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.ui:ui-graphics-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b0cb667c4956dfd43b737f02cbf057ef/transformed/ui-graphics-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.ui:ui-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/8a5998f5a93272dd959c948b17a6132e/transformed/ui-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.ui:ui-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/8a5998f5a93272dd959c948b17a6132e/transformed/ui-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/d61727dc9d24159d6a5fad2376315a34/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:20:5-44
-MERGED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/d61727dc9d24159d6a5fad2376315a34/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:20:5-44
-MERGED from [androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/64a2f5ccf95ce9e89837b71226a85abf/transformed/ui-tooling-release/AndroidManifest.xml:20:5-44
-MERGED from [androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/64a2f5ccf95ce9e89837b71226a85abf/transformed/ui-tooling-release/AndroidManifest.xml:20:5-44
-MERGED from [androidx.activity:activity-compose:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/ee50c54528c44535061e733f541f6dc3/transformed/activity-compose-1.9.0/AndroidManifest.xml:5:5-44
-MERGED from [androidx.activity:activity-compose:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/ee50c54528c44535061e733f541f6dc3/transformed/activity-compose-1.9.0/AndroidManifest.xml:5:5-44
-MERGED from [androidx.activity:activity-ktx:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/6ba78525741d13b9e17df1d238dadc25/transformed/activity-ktx-1.9.0/AndroidManifest.xml:5:5-44
-MERGED from [androidx.activity:activity-ktx:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/6ba78525741d13b9e17df1d238dadc25/transformed/activity-ktx-1.9.0/AndroidManifest.xml:5:5-44
-MERGED from [androidx.activity:activity:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/a64ec2e3e82f2cfdb85d0928ba72d92a/transformed/activity-1.9.0/AndroidManifest.xml:20:5-44
-MERGED from [androidx.activity:activity:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/a64ec2e3e82f2cfdb85d0928ba72d92a/transformed/activity-1.9.0/AndroidManifest.xml:20:5-44
-MERGED from [androidx.autofill:autofill:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/afa24bc3c28113762a00bca9fcc97187/transformed/autofill-1.0.0/AndroidManifest.xml:20:5-22:41
-MERGED from [androidx.autofill:autofill:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/afa24bc3c28113762a00bca9fcc97187/transformed/autofill-1.0.0/AndroidManifest.xml:20:5-22:41
-MERGED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0aec448ec30532dff610109b6dc28b36/transformed/emoji2-1.3.0/AndroidManifest.xml:21:5-44
-MERGED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0aec448ec30532dff610109b6dc28b36/transformed/emoji2-1.3.0/AndroidManifest.xml:21:5-44
-MERGED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/61628a0e43a118b5def013e6b43b0013/transformed/core-1.13.1/AndroidManifest.xml:20:5-44
-MERGED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/61628a0e43a118b5def013e6b43b0013/transformed/core-1.13.1/AndroidManifest.xml:20:5-44
-MERGED from [androidx.savedstate:savedstate-ktx:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/9bd665e34c72670f59757584ea260381/transformed/savedstate-ktx-1.2.1/AndroidManifest.xml:20:5-44
-MERGED from [androidx.savedstate:savedstate-ktx:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/9bd665e34c72670f59757584ea260381/transformed/savedstate-ktx-1.2.1/AndroidManifest.xml:20:5-44
-MERGED from [androidx.savedstate:savedstate:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/1705ce9902febbb5996d7b14ce1fa6a2/transformed/savedstate-1.2.1/AndroidManifest.xml:20:5-44
-MERGED from [androidx.savedstate:savedstate:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/1705ce9902febbb5996d7b14ce1fa6a2/transformed/savedstate-1.2.1/AndroidManifest.xml:20:5-44
-MERGED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/8dec745ba63d2f51fdf480c698bf2430/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:21:5-44
-MERGED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/8dec745ba63d2f51fdf480c698bf2430/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:21:5-44
-MERGED from [androidx.lifecycle:lifecycle-livedata-core:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/acd86156c2493af804e463e89d7e6f4e/transformed/lifecycle-livedata-core-2.8.2/AndroidManifest.xml:20:5-44
-MERGED from [androidx.lifecycle:lifecycle-livedata-core:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/acd86156c2493af804e463e89d7e6f4e/transformed/lifecycle-livedata-core-2.8.2/AndroidManifest.xml:20:5-44
-MERGED from [androidx.lifecycle:lifecycle-viewmodel-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/8f832d7312671d4e70d3735c01f2d685/transformed/lifecycle-viewmodel-release/AndroidManifest.xml:20:5-44
-MERGED from [androidx.lifecycle:lifecycle-viewmodel-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/8f832d7312671d4e70d3735c01f2d685/transformed/lifecycle-viewmodel-release/AndroidManifest.xml:20:5-44
-MERGED from [androidx.lifecycle:lifecycle-runtime-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/4e9c64221824c6a7f7d52e43d699f439/transformed/lifecycle-runtime-release/AndroidManifest.xml:20:5-44
-MERGED from [androidx.lifecycle:lifecycle-runtime-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/4e9c64221824c6a7f7d52e43d699f439/transformed/lifecycle-runtime-release/AndroidManifest.xml:20:5-44
-MERGED from [androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/6a7c805fcb25de58026e602664f0ca5c/transformed/lifecycle-viewmodel-ktx-2.8.2/AndroidManifest.xml:5:5-44
-MERGED from [androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/6a7c805fcb25de58026e602664f0ca5c/transformed/lifecycle-viewmodel-ktx-2.8.2/AndroidManifest.xml:5:5-44
-MERGED from [androidx.lifecycle:lifecycle-runtime-ktx-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/1661bddffe9bfb5142762a3669ad5993/transformed/lifecycle-runtime-ktx-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.lifecycle:lifecycle-runtime-ktx-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/1661bddffe9bfb5142762a3669ad5993/transformed/lifecycle-runtime-ktx-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.lifecycle:lifecycle-viewmodel-savedstate:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/53e84bb8e3e6674b9ae5d8b448124302/transformed/lifecycle-viewmodel-savedstate-2.8.2/AndroidManifest.xml:20:5-44
-MERGED from [androidx.lifecycle:lifecycle-viewmodel-savedstate:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/53e84bb8e3e6674b9ae5d8b448124302/transformed/lifecycle-viewmodel-savedstate-2.8.2/AndroidManifest.xml:20:5-44
-MERGED from [androidx.customview:customview-poolingcontainer:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/077d9849d7f7424b43d9d3aa3ce125cb/transformed/customview-poolingcontainer-1.0.0/AndroidManifest.xml:20:5-21:38
-MERGED from [androidx.customview:customview-poolingcontainer:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/077d9849d7f7424b43d9d3aa3ce125cb/transformed/customview-poolingcontainer-1.0.0/AndroidManifest.xml:20:5-21:38
-MERGED from [androidx.core:core-ktx:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/60ee756110c1e0e2d71bbd643dfbdb30/transformed/core-ktx-1.13.1/AndroidManifest.xml:5:5-44
-MERGED from [androidx.core:core-ktx:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/60ee756110c1e0e2d71bbd643dfbdb30/transformed/core-ktx-1.13.1/AndroidManifest.xml:5:5-44
-MERGED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/84eb1bad3be503453e2ba2d1669692d4/transformed/room-runtime/AndroidManifest.xml:21:5-44
-MERGED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/84eb1bad3be503453e2ba2d1669692d4/transformed/room-runtime/AndroidManifest.xml:21:5-44
-MERGED from [androidx.room:room-ktx:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/b217f1ffff26677736685271b7d195c6/transformed/room-ktx-2.8.4/AndroidManifest.xml:20:5-44
-MERGED from [androidx.room:room-ktx:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/b217f1ffff26677736685271b7d195c6/transformed/room-ktx-2.8.4/AndroidManifest.xml:20:5-44
-MERGED from [androidx.compose.runtime:runtime-saveable-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/5bd97be4718b63db994c5348e3ed238e/transformed/runtime-saveable-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.runtime:runtime-saveable-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/5bd97be4718b63db994c5348e3ed238e/transformed/runtime-saveable-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.runtime:runtime-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b4eb2fa0cda7342ae471b00cbd32d303/transformed/runtime-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.compose.runtime:runtime-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b4eb2fa0cda7342ae471b00cbd32d303/transformed/runtime-release/AndroidManifest.xml:5:5-44
-MERGED from [androidx.annotation:annotation-experimental:1.5.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/fbdb40c76627d90ab793bb577c7fc05e/transformed/annotation-experimental-1.5.0/AndroidManifest.xml:5:5-44
-MERGED from [androidx.annotation:annotation-experimental:1.5.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/fbdb40c76627d90ab793bb577c7fc05e/transformed/annotation-experimental-1.5.0/AndroidManifest.xml:5:5-44
-MERGED from [androidx.interpolator:interpolator:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/ddf3f90769165d48eb6bcad5b6f4f43a/transformed/interpolator-1.0.0/AndroidManifest.xml:20:5-44
-MERGED from [androidx.interpolator:interpolator:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/ddf3f90769165d48eb6bcad5b6f4f43a/transformed/interpolator-1.0.0/AndroidManifest.xml:20:5-44
-MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/6789b5d7c9153968c18cca80e240df5b/transformed/versionedparcelable-1.1.1/AndroidManifest.xml:20:5-22:41
-MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/6789b5d7c9153968c18cca80e240df5b/transformed/versionedparcelable-1.1.1/AndroidManifest.xml:20:5-22:41
-MERGED from [androidx.arch.core:core-runtime:2.2.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/63dea79c53208ad53febe7b5c801fd0e/transformed/core-runtime-2.2.0/AndroidManifest.xml:20:5-44
-MERGED from [androidx.arch.core:core-runtime:2.2.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/63dea79c53208ad53febe7b5c801fd0e/transformed/core-runtime-2.2.0/AndroidManifest.xml:20:5-44
-MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:21:5-44
-MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:21:5-44
-MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/f0907ddd1b393d4b53f80dc13a9edecd/transformed/startup-runtime-1.1.1/AndroidManifest.xml:21:5-23:41
-MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/f0907ddd1b393d4b53f80dc13a9edecd/transformed/startup-runtime-1.1.1/AndroidManifest.xml:21:5-23:41
-MERGED from [androidx.tracing:tracing:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0f5f7eee668a2feb87523c787c7b0f93/transformed/tracing-1.0.0/AndroidManifest.xml:20:5-22:41
-MERGED from [androidx.tracing:tracing:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0f5f7eee668a2feb87523c787c7b0f93/transformed/tracing-1.0.0/AndroidManifest.xml:20:5-22:41
-MERGED from [androidx.sqlite:sqlite-framework-android:2.6.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/82a6199f9c998294071a9a1b91a74ebc/transformed/sqlite-framework/AndroidManifest.xml:20:5-44
-MERGED from [androidx.sqlite:sqlite-framework-android:2.6.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/82a6199f9c998294071a9a1b91a74ebc/transformed/sqlite-framework/AndroidManifest.xml:20:5-44
-MERGED from [androidx.sqlite:sqlite-android:2.6.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/f07a7baa0bab5952780da606124e5aec/transformed/sqlite/AndroidManifest.xml:20:5-44
-MERGED from [androidx.sqlite:sqlite-android:2.6.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/f07a7baa0bab5952780da606124e5aec/transformed/sqlite/AndroidManifest.xml:20:5-44
+MERGED from [androidx.compose.material3:material3-android:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/969002731c2fbf61a414c362a7faa865/transformed/material3-release/AndroidManifest.xml:20:5-44
+MERGED from [androidx.compose.material3:material3-android:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/969002731c2fbf61a414c362a7faa865/transformed/material3-release/AndroidManifest.xml:20:5-44
+MERGED from [androidx.compose.material:material-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/7cf0a1e614e167dd4f4107d556c2e198/transformed/material-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.material:material-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/7cf0a1e614e167dd4f4107d556c2e198/transformed/material-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.material:material-icons-core-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/086120308d63c58c2af681a21fbaf8fb/transformed/material-icons-core-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.material:material-icons-core-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/086120308d63c58c2af681a21fbaf8fb/transformed/material-icons-core-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.material:material-ripple-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b11ca36439ab34441b58da225de81812/transformed/material-ripple-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.material:material-ripple-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b11ca36439ab34441b58da225de81812/transformed/material-ripple-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.foundation:foundation-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/5adb73e34b8e3fae1a46e1c0661c9b30/transformed/foundation-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.foundation:foundation-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/5adb73e34b8e3fae1a46e1c0661c9b30/transformed/foundation-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.animation:animation-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/9a82c516d09d05c2019fd0a4542f3d67/transformed/animation-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.animation:animation-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/9a82c516d09d05c2019fd0a4542f3d67/transformed/animation-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.foundation:foundation-layout-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/62b8ee328b3c3a5e1ff221476b708c62/transformed/foundation-layout-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.foundation:foundation-layout-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/62b8ee328b3c3a5e1ff221476b708c62/transformed/foundation-layout-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.animation:animation-core-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/ab729e3b64cb0e8ac8352bdc2bcaa9a1/transformed/animation-core-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.animation:animation-core-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/ab729e3b64cb0e8ac8352bdc2bcaa9a1/transformed/animation-core-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-tooling-data-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/39d8a3df3e40c6378174fb270e411f42/transformed/ui-tooling-data-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-tooling-data-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/39d8a3df3e40c6378174fb270e411f42/transformed/ui-tooling-data-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-unit-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/f2efa986a363fc99576dc8c405d6c5db/transformed/ui-unit-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-unit-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/f2efa986a363fc99576dc8c405d6c5db/transformed/ui-unit-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-geometry-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b5f81f6a92ef313be9c4ae37edfe4830/transformed/ui-geometry-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-geometry-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b5f81f6a92ef313be9c4ae37edfe4830/transformed/ui-geometry-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-util-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/7826f3b181251a93e9322c774cf0eee9/transformed/ui-util-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-util-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/7826f3b181251a93e9322c774cf0eee9/transformed/ui-util-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-text-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/f9333df67ad8b044d089e947f1ddd9c7/transformed/ui-text-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-text-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/f9333df67ad8b044d089e947f1ddd9c7/transformed/ui-text-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-tooling-preview-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/ca24e9f0455a745f65c7d4a441081bed/transformed/ui-tooling-preview-release/AndroidManifest.xml:20:5-44
+MERGED from [androidx.compose.ui:ui-tooling-preview-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/ca24e9f0455a745f65c7d4a441081bed/transformed/ui-tooling-preview-release/AndroidManifest.xml:20:5-44
+MERGED from [androidx.compose.ui:ui-graphics-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b3323b714c95462aa394fc334b54add9/transformed/ui-graphics-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-graphics-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b3323b714c95462aa394fc334b54add9/transformed/ui-graphics-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/fca86229fa0bc2bf940f9fcfe070ef88/transformed/ui-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/fca86229fa0bc2bf940f9fcfe070ef88/transformed/ui-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/a8ecf215b3292409a882f27b29e5c315/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:20:5-44
+MERGED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/a8ecf215b3292409a882f27b29e5c315/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:20:5-44
+MERGED from [androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/598824c37021111ab12cb81df5b0971f/transformed/ui-tooling-release/AndroidManifest.xml:20:5-44
+MERGED from [androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/598824c37021111ab12cb81df5b0971f/transformed/ui-tooling-release/AndroidManifest.xml:20:5-44
+MERGED from [androidx.activity:activity-compose:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/1bbd4d8ca9e2581f8820984beb6e8aab/transformed/activity-compose-1.9.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.activity:activity-compose:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/1bbd4d8ca9e2581f8820984beb6e8aab/transformed/activity-compose-1.9.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.activity:activity-ktx:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/6830aebd0cf826e1816c453094e05be4/transformed/activity-ktx-1.9.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.activity:activity-ktx:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/6830aebd0cf826e1816c453094e05be4/transformed/activity-ktx-1.9.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.activity:activity:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/1305984f55b83476b90b103bf595fa69/transformed/activity-1.9.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.activity:activity:1.9.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/1305984f55b83476b90b103bf595fa69/transformed/activity-1.9.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.autofill:autofill:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/57da4acd5a295072a26a198ab1bcf24b/transformed/autofill-1.0.0/AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.autofill:autofill:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/57da4acd5a295072a26a198ab1bcf24b/transformed/autofill-1.0.0/AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/90f77dc5b1041cbe4112872e1674ea58/transformed/emoji2-1.3.0/AndroidManifest.xml:21:5-44
+MERGED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/90f77dc5b1041cbe4112872e1674ea58/transformed/emoji2-1.3.0/AndroidManifest.xml:21:5-44
+MERGED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/AndroidManifest.xml:20:5-44
+MERGED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/AndroidManifest.xml:20:5-44
+MERGED from [androidx.savedstate:savedstate-ktx:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/183e5da5f09ce773f3186e794bd63641/transformed/savedstate-ktx-1.2.1/AndroidManifest.xml:20:5-44
+MERGED from [androidx.savedstate:savedstate-ktx:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/183e5da5f09ce773f3186e794bd63641/transformed/savedstate-ktx-1.2.1/AndroidManifest.xml:20:5-44
+MERGED from [androidx.savedstate:savedstate:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/ce9bd7935a840ed8cf31bb936f85912b/transformed/savedstate-1.2.1/AndroidManifest.xml:20:5-44
+MERGED from [androidx.savedstate:savedstate:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/ce9bd7935a840ed8cf31bb936f85912b/transformed/savedstate-1.2.1/AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/3539867e443d92e36899e3ce5f2aa419/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:21:5-44
+MERGED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/3539867e443d92e36899e3ce5f2aa419/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:21:5-44
+MERGED from [androidx.lifecycle:lifecycle-livedata-core:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/bbd8db5cd949bd0578ca589cef322690/transformed/lifecycle-livedata-core-2.8.2/AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-livedata-core:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/bbd8db5cd949bd0578ca589cef322690/transformed/lifecycle-livedata-core-2.8.2/AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/91ae421cdf5eb196f811a9befe83a7b0/transformed/lifecycle-viewmodel-release/AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/91ae421cdf5eb196f811a9befe83a7b0/transformed/lifecycle-viewmodel-release/AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-runtime-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/ba1251bec369da45e3ca7b9909740ba5/transformed/lifecycle-runtime-release/AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-runtime-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/ba1251bec369da45e3ca7b9909740ba5/transformed/lifecycle-runtime-release/AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/64710541546791a960b60cecc6aa2609/transformed/lifecycle-viewmodel-ktx-2.8.2/AndroidManifest.xml:5:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/64710541546791a960b60cecc6aa2609/transformed/lifecycle-viewmodel-ktx-2.8.2/AndroidManifest.xml:5:5-44
+MERGED from [androidx.lifecycle:lifecycle-runtime-ktx-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/3389275ef12322a455c0b3ce2b7a66a6/transformed/lifecycle-runtime-ktx-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.lifecycle:lifecycle-runtime-ktx-android:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/3389275ef12322a455c0b3ce2b7a66a6/transformed/lifecycle-runtime-ktx-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-savedstate:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/5389a63a7237b6178d7842af3429da91/transformed/lifecycle-viewmodel-savedstate-2.8.2/AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-savedstate:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/5389a63a7237b6178d7842af3429da91/transformed/lifecycle-viewmodel-savedstate-2.8.2/AndroidManifest.xml:20:5-44
+MERGED from [androidx.customview:customview-poolingcontainer:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/8fb1ac6eab509e44e38a4cc8b4a71179/transformed/customview-poolingcontainer-1.0.0/AndroidManifest.xml:20:5-21:38
+MERGED from [androidx.customview:customview-poolingcontainer:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/8fb1ac6eab509e44e38a4cc8b4a71179/transformed/customview-poolingcontainer-1.0.0/AndroidManifest.xml:20:5-21:38
+MERGED from [androidx.core:core-ktx:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/6ab960256dd055580e30bb75be222fe1/transformed/core-ktx-1.13.1/AndroidManifest.xml:5:5-44
+MERGED from [androidx.core:core-ktx:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/6ab960256dd055580e30bb75be222fe1/transformed/core-ktx-1.13.1/AndroidManifest.xml:5:5-44
+MERGED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/0bf47e86de707dc26fea58def7f6b453/transformed/room-runtime/AndroidManifest.xml:21:5-44
+MERGED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/0bf47e86de707dc26fea58def7f6b453/transformed/room-runtime/AndroidManifest.xml:21:5-44
+MERGED from [androidx.room:room-ktx:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/9a8dd80fc5a92185492a9bca601c8e04/transformed/room-ktx-2.8.4/AndroidManifest.xml:20:5-44
+MERGED from [androidx.room:room-ktx:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/9a8dd80fc5a92185492a9bca601c8e04/transformed/room-ktx-2.8.4/AndroidManifest.xml:20:5-44
+MERGED from [androidx.compose.runtime:runtime-saveable-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b5307a712b1441aaa50b66f7f275015/transformed/runtime-saveable-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.runtime:runtime-saveable-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b5307a712b1441aaa50b66f7f275015/transformed/runtime-saveable-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.runtime:runtime-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/0b75c4c4bc82208af327857b4002a73a/transformed/runtime-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.compose.runtime:runtime-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/0b75c4c4bc82208af327857b4002a73a/transformed/runtime-release/AndroidManifest.xml:5:5-44
+MERGED from [androidx.annotation:annotation-experimental:1.5.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/282cd722ac81bbd6ef8a6d93e50df7f3/transformed/annotation-experimental-1.5.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.annotation:annotation-experimental:1.5.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/282cd722ac81bbd6ef8a6d93e50df7f3/transformed/annotation-experimental-1.5.0/AndroidManifest.xml:5:5-44
+MERGED from [androidx.interpolator:interpolator:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/8069a2c9de5f5874675b406626cd1dce/transformed/interpolator-1.0.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.interpolator:interpolator:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/8069a2c9de5f5874675b406626cd1dce/transformed/interpolator-1.0.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b3ee98369ab35e08bcc84f01fbb2df28/transformed/versionedparcelable-1.1.1/AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b3ee98369ab35e08bcc84f01fbb2df28/transformed/versionedparcelable-1.1.1/AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.arch.core:core-runtime:2.2.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0cb838fb0e724f82d15e062febb76571/transformed/core-runtime-2.2.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.arch.core:core-runtime:2.2.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0cb838fb0e724f82d15e062febb76571/transformed/core-runtime-2.2.0/AndroidManifest.xml:20:5-44
+MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:21:5-44
+MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:21:5-44
+MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/529ba70837c50f61aff375bb3b190294/transformed/startup-runtime-1.1.1/AndroidManifest.xml:21:5-23:41
+MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/529ba70837c50f61aff375bb3b190294/transformed/startup-runtime-1.1.1/AndroidManifest.xml:21:5-23:41
+MERGED from [androidx.tracing:tracing:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/9c5db33839f2008c165431d80b038f96/transformed/tracing-1.0.0/AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.tracing:tracing:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/9c5db33839f2008c165431d80b038f96/transformed/tracing-1.0.0/AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.sqlite:sqlite-framework-android:2.6.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/1d6c26784ccc98f3a4c9f8201ac21a27/transformed/sqlite-framework/AndroidManifest.xml:20:5-44
+MERGED from [androidx.sqlite:sqlite-framework-android:2.6.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/1d6c26784ccc98f3a4c9f8201ac21a27/transformed/sqlite-framework/AndroidManifest.xml:20:5-44
+MERGED from [androidx.sqlite:sqlite-android:2.6.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/1a2e6fa3f481e82e9c518230086a99b9/transformed/sqlite/AndroidManifest.xml:20:5-44
+MERGED from [androidx.sqlite:sqlite-android:2.6.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/1a2e6fa3f481e82e9c518230086a99b9/transformed/sqlite/AndroidManifest.xml:20:5-44
+MERGED from [org.tensorflow:tensorflow-lite:2.16.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/40d96a664ca104745c9088e633986561/transformed/tensorflow-lite-2.16.1/AndroidManifest.xml:6:5-7:38
+MERGED from [org.tensorflow:tensorflow-lite:2.16.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/40d96a664ca104745c9088e633986561/transformed/tensorflow-lite-2.16.1/AndroidManifest.xml:6:5-7:38
+MERGED from [org.tensorflow:tensorflow-lite-api:2.16.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/3f0b7e2f4e129e962ea20ba3bed1fe7f/transformed/tensorflow-lite-api-2.16.1/AndroidManifest.xml:6:5-7:38
+MERGED from [org.tensorflow:tensorflow-lite-api:2.16.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/3f0b7e2f4e129e962ea20ba3bed1fe7f/transformed/tensorflow-lite-api-2.16.1/AndroidManifest.xml:6:5-7:38
 	android:targetSdkVersion
 		INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml
 	android:minSdkVersion
 		INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml
 activity#androidx.activity.ComponentActivity
-ADDED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/d61727dc9d24159d6a5fad2376315a34/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:23:9-25:39
+ADDED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/a8ecf215b3292409a882f27b29e5c315/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:23:9-25:39
 	android:exported
-		ADDED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/d61727dc9d24159d6a5fad2376315a34/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:25:13-36
+		ADDED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/a8ecf215b3292409a882f27b29e5c315/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:25:13-36
 	android:name
-		ADDED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/d61727dc9d24159d6a5fad2376315a34/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:24:13-63
+		ADDED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/a8ecf215b3292409a882f27b29e5c315/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:24:13-63
 activity#androidx.compose.ui.tooling.PreviewActivity
-ADDED from [androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/64a2f5ccf95ce9e89837b71226a85abf/transformed/ui-tooling-release/AndroidManifest.xml:23:9-25:39
+ADDED from [androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/598824c37021111ab12cb81df5b0971f/transformed/ui-tooling-release/AndroidManifest.xml:23:9-25:39
 	android:exported
-		ADDED from [androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/64a2f5ccf95ce9e89837b71226a85abf/transformed/ui-tooling-release/AndroidManifest.xml:25:13-36
+		ADDED from [androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/598824c37021111ab12cb81df5b0971f/transformed/ui-tooling-release/AndroidManifest.xml:25:13-36
 	android:name
-		ADDED from [androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/64a2f5ccf95ce9e89837b71226a85abf/transformed/ui-tooling-release/AndroidManifest.xml:24:13-71
+		ADDED from [androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/598824c37021111ab12cb81df5b0971f/transformed/ui-tooling-release/AndroidManifest.xml:24:13-71
 provider#androidx.startup.InitializationProvider
-ADDED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0aec448ec30532dff610109b6dc28b36/transformed/emoji2-1.3.0/AndroidManifest.xml:24:9-32:20
-MERGED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/8dec745ba63d2f51fdf480c698bf2430/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:24:9-32:20
-MERGED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/8dec745ba63d2f51fdf480c698bf2430/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:24:9-32:20
-MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:24:9-32:20
-MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:24:9-32:20
-MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/f0907ddd1b393d4b53f80dc13a9edecd/transformed/startup-runtime-1.1.1/AndroidManifest.xml:26:9-30:34
-MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/f0907ddd1b393d4b53f80dc13a9edecd/transformed/startup-runtime-1.1.1/AndroidManifest.xml:26:9-30:34
+ADDED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/90f77dc5b1041cbe4112872e1674ea58/transformed/emoji2-1.3.0/AndroidManifest.xml:24:9-32:20
+MERGED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/3539867e443d92e36899e3ce5f2aa419/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:24:9-32:20
+MERGED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/3539867e443d92e36899e3ce5f2aa419/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:24:9-32:20
+MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:24:9-32:20
+MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:24:9-32:20
+MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/529ba70837c50f61aff375bb3b190294/transformed/startup-runtime-1.1.1/AndroidManifest.xml:26:9-30:34
+MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/529ba70837c50f61aff375bb3b190294/transformed/startup-runtime-1.1.1/AndroidManifest.xml:26:9-30:34
 	tools:node
-		ADDED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0aec448ec30532dff610109b6dc28b36/transformed/emoji2-1.3.0/AndroidManifest.xml:28:13-31
+		ADDED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/90f77dc5b1041cbe4112872e1674ea58/transformed/emoji2-1.3.0/AndroidManifest.xml:28:13-31
 	android:authorities
-		ADDED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0aec448ec30532dff610109b6dc28b36/transformed/emoji2-1.3.0/AndroidManifest.xml:26:13-68
+		ADDED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/90f77dc5b1041cbe4112872e1674ea58/transformed/emoji2-1.3.0/AndroidManifest.xml:26:13-68
 	android:exported
-		ADDED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0aec448ec30532dff610109b6dc28b36/transformed/emoji2-1.3.0/AndroidManifest.xml:27:13-37
+		ADDED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/90f77dc5b1041cbe4112872e1674ea58/transformed/emoji2-1.3.0/AndroidManifest.xml:27:13-37
 	android:name
-		ADDED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0aec448ec30532dff610109b6dc28b36/transformed/emoji2-1.3.0/AndroidManifest.xml:25:13-67
+		ADDED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/90f77dc5b1041cbe4112872e1674ea58/transformed/emoji2-1.3.0/AndroidManifest.xml:25:13-67
 meta-data#androidx.emoji2.text.EmojiCompatInitializer
-ADDED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0aec448ec30532dff610109b6dc28b36/transformed/emoji2-1.3.0/AndroidManifest.xml:29:13-31:52
+ADDED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/90f77dc5b1041cbe4112872e1674ea58/transformed/emoji2-1.3.0/AndroidManifest.xml:29:13-31:52
 	android:value
-		ADDED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0aec448ec30532dff610109b6dc28b36/transformed/emoji2-1.3.0/AndroidManifest.xml:31:17-49
+		ADDED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/90f77dc5b1041cbe4112872e1674ea58/transformed/emoji2-1.3.0/AndroidManifest.xml:31:17-49
 	android:name
-		ADDED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/0aec448ec30532dff610109b6dc28b36/transformed/emoji2-1.3.0/AndroidManifest.xml:30:17-75
+		ADDED from [androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/90f77dc5b1041cbe4112872e1674ea58/transformed/emoji2-1.3.0/AndroidManifest.xml:30:17-75
 permission#${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
-ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/61628a0e43a118b5def013e6b43b0013/transformed/core-1.13.1/AndroidManifest.xml:22:5-24:47
+ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/AndroidManifest.xml:22:5-24:47
 	android:protectionLevel
-		ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/61628a0e43a118b5def013e6b43b0013/transformed/core-1.13.1/AndroidManifest.xml:24:9-44
+		ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/AndroidManifest.xml:24:9-44
 	android:name
-		ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/61628a0e43a118b5def013e6b43b0013/transformed/core-1.13.1/AndroidManifest.xml:23:9-81
+		ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/AndroidManifest.xml:23:9-81
 permission#com.teya.agent.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
-ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/61628a0e43a118b5def013e6b43b0013/transformed/core-1.13.1/AndroidManifest.xml:22:5-24:47
+ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/AndroidManifest.xml:22:5-24:47
 	android:protectionLevel
-		ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/61628a0e43a118b5def013e6b43b0013/transformed/core-1.13.1/AndroidManifest.xml:24:9-44
+		ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/AndroidManifest.xml:24:9-44
 	android:name
-		ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/61628a0e43a118b5def013e6b43b0013/transformed/core-1.13.1/AndroidManifest.xml:23:9-81
+		ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/AndroidManifest.xml:23:9-81
 uses-permission#${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
-ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/61628a0e43a118b5def013e6b43b0013/transformed/core-1.13.1/AndroidManifest.xml:26:5-97
+ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/AndroidManifest.xml:26:5-97
 	android:name
-		ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/61628a0e43a118b5def013e6b43b0013/transformed/core-1.13.1/AndroidManifest.xml:26:22-94
+		ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/AndroidManifest.xml:26:22-94
 uses-permission#com.teya.agent.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
-ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/61628a0e43a118b5def013e6b43b0013/transformed/core-1.13.1/AndroidManifest.xml:26:5-97
+ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/AndroidManifest.xml:26:5-97
 	android:name
-		ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/61628a0e43a118b5def013e6b43b0013/transformed/core-1.13.1/AndroidManifest.xml:26:22-94
+		ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b39ac7cc9f362f20f48ee8bf8b064017/transformed/core-1.13.1/AndroidManifest.xml:26:22-94
 meta-data#androidx.lifecycle.ProcessLifecycleInitializer
-ADDED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/8dec745ba63d2f51fdf480c698bf2430/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:29:13-31:52
+ADDED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/3539867e443d92e36899e3ce5f2aa419/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:29:13-31:52
 	android:value
-		ADDED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/8dec745ba63d2f51fdf480c698bf2430/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:31:17-49
+		ADDED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/3539867e443d92e36899e3ce5f2aa419/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:31:17-49
 	android:name
-		ADDED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/8dec745ba63d2f51fdf480c698bf2430/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:30:17-78
+		ADDED from [androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/3539867e443d92e36899e3ce5f2aa419/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:30:17-78
 service#androidx.room.MultiInstanceInvalidationService
-ADDED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/84eb1bad3be503453e2ba2d1669692d4/transformed/room-runtime/AndroidManifest.xml:24:9-28:63
+ADDED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/0bf47e86de707dc26fea58def7f6b453/transformed/room-runtime/AndroidManifest.xml:24:9-28:63
 	android:exported
-		ADDED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/84eb1bad3be503453e2ba2d1669692d4/transformed/room-runtime/AndroidManifest.xml:27:13-37
+		ADDED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/0bf47e86de707dc26fea58def7f6b453/transformed/room-runtime/AndroidManifest.xml:27:13-37
 	tools:ignore
-		ADDED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/84eb1bad3be503453e2ba2d1669692d4/transformed/room-runtime/AndroidManifest.xml:28:13-60
+		ADDED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/0bf47e86de707dc26fea58def7f6b453/transformed/room-runtime/AndroidManifest.xml:28:13-60
 	android:directBootAware
-		ADDED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/84eb1bad3be503453e2ba2d1669692d4/transformed/room-runtime/AndroidManifest.xml:26:13-43
+		ADDED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/0bf47e86de707dc26fea58def7f6b453/transformed/room-runtime/AndroidManifest.xml:26:13-43
 	android:name
-		ADDED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/84eb1bad3be503453e2ba2d1669692d4/transformed/room-runtime/AndroidManifest.xml:25:13-74
+		ADDED from [androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/0bf47e86de707dc26fea58def7f6b453/transformed/room-runtime/AndroidManifest.xml:25:13-74
 meta-data#androidx.profileinstaller.ProfileInstallerInitializer
-ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:29:13-31:52
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:29:13-31:52
 	android:value
-		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:31:17-49
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:31:17-49
 	android:name
-		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:30:17-85
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:30:17-85
 receiver#androidx.profileinstaller.ProfileInstallReceiver
-ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:34:9-52:20
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:34:9-52:20
 	android:enabled
-		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:37:13-35
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:37:13-35
 	android:exported
-		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:38:13-36
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:38:13-36
 	android:permission
-		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:39:13-57
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:39:13-57
 	android:directBootAware
-		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:36:13-44
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:36:13-44
 	android:name
-		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:35:13-76
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:35:13-76
 intent-filter#action:name:androidx.profileinstaller.action.INSTALL_PROFILE
-ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:40:13-42:29
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:40:13-42:29
 action#androidx.profileinstaller.action.INSTALL_PROFILE
-ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:17-91
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:17-91
 	android:name
-		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:25-88
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:25-88
 intent-filter#action:name:androidx.profileinstaller.action.SKIP_FILE
-ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:43:13-45:29
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:43:13-45:29
 action#androidx.profileinstaller.action.SKIP_FILE
-ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:17-85
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:17-85
 	android:name
-		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:25-82
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:25-82
 intent-filter#action:name:androidx.profileinstaller.action.SAVE_PROFILE
-ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:46:13-48:29
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:46:13-48:29
 action#androidx.profileinstaller.action.SAVE_PROFILE
-ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:17-88
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:17-88
 	android:name
-		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:25-85
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:25-85
 intent-filter#action:name:androidx.profileinstaller.action.BENCHMARK_OPERATION
-ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:49:13-51:29
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:49:13-51:29
 action#androidx.profileinstaller.action.BENCHMARK_OPERATION
-ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:17-95
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:17-95
 	android:name
-		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/72fac0d71a7d60cbc5cd9391bd08e34e/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:25-92
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/2b96a450538e64bed4e4c4aa2f61f877/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:25-92
