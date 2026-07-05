@@ -13,9 +13,7 @@ composeBom = "2024.06.00"
 ksp = "2.0.0-1.0.22"
 ktor = "2.3.12"
 kotlinxSerializationJson = "1.7.1"
-tensorflowLite = "2.16.1"
-# We exclude the support library temporarily to resolve the manifest namespace conflict
-# tensorflowLiteSupport = "0.4.4"
+litert = "2.1.6"
 securityCrypto = "1.1.0"
 
 [libraries]
@@ -42,8 +40,8 @@ ktor-client-content-negotiation = { group = "io.ktor", name = "ktor-client-conte
 ktor-serialization-kotlinx-json = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktor" }
 ktor-client-logging = { group = "io.ktor", name = "ktor-client-logging", version.ref = "ktor" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
-tensorflow-lite = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "tensorflowLite" }
-# tensorflow-lite-support = { group = "org.tensorflow", name = "tensorflow-lite-support", version.ref = "tensorflowLiteSupport" }
+litert = { group = "com.google.ai.edge.litert", name = "litert" }
+litert-api = { group = "com.google.ai.edge.litert", name = "litert-api" }
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 
 [plugins]
