@@ -4,11 +4,22 @@ import android.content.Context
 import android.util.Log
 
 class VoicePipeline(private val context: Context) {
-    // Stubs for STT, TTS, and Wake Word
     
+    private val wakeWordEngine = WakeWordEngine(context) {
+        onDetected()
+    }
+    
+    private var wakeWordCallback: (() -> Unit)? = null
+
     fun startListening(onWakeWord: () -> Unit) {
         Log.d("VoicePipeline", "Wake word detection started")
-        // Implementation with Porcupine/etc. goes here
+        this.wakeWordCallback = onWakeWord
+        wakeWordEngine.start()
+    }
+    
+    private fun onDetected() {
+        Log.d("VoicePipeline", "Wake word detected!")
+        wakeWordCallback?.invoke()
     }
     
     fun speechToText(audio: Any): String {
@@ -17,6 +28,10 @@ class VoicePipeline(private val context: Context) {
     
     fun textToSpeech(text: String) {
         Log.d("VoicePipeline", "Speaking: $text")
-        // Implementation with ElevenLabs/etc. goes here
+        // Implementation with Mistral TTS goes here
+    }
+
+    fun stop() {
+        wakeWordEngine.stop()
     }
 }

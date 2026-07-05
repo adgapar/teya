@@ -66,6 +66,10 @@ dependencies {
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.kotlinx.serialization.json)
 
+    // AI / Wake Word
+    implementation(libs.tensorflow.lite)
+    implementation(libs.tensorflow.lite.support)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
