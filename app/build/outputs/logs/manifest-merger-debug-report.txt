@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:2:1-59:12
-INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:2:1-59:12
-INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:2:1-59:12
-INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:2:1-59:12
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:2:1-58:12
+INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:2:1-58:12
+INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:2:1-58:12
+INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:2:1-58:12
 MERGED from [androidx.compose.material3:material3-android:1.2.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/c33658ce29322a7f4e7f5505a1ce833c/transformed/material3-release/AndroidManifest.xml:17:1-22:12
 MERGED from [androidx.compose.material:material-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/4fce85a2d5611657ccbff40bb43ef0ba/transformed/material-release/AndroidManifest.xml:2:1-7:12
 MERGED from [androidx.compose.material:material-icons-core-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/3ee11e0e6e115023709f496ae2040593/transformed/material-icons-core-release/AndroidManifest.xml:2:1-7:12
@@ -87,29 +87,25 @@ uses-permission#android.permission.FOREGROUND_SERVICE_PHONE_CALL
 ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:9:5-88
 	android:name
 		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:9:22-85
-uses-permission#android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:10:5-94
-	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:10:22-91
 uses-permission#android.permission.RECORD_AUDIO
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:11:5-71
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:10:5-71
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:11:22-68
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:10:22-68
 uses-permission#android.permission.CALL_PHONE
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:12:5-69
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:11:5-69
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:12:22-66
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:11:22-66
 uses-permission#android.permission.ANSWER_PHONE_CALLS
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:13:5-77
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:12:5-77
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:13:22-74
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:12:22-74
 uses-permission#android.permission.MANAGE_OWN_CALLS
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:14:5-75
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:13:5-75
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:14:22-72
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:13:22-72
 application
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:16:5-57:19
-INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:16:5-57:19
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:15:5-56:19
+INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:15:5-56:19
 MERGED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/497ac39e384e3fea6f7bf1f4f94c3d36/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:22:5-26:19
 MERGED from [androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/497ac39e384e3fea6f7bf1f4f94c3d36/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:22:5-26:19
 MERGED from [androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/b716d857c5231d3fd70556deaa810838/transformed/ui-tooling-release/AndroidManifest.xml:22:5-26:19
@@ -137,73 +133,73 @@ MERGED from [com.google.ai.edge.litert:litert-api:1.4.1] /Users/adgapar/.gradle/
 	android:appComponentFactory
 		ADDED from [androidx.core:core:1.13.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/ed32ee7b87cf8d8dbbce1753c86ac825/transformed/core-1.13.1/AndroidManifest.xml:28:18-86
 	android:supportsRtl
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:19:9-35
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:18:9-35
 	android:label
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:18:9-41
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:17:9-41
 	android:allowBackup
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:17:9-35
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:16:9-35
 	android:theme
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:20:9-42
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:19:9-42
 activity#com.teya.agent.SetupActivity
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:22:9-31:20
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:21:9-30:20
 	android:screenOrientation
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:25:13-49
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:24:13-49
 	android:exported
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:24:13-36
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:23:13-36
 	android:theme
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:26:13-46
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:25:13-46
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:23:13-42
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:22:13-42
 intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:27:13-30:29
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:26:13-29:29
 action#android.intent.action.MAIN
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:28:17-69
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:27:17-69
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:28:25-66
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:27:25-66
 category#android.intent.category.LAUNCHER
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:29:17-77
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:28:17-77
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:29:27-74
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:28:27-74
 activity#com.teya.agent.MainActivity
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:33:9-37:49
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:32:9-36:49
 	android:screenOrientation
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:36:13-50
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:35:13-50
 	android:exported
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:35:13-37
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:34:13-37
 	android:theme
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:37:13-46
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:36:13-46
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:34:13-41
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:33:13-41
 service#com.teya.agent.harness.HarnessService
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:39:9-43:68
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:38:9-42:68
 	android:enabled
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:41:13-35
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:40:13-35
 	android:exported
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:42:13-37
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:41:13-37
 	android:foregroundServiceType
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:43:13-65
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:42:13-65
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:40:13-51
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:39:13-51
 service#com.teya.agent.telephony.TeyaInCallService
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:45:9-55:19
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:44:9-54:19
 	android:exported
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:48:13-36
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:47:13-36
 	android:permission
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:47:13-72
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:46:13-72
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:46:13-56
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:45:13-56
 meta-data#android.telecom.IN_CALL_SERVICE_UI
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:49:13-51:40
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:48:13-50:40
 	android:value
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:51:17-37
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:50:17-37
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:50:17-66
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:49:17-66
 intent-filter#action:name:android.telecom.InCallService
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:52:13-54:29
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:51:13-53:29
 action#android.telecom.InCallService
-ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:53:17-72
+ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:52:17-72
 	android:name
-		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:53:25-69
+		ADDED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:52:25-69
 uses-sdk
 INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml

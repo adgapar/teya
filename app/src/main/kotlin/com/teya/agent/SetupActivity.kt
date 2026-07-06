@@ -19,9 +19,11 @@ class SetupActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        android.util.Log.d("SetupActivity", "onCreate started")
         configManager = ConfigManager(this)
 
         if (configManager.isConfigured()) {
+            android.util.Log.d("SetupActivity", "Config found, redirecting to MainActivity")
             startActivity(Intent(this, MainActivity::class.java))
             finish()
             return
