@@ -1,5 +1,6 @@
 package com.teya.agent.brain
 
+import android.util.Log
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
@@ -17,14 +18,15 @@ class MistralClient(
 
     private val baseUrl = "https://api.mistral.ai/v1"
     private val json = Json { ignoreUnknownKeys = true }
+    private val cleanApiKey = apiKey.replace(Regex("[^\\x20-\\x7E]"), "").trim()
 
     /**
      * STT: Audio -> Text
      * Uses Voxtral Transcribe 2
      */
     suspend fun transcribe(audioFile: File): String {
-        val response: MistralTranscriptionResponse = httpClient.post("$baseUrl/audio/transcriptions") {
-            header(HttpHeaders.Authorization, "Bearer $apiKey")
+        val httpResponse = httpClient.post("$baseUrl/audio/transcriptions") {
+            header(HttpHeaders.Authorization, "Bearer $cleanApiKey")
             setBody(MultiPartFormDataContent(
                 formData {
                     append("model", "voxtral-mini-latest")
@@ -34,7 +36,15 @@ class MistralClient(
                     })
                 }
             ))
-        }.body()
+        }
+
+        if (httpResponse.status != HttpStatusCode.OK) {
+            val errorBody = httpResponse.bodyAsText()
+            Log.e("MistralClient", "STT Error: ${httpResponse.status} - $errorBody")
+            return ""
+        }
+
+        val response: MistralTranscriptionResponse = httpResponse.body()
         return response.text
     }
 
@@ -43,20 +53,30 @@ class MistralClient(
      * This fulfills the BrainClient interface
      */
     override suspend fun processText(input: String): BrainResponse {
-        val response: MistralChatResponse = httpClient.post("$baseUrl/chat/completions") {
-            header(HttpHeaders.Authorization, "Bearer $apiKey")
+        Log.d("MistralClient", "Processing text: $input")
+        val httpResponse = httpClient.post("$baseUrl/chat/completions") {
+            header(HttpHeaders.Authorization, "Bearer $cleanApiKey")
             contentType(ContentType.Application.Json)
             setBody(MistralChatRequest(
                 model = "mistral-large-latest",
                 messages = listOf(MistralMessage(role = "user", content = input))
             ))
-        }.body()
+        }
 
-        val choice = response.choices.first()
+        if (httpResponse.status != HttpStatusCode.OK) {
+            val errorBody = httpResponse.bodyAsText()
+            Log.e("MistralClient", "LLM Error: ${httpResponse.status} - $errorBody")
+            return BrainResponse("I'm sorry, I'm having trouble connecting to my brain. Please check your API key.")
+        }
+
+        val response: MistralChatResponse = httpResponse.body()
+        val choice = response.choices.firstOrNull() ?: return BrainResponse("I have no words.")
+        
         val toolCall = choice.message.toolCalls?.firstOrNull()?.let {
             val args = try {
                 json.decodeFromString<Map<String, String>>(it.function.arguments)
             } catch (e: Exception) {
+                Log.e("MistralClient", "Failed to parse tool arguments", e)
                 emptyMap()
             }
             ToolCall(it.function.name, args)
@@ -73,13 +93,18 @@ class MistralClient(
      * Uses Voxtral TTS
      */
     suspend fun synthesizeSpeech(text: String, onStream: suspend (ByteReadChannel) -> Unit) {
+        if (text.isBlank()) return
+        
         httpClient.preparePost("$baseUrl/audio/speech") {
-            header(HttpHeaders.Authorization, "Bearer $apiKey")
+            header(HttpHeaders.Authorization, "Bearer $cleanApiKey")
             contentType(ContentType.Application.Json)
             setBody(MistralTTSRequest(input = text))
         }.execute { response ->
             if (response.status == HttpStatusCode.OK) {
                 onStream(response.bodyAsChannel())
+            } else {
+                val errorBody = response.bodyAsText()
+                Log.e("MistralClient", "TTS Error: ${response.status} - $errorBody")
             }
         }
     }

@@ -15,6 +15,7 @@ import com.teya.agent.R
 import com.teya.agent.brain.*
 import com.teya.agent.safety.ContactAllowlistManager
 import com.teya.agent.telephony.TelephonyActuator
+import com.teya.agent.ui.face.AgentState
 import com.teya.agent.voice.VoicePipeline
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,7 @@ class HarnessService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        Log.d(TAG, "onCreate")
         createNotificationChannel()
         
         val configManager = ConfigManager(this)
@@ -50,20 +52,13 @@ class HarnessService : Service() {
         
         val apiKey = configManager.mistralApiKey
         if (!apiKey.isNullOrBlank()) {
+            Log.d(TAG, "Initializing Mistral brain with key")
             brainClient = MistralClient(KtorClientFactory.create(), apiKey)
         } else {
-            // Fallback to stub if not configured
+            Log.w(TAG, "No API key found, using stub brain")
             brainClient = object : BrainClient {
                 override suspend fun processText(input: String): BrainResponse {
-                    return if (input.contains("call", ignoreCase = true)) {
-                        val name = input.substringAfter("call ").trim()
-                        BrainResponse(
-                            speechResponse = "Calling $name",
-                            toolCall = com.teya.agent.brain.ToolCall("place_call", mapOf("name" to name))
-                        )
-                    } else {
-                        BrainResponse("I didn't quite catch that.")
-                    }
+                    return BrainResponse("Please configure your Mistral API key in settings.")
                 }
             }
         }
@@ -73,10 +68,12 @@ class HarnessService : Service() {
         startForegroundService()
         
         if (intent?.action == ACTION_TRIGGER_VOICE) {
+            Log.d(TAG, "Manual trigger received")
             scope.launch {
                 handleVoiceTrigger()
             }
         } else {
+            Log.d(TAG, "Service started, initializing wake word loop")
             startAgentLoop()
         }
         
@@ -85,6 +82,7 @@ class HarnessService : Service() {
 
     private fun startAgentLoop() {
         voicePipeline.startListening {
+            Log.d(TAG, "Wake word detected!")
             scope.launch {
                 handleVoiceTrigger()
             }
@@ -92,47 +90,74 @@ class HarnessService : Service() {
     }
 
     private suspend fun handleVoiceTrigger() {
-        // Prompting: Let Teya say "Yes?" or "How can I help?"
-        voicePipeline.textToSpeech("Yes?")
+        try {
+            updateUiState(AgentState.LISTENING)
+            // Prompting
+            Log.d(TAG, "Starting prompt...")
+            voicePipeline.textToSpeech("Yes?")
 
-        // 1. STT
-        val text = voicePipeline.speechToText(Any()) // Placeholder
-        Log.d(TAG, "Recognized: $text")
+            // 1. STT (Simplified for now - just waits 2 seconds)
+            Log.d(TAG, "Listening for command...")
+            val text = voicePipeline.speechToText(Any()) 
+            Log.d(TAG, "Input: $text")
 
-        // 2. Brain
-        val response = brainClient.processText(text)
-        
-        // 3. TTS
-        voicePipeline.textToSpeech(response.speechResponse)
+            updateUiState(AgentState.THINKING)
+            // 2. Brain
+            Log.d(TAG, "Thinking...")
+            val response = brainClient.processText(text)
+            Log.d(TAG, "Brain response: ${response.speechResponse}")
+            
+            updateUiState(AgentState.SPEAKING)
+            // 3. TTS
+            voicePipeline.textToSpeech(response.speechResponse)
 
-        // 4. Actuator
-        response.toolCall?.let { tool ->
-            if (tool.functionName == "place_call") {
-                val name = tool.arguments["name"] ?: ""
-                val success = telephonyActuator.placeCall(name)
-                if (!success) {
-                    voicePipeline.textToSpeech("I'm sorry, I can't call $name. They are not on the allowlist.")
+            // 4. Actuator
+            response.toolCall?.let { tool ->
+                if (tool.functionName == "place_call") {
+                    val name = tool.arguments["name"] ?: ""
+                    Log.d(TAG, "Actuator: Placing call to $name")
+                    val success = telephonyActuator.placeCall(name)
+                    if (!success) {
+                        voicePipeline.textToSpeech("I'm sorry, I can't call $name. They are not on the allowlist.")
+                    }
                 }
             }
+            updateUiState(AgentState.IDLE)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in voice trigger loop", e)
+            updateUiState(AgentState.IDLE)
         }
+    }
+
+    private fun updateUiState(state: AgentState) {
+        val intent = Intent("com.teya.agent.STATE_UPDATE").apply {
+            putExtra("state", state.name)
+            setPackage(packageName)
+        }
+        sendBroadcast(intent)
     }
 
     private fun startForegroundService() {
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Teya Agent")
-            .setContentText("Teya is listening...")
+            .setContentText("Teya is active")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start foreground service", e)
         }
     }
 
@@ -150,6 +175,8 @@ class HarnessService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        Log.d(TAG, "onDestroy")
         job.cancel()
+        voicePipeline.stop()
     }
 }

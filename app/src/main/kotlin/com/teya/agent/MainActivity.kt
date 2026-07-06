@@ -1,7 +1,7 @@
 package com.teya.agent
 
 import android.Manifest
-import android.content.Intent
+import android.content.*
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -30,6 +30,14 @@ import com.teya.agent.ui.theme.TeyaTheme
 
 class MainActivity : ComponentActivity() {
     private lateinit var configManager: ConfigManager
+    private var agentState by mutableStateOf(AgentState.IDLE)
+
+    private val stateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val stateName = intent?.getStringExtra("state") ?: return
+            agentState = AgentState.valueOf(stateName)
+        }
+    }
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -60,13 +68,13 @@ class MainActivity : ComponentActivity() {
         setContent {
             TeyaTheme {
                 MainScreen(
+                    state = agentState,
                     onOrbClick = { 
                         Log.d("MainActivity", "Orb clicked, triggering voice loop")
                         val intent = Intent(this, HarnessService::class.java).apply {
                             action = HarnessService.ACTION_TRIGGER_VOICE
                         }
                         try {
-                            // On Android 12+, we can start foreground services from foreground activity
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                 startForegroundService(intent)
                             } else {
@@ -82,6 +90,16 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        registerReceiver(stateReceiver, IntentFilter("com.teya.agent.STATE_UPDATE"), RECEIVER_NOT_EXPORTED)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        unregisterReceiver(stateReceiver)
     }
 
     private fun checkAndRequestPermissions() {
@@ -120,9 +138,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainScreen(onOrbClick: () -> Unit, onSettingsClick: () -> Unit) {
-    var agentState by remember { mutableStateOf(AgentState.IDLE) }
-
+fun MainScreen(state: AgentState, onOrbClick: () -> Unit, onSettingsClick: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = Color(0xFF0A0A0A)
@@ -133,7 +149,7 @@ fun MainScreen(onOrbClick: () -> Unit, onSettingsClick: () -> Unit) {
                     .fillMaxSize()
                     .clickable { onOrbClick() }
             ) {
-                AgentFace(state = agentState)
+                AgentFace(state = state)
             }
 
             IconButton(
