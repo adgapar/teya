@@ -1,24 +1,43 @@
 package com.teya.agent.voice
 
+import android.annotation.SuppressLint
 import android.content.Context
+import android.media.AudioFormat
+import android.media.AudioRecord
 import android.media.MediaPlayer
+import android.media.MediaRecorder
 import android.util.Log
 import com.teya.agent.brain.MistralClient
 import io.ktor.utils.io.jvm.javaio.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.coroutines.resume
+import kotlin.math.sqrt
 
 class VoicePipeline(private val context: Context) {
-    
+
+    companion object {
+        private const val SAMPLE_RATE = 16000
+        private const val FRAME_MS = 20
+        private const val FRAME_SAMPLES = SAMPLE_RATE / (1000 / FRAME_MS) // 320 samples @ 20ms
+        private const val SILENCE_RMS_THRESHOLD = 500.0                   // energy floor for "speech"
+        private const val TRAILING_SILENCE_MS = 800                       // silence that ends a command
+        private const val MAX_INITIAL_SILENCE_MS = 4000                   // give up if nobody speaks
+        private const val MAX_RECORDING_MS = 12000                        // hard cap on a single command
+    }
+
     private val wakeWordEngine = WakeWordEngine(context) {
         onDetected()
     }
-    
+
     private var wakeWordCallback: (() -> Unit)? = null
+    private var wakeWordActive = false
     private var mistralClient: MistralClient? = null
 
     fun setMistralClient(client: MistralClient) {
@@ -28,21 +47,156 @@ class VoicePipeline(private val context: Context) {
     fun startListening(onWakeWord: () -> Unit) {
         Log.d("VoicePipeline", "Wake word detection started")
         this.wakeWordCallback = onWakeWord
+        wakeWordActive = true
         wakeWordEngine.start()
     }
-    
+
     private fun onDetected() {
         Log.d("VoicePipeline", "Wake word detected!")
         wakeWordCallback?.invoke()
     }
-    
-    fun speechToText(audio: Any): String {
-        return "Call Dad" 
+
+    /**
+     * Records a spoken command using simple energy-based VAD (stops after a short
+     * trailing silence), then transcribes it via Voxtral. The always-on wake-word
+     * recorder is paused for the duration to avoid microphone contention.
+     * Returns "" on any failure (no client, no speech, transcription error).
+     */
+    suspend fun listenForCommand(): String = withContext(Dispatchers.IO) {
+        val client = mistralClient ?: run {
+            Log.e("VoicePipeline", "MistralClient not set, cannot transcribe")
+            return@withContext ""
+        }
+
+        // Free the mic from the always-on wake-word recorder.
+        if (wakeWordActive) wakeWordEngine.stop()
+        try {
+            val wavFile = recordWithVad()
+            if (wavFile == null) {
+                Log.d("VoicePipeline", "No command audio captured")
+                return@withContext ""
+            }
+            client.transcribe(wavFile)
+        } catch (e: Exception) {
+            Log.e("VoicePipeline", "Error during STT", e)
+            ""
+        } finally {
+            // Resume wake-word listening.
+            if (wakeWordActive) wakeWordEngine.start()
+        }
     }
-    
+
+    @SuppressLint("MissingPermission")
+    private fun recordWithVad(): File? {
+        val minBuffer = AudioRecord.getMinBufferSize(
+            SAMPLE_RATE,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT
+        )
+        if (minBuffer <= 0) {
+            Log.e("VoicePipeline", "Invalid AudioRecord buffer size: $minBuffer")
+            return null
+        }
+
+        val recorder = AudioRecord(
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            SAMPLE_RATE,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+            maxOf(minBuffer, FRAME_SAMPLES * 2 * 4)
+        )
+        if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+            Log.e("VoicePipeline", "AudioRecord failed to initialize")
+            recorder.release()
+            return null
+        }
+
+        val pcm = ByteArrayOutputStream()
+        val frame = ShortArray(FRAME_SAMPLES)
+        var speechStarted = false
+        var trailingSilenceMs = 0
+        var elapsedMs = 0
+
+        try {
+            recorder.startRecording()
+            Log.d("VoicePipeline", "Recording command…")
+            while (elapsedMs < MAX_RECORDING_MS) {
+                val read = recorder.read(frame, 0, frame.size)
+                if (read <= 0) continue
+                elapsedMs += FRAME_MS
+
+                var sumSquares = 0.0
+                for (i in 0 until read) {
+                    val s = frame[i].toDouble()
+                    sumSquares += s * s
+                }
+                val rms = sqrt(sumSquares / read)
+                val isSpeech = rms > SILENCE_RMS_THRESHOLD
+
+                if (isSpeech) {
+                    speechStarted = true
+                    trailingSilenceMs = 0
+                } else if (speechStarted) {
+                    trailingSilenceMs += FRAME_MS
+                }
+
+                // Only keep audio once speech has begun (trims leading silence).
+                if (speechStarted) {
+                    val bytes = ByteArray(read * 2)
+                    ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+                        .asShortBuffer().put(frame, 0, read)
+                    pcm.write(bytes)
+                }
+
+                if (speechStarted && trailingSilenceMs >= TRAILING_SILENCE_MS) break
+                if (!speechStarted && elapsedMs >= MAX_INITIAL_SILENCE_MS) break
+            }
+        } catch (e: Exception) {
+            Log.e("VoicePipeline", "Recording error", e)
+        } finally {
+            try { recorder.stop() } catch (_: Exception) {}
+            recorder.release()
+        }
+
+        val pcmBytes = pcm.toByteArray()
+        if (pcmBytes.isEmpty()) return null
+
+        val wavFile = File(context.cacheDir, "command.wav")
+        writeWav(wavFile, pcmBytes)
+        Log.d("VoicePipeline", "Captured ${pcmBytes.size} bytes of PCM")
+        return wavFile
+    }
+
+    /** Writes 16 kHz / mono / 16-bit PCM to a canonical 44-byte-header WAV file. */
+    private fun writeWav(file: File, pcm: ByteArray) {
+        val channels = 1
+        val bitsPerSample = 16
+        val byteRate = SAMPLE_RATE * channels * bitsPerSample / 8
+        val blockAlign = channels * bitsPerSample / 8
+        val dataLen = pcm.size
+        FileOutputStream(file).use { out ->
+            val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
+            header.put("RIFF".toByteArray(Charsets.US_ASCII))
+            header.putInt(36 + dataLen)
+            header.put("WAVE".toByteArray(Charsets.US_ASCII))
+            header.put("fmt ".toByteArray(Charsets.US_ASCII))
+            header.putInt(16)                          // PCM fmt chunk size
+            header.putShort(1.toShort())               // PCM format
+            header.putShort(channels.toShort())
+            header.putInt(SAMPLE_RATE)
+            header.putInt(byteRate)
+            header.putShort(blockAlign.toShort())
+            header.putShort(bitsPerSample.toShort())
+            header.put("data".toByteArray(Charsets.US_ASCII))
+            header.putInt(dataLen)
+            out.write(header.array())
+            out.write(pcm)
+        }
+    }
+
     suspend fun textToSpeech(text: String) {
         if (text.isBlank()) return
-        
+
         val client = mistralClient ?: run {
             Log.e("VoicePipeline", "MistralClient not set, cannot speak")
             return
@@ -58,18 +212,24 @@ class VoicePipeline(private val context: Context) {
                     }
                 }
 
+                // If synthesis failed, no bytes were written — don't try to play silence.
+                if (!tempFile.exists() || tempFile.length() == 0L) {
+                    Log.e("VoicePipeline", "TTS produced no audio, skipping playback")
+                    return@withContext
+                }
+
                 // Play and wait for completion
                 withContext(Dispatchers.Main) {
                     suspendCancellableCoroutine<Unit> { continuation ->
                         val mediaPlayer = MediaPlayer()
                         mediaPlayer.setDataSource(tempFile.absolutePath)
-                        
+
                         mediaPlayer.setOnCompletionListener {
                             Log.d("VoicePipeline", "Playback finished")
                             it.release()
                             if (continuation.isActive) continuation.resume(Unit)
                         }
-                        
+
                         mediaPlayer.setOnErrorListener { mp, what, extra ->
                             Log.e("VoicePipeline", "MediaPlayer Error: $what, $extra")
                             mp.release()
@@ -79,7 +239,7 @@ class VoicePipeline(private val context: Context) {
 
                         mediaPlayer.prepare()
                         mediaPlayer.start()
-                        
+
                         continuation.invokeOnCancellation {
                             try {
                                 mediaPlayer.stop()
@@ -97,6 +257,7 @@ class VoicePipeline(private val context: Context) {
     }
 
     fun stop() {
+        wakeWordActive = false
         wakeWordEngine.stop()
     }
 }

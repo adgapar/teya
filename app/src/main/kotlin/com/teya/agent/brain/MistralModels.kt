@@ -15,7 +15,9 @@ data class MistralChatRequest(
 @Serializable
 data class MistralMessage(
     val role: String,
-    val content: String,
+    // Nullable: assistant messages that carry a tool_call return content = null,
+    // which would otherwise crash deserialization into a non-null String.
+    val content: String? = null,
     @SerialName("tool_calls") val toolCalls: List<MistralToolCall>? = null
 )
 
@@ -62,7 +64,8 @@ data class MistralChoice(
 data class MistralTTSRequest(
     val model: String = "voxtral-mini-tts-latest",
     val input: String,
-    @SerialName("voice_id") val voiceId: String = "default",
+    // "default" is NOT a real preset; Voxtral requires a valid saved/preset voice id.
+    @SerialName("voice_id") val voiceId: String = "neutral_female",
     @SerialName("response_format") val responseFormat: String = "mp3"
 )
 

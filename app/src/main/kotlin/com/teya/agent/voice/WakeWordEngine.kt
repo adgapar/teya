@@ -73,12 +73,19 @@ class WakeWordEngine(
         }
         
         Thread {
-            val audioBuffer = ShortArray(160) // 10ms of audio at 16kHz
-            while (isRunning) {
-                val read = audioRecord?.read(audioBuffer, 0, audioBuffer.size) ?: 0
-                if (read > 0) {
-                    processAudio(audioBuffer)
+            // Guard the loop: stop()/start() cycles (pausing for STT) can release the
+            // AudioRecord while a blocking read() is in flight — swallow that instead
+            // of crashing the app on a background thread.
+            try {
+                val audioBuffer = ShortArray(160) // 10ms of audio at 16kHz
+                while (isRunning) {
+                    val read = audioRecord?.read(audioBuffer, 0, audioBuffer.size) ?: 0
+                    if (read > 0) {
+                        processAudio(audioBuffer)
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e("WakeWordEngine", "Recording loop error", e)
             }
         }.start()
     }

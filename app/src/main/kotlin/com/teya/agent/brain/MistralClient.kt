@@ -9,8 +9,10 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.utils.io.*
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import java.io.File
 
@@ -45,8 +47,8 @@ class MistralClient(
                             put("description", "The name of the person to call (e.g., 'Dad', 'Mom')")
                         }
                     }
-                    putJsonObject("required") {
-                        put("0", "name") // Serializer needs strings as keys for arrays in some versions
+                    putJsonArray("required") {
+                        add("name")
                     }
                 }
             )
@@ -54,13 +56,14 @@ class MistralClient(
     )
 
     suspend fun transcribe(audioFile: File): String {
+        val mime = if (audioFile.extension.equals("wav", ignoreCase = true)) "audio/wav" else "audio/mpeg"
         val httpResponse = httpClient.post("${baseUrl}/audio/transcriptions") {
             header(HttpHeaders.Authorization, "Bearer ${cleanApiKey}")
             setBody(MultiPartFormDataContent(
                 formData {
                     append("model", "voxtral-mini-latest")
                     append("file", audioFile.readBytes(), Headers.build {
-                        append(HttpHeaders.ContentType, "audio/mpeg")
+                        append(HttpHeaders.ContentType, mime)
                         append(HttpHeaders.ContentDisposition, "filename=\"${audioFile.name}\"")
                     })
                 }
@@ -114,7 +117,7 @@ class MistralClient(
         }
 
         return BrainResponse(
-            speechResponse = choice.message.content,
+            speechResponse = choice.message.content ?: "",
             toolCall = toolCall
         )
     }

@@ -93,25 +93,35 @@ class HarnessService : Service() {
 
     private suspend fun handleVoiceTrigger() {
         try {
-            updateUiState(AgentState.LISTENING)
-            // Prompting
-            Log.d(TAG, "Starting prompt...")
+            // Prompt the user that we're listening.
+            updateUiState(AgentState.SPEAKING)
+            Log.d(TAG, "Prompting...")
             voicePipeline.textToSpeech("Yes?")
 
-            // 1. STT (Simplified for now - just waits 2 seconds)
+            // 1. Listen + STT (VAD-based capture, then Voxtral transcription)
+            updateUiState(AgentState.LISTENING)
             Log.d(TAG, "Listening for command...")
-            val text = voicePipeline.speechToText(Any()) 
+            val text = voicePipeline.listenForCommand()
             Log.d(TAG, "Input: $text")
+
+            if (text.isBlank()) {
+                updateUiState(AgentState.SPEAKING)
+                voicePipeline.textToSpeech("Sorry, I didn't catch that.")
+                updateUiState(AgentState.IDLE)
+                return
+            }
 
             updateUiState(AgentState.THINKING)
             // 2. Brain
             Log.d(TAG, "Thinking...")
             val response = brainClient.processText(text)
             Log.d(TAG, "Brain response: ${response.speechResponse}")
-            
+
             updateUiState(AgentState.SPEAKING)
-            // 3. TTS
-            voicePipeline.textToSpeech(response.speechResponse)
+            // 3. TTS (skip if the model only returned a tool call with no words)
+            if (response.speechResponse.isNotBlank()) {
+                voicePipeline.textToSpeech(response.speechResponse)
+            }
 
             // 4. Actuator
             response.toolCall?.let { tool ->
