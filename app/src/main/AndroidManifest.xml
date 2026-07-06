@@ -35,6 +35,11 @@
             android:screenOrientation="landscape"
             android:theme="@style/Theme.Teya" />
 
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Teya" />
+
         <service
             android:name=".harness.HarnessService"
             android:enabled="true"

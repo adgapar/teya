@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 
 class HarnessService : Service() {
     companion object {
+        const val ACTION_TRIGGER_VOICE = "com.teya.agent.action.TRIGGER_VOICE"
         private const val CHANNEL_ID = "teya_harness_channel"
         private const val NOTIFICATION_ID = 1
         private const val TAG = "HarnessService"
@@ -70,7 +71,15 @@ class HarnessService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForegroundService()
-        startAgentLoop()
+        
+        if (intent?.action == ACTION_TRIGGER_VOICE) {
+            scope.launch {
+                handleVoiceTrigger()
+            }
+        } else {
+            startAgentLoop()
+        }
+        
         return START_STICKY
     }
 
@@ -83,6 +92,9 @@ class HarnessService : Service() {
     }
 
     private suspend fun handleVoiceTrigger() {
+        // Prompting: Let Teya say "Yes?" or "How can I help?"
+        voicePipeline.textToSpeech("Yes?")
+
         // 1. STT
         val text = voicePipeline.speechToText(Any()) // Placeholder
         Log.d(TAG, "Recognized: $text")

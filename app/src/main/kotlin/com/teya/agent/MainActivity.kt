@@ -9,9 +9,16 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.teya.agent.harness.ConfigManager
 import com.teya.agent.harness.HarnessService
@@ -49,9 +56,18 @@ class MainActivity : ComponentActivity() {
         
         setContent {
             TeyaTheme {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    AgentFace(state = AgentState.IDLE)
-                }
+                MainScreen(
+                    onOrbClick = { 
+                        // Trigger the pipeline manually via Intent to Service
+                        val intent = Intent(this, HarnessService::class.java).apply {
+                            action = HarnessService.ACTION_TRIGGER_VOICE
+                        }
+                        startService(intent)
+                    },
+                    onSettingsClick = {
+                        startActivity(Intent(this, SettingsActivity::class.java))
+                    }
+                )
             }
         }
     }
@@ -83,6 +99,35 @@ class MainActivity : ComponentActivity() {
             startForegroundService(intent)
         } else {
             startService(intent)
+        }
+    }
+}
+
+@Composable
+fun MainScreen(onOrbClick: () -> Unit, onSettingsClick: () -> Unit) {
+    // In a real app, state would be observed from the Service/ViewModel
+    var agentState by remember { mutableStateOf(AgentState.IDLE) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable { onOrbClick() }
+        ) {
+            AgentFace(state = agentState)
+        }
+
+        IconButton(
+            onClick = onSettingsClick,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Settings,
+                contentDescription = "Settings",
+                tint = Color.White.copy(alpha = 0.5f)
+            )
         }
     }
 }
