@@ -12,92 +12,258 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 
+/**
+ * openWakeWord "hey_jarvis" detector.
+ *
+ * openWakeWord is a 3-model chain, run in series on a rolling buffer of 16 kHz mono audio:
+ *
+ *   [1,1280] raw audio ──▶ melspectrogram.tflite ──▶ mel frames (N × 32)
+ *                          embedding_model.tflite  ◀── window of 76 mel frames [1,76,32,1]
+ *                                                  ──▶ 96-dim embedding
+ *                          hey_jarvis_v0.1.tflite  ◀── last 16 embeddings [1,1536]
+ *                                                  ──▶ P(wake word) in [0,1]
+ *
+ * Audio is processed one 80 ms (1280-sample) chunk at a time. Each chunk appends mel frames,
+ * produces exactly one embedding (from the newest 76 mel frames), and — once 16 embeddings
+ * exist — yields one probability. We fire on a short streak above threshold, then cool down.
+ *
+ * NOTE ON LICENSING: melspectrogram + embedding models are Apache-2.0 (commercial OK). The
+ * pre-trained hey_jarvis classifier is CC BY-NC-SA 4.0 (NON-commercial). For a shipping product
+ * this classifier must be replaced with a self-trained one — same [1,1536]→[1,1] tensor slot,
+ * no code change. See THIRD_PARTY_MODELS.md.
+ */
 class WakeWordEngine(
     private val context: Context,
-    private val modelPath: String = "hey_jarvis.tflite",
     private val onDetected: () -> Unit
 ) {
-    private var interpreter: Interpreter? = null
-    private var audioRecord: AudioRecord? = null
-    private var isRunning = false
-    
-    init {
-        loadModel()
+    companion object {
+        private const val TAG = "WakeWordEngine"
+
+        private const val MODEL_MELSPEC = "melspectrogram.tflite"
+        private const val MODEL_EMBED = "embedding_model.tflite"
+        private const val MODEL_WAKE = "hey_jarvis_v0.1.tflite"
+
+        private const val SAMPLE_RATE = 16000
+        private const val CHUNK = 1280           // 80 ms @ 16 kHz — the canonical streaming step
+        private const val MEL_BINS = 32
+        private const val EMB_WINDOW = 76         // mel frames per embedding window
+        private const val EMB_DIM = 96
+        private const val WAKE_EMBEDDINGS = 16    // embeddings the classifier consumes
+        private const val WAKE_INPUT = WAKE_EMBEDDINGS * EMB_DIM // 1536
+
+        private const val THRESHOLD = 0.5f        // openWakeWord default
+        private const val PATIENCE = 2            // consecutive chunks over threshold before firing
+        private const val COOLDOWN_CHUNKS = 25    // ~2 s suppression after a detection
+
+        private const val MEL_BUFFER_MAX = 970    // ~10 s of mel frames
+        private const val EMB_BUFFER_MAX = 120    // ~10 s of embeddings
     }
 
-    private fun loadModel() {
-        try {
-            val assetFileDescriptor = context.assets.openFd(modelPath)
-            val inputStream = FileInputStream(assetFileDescriptor.fileDescriptor)
-            val fileChannel = inputStream.channel
-            val startOffset = assetFileDescriptor.startOffset
-            val declaredLength = assetFileDescriptor.length
-            val modelBuffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
-            
-            val options = Interpreter.Options()
-            options.setNumThreads(2)
-            
-            interpreter = Interpreter(modelBuffer, options)
-            Log.d("WakeWordEngine", "Model loaded successfully: $modelPath")
+    private var melspec: Interpreter? = null
+    private var embedding: Interpreter? = null
+    private var wakeword: Interpreter? = null
+
+    // Reused I/O buffers (native-order float32).
+    private var melIn: ByteBuffer? = null
+    private var melOut: ByteBuffer? = null
+    private var melOutFrames = 0
+    private var embIn: ByteBuffer? = null
+    private var embOut: ByteBuffer? = null
+    private var wakeIn: ByteBuffer? = null
+    private var wakeOut: ByteBuffer? = null
+
+    // Rolling feature buffers (class state — the pipeline is stateful).
+    private val melBuffer = ArrayDeque<FloatArray>() // each entry: FloatArray(32)
+    private val embBuffer = ArrayDeque<FloatArray>() // each entry: FloatArray(96)
+    private var positiveStreak = 0
+    private var cooldown = 0
+
+    private var audioRecord: AudioRecord? = null
+    @Volatile private var isRunning = false
+
+    init {
+        loadModels()
+    }
+
+    private fun loadModels() {
+        melspec = loadInterpreter(MODEL_MELSPEC, intArrayOf(1, CHUNK))
+        embedding = loadInterpreter(MODEL_EMBED, intArrayOf(1, EMB_WINDOW, MEL_BINS, 1))
+        wakeword = loadInterpreter(MODEL_WAKE, intArrayOf(1, WAKE_INPUT))
+
+        val mel = melspec ?: return
+        // Melspec output is [1,1,N,32] → N frames per chunk (fixed once input is [1,1280]).
+        val melOutElems = mel.getOutputTensor(0).shape().fold(1) { a, b -> a * b }
+        melOutFrames = melOutElems / MEL_BINS
+
+        melIn = directFloatBuffer(CHUNK)
+        melOut = directFloatBuffer(melOutElems)
+        embIn = directFloatBuffer(EMB_WINDOW * MEL_BINS)
+        embOut = directFloatBuffer(EMB_DIM)
+        wakeIn = directFloatBuffer(WAKE_INPUT)
+        wakeOut = directFloatBuffer(1)
+        Log.d(TAG, "Models ready. melOutFrames=$melOutFrames per 80ms chunk")
+    }
+
+    private fun loadInterpreter(assetName: String, inputDims: IntArray): Interpreter? {
+        return try {
+            val afd = context.assets.openFd(assetName)
+            val channel = FileInputStream(afd.fileDescriptor).channel
+            val buffer = channel.map(FileChannel.MapMode.READ_ONLY, afd.startOffset, afd.declaredLength)
+            val interp = Interpreter(buffer, Interpreter.Options().apply { setNumThreads(2) })
+            // Android's Interpreter needs an explicit resize+allocate for these dynamic-input
+            // models, otherwise CONV_2D fails to prepare (openWakeWord issue #223).
+            interp.resizeInput(0, inputDims)
+            interp.allocateTensors()
+            Log.d(
+                TAG,
+                "Loaded $assetName in=${interp.getInputTensor(0).shape().joinToString()} " +
+                    "out=${interp.getOutputTensor(0).shape().joinToString()}"
+            )
+            interp
         } catch (e: Exception) {
-            Log.e("WakeWordEngine", "Error loading model: $modelPath", e)
+            Log.e(TAG, "Failed to load $assetName", e)
+            null
         }
     }
+
+    private fun directFloatBuffer(floats: Int): ByteBuffer =
+        ByteBuffer.allocateDirect(floats * 4).order(ByteOrder.nativeOrder())
 
     @SuppressLint("MissingPermission")
     fun start() {
         if (isRunning) return
-        isRunning = true
-        
-        val bufferSize = AudioRecord.getMinBufferSize(
-            16000,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT
-        )
+        if (melspec == null || embedding == null || wakeword == null) {
+            Log.e(TAG, "Models not loaded; wake word disabled")
+            return
+        }
+        resetBuffers()
 
+        val minBuffer = AudioRecord.getMinBufferSize(
+            SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
+        )
         audioRecord = AudioRecord(
             MediaRecorder.AudioSource.MIC,
-            16000,
+            SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
-            bufferSize
+            maxOf(minBuffer, CHUNK * 4)
         )
+        if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+            Log.e(TAG, "AudioRecord failed to initialize")
+            audioRecord?.release()
+            audioRecord = null
+            return
+        }
 
+        isRunning = true
         try {
             audioRecord?.startRecording()
-            Log.d("WakeWordEngine", "Microphone recording started")
+            Log.d(TAG, "Microphone recording started (wake word)")
         } catch (e: Exception) {
-            Log.e("WakeWordEngine", "Failed to start recording", e)
+            Log.e(TAG, "Failed to start recording", e)
             isRunning = false
             return
         }
-        
+
         Thread {
             // Guard the loop: stop()/start() cycles (pausing for STT) can release the
             // AudioRecord while a blocking read() is in flight — swallow that instead
             // of crashing the app on a background thread.
             try {
-                val audioBuffer = ShortArray(160) // 10ms of audio at 16kHz
+                val chunk = ShortArray(CHUNK)
                 while (isRunning) {
-                    val read = audioRecord?.read(audioBuffer, 0, audioBuffer.size) ?: 0
-                    if (read > 0) {
-                        processAudio(audioBuffer)
+                    var filled = 0
+                    while (isRunning && filled < CHUNK) {
+                        val n = audioRecord?.read(chunk, filled, CHUNK - filled) ?: 0
+                        if (n > 0) filled += n
+                        else if (n < 0) { Log.e(TAG, "AudioRecord read error: $n"); break }
                     }
+                    if (filled == CHUNK) processChunk(chunk)
                 }
             } catch (e: Exception) {
-                Log.e("WakeWordEngine", "Recording loop error", e)
+                Log.e(TAG, "Recording loop error", e)
             }
         }.start()
     }
 
-    private fun processAudio(audio: ShortArray) {
-        // Simple volume logging to verify mic is active
-        val maxAmplitude = audio.maxOrNull() ?: 0
-        if (maxAmplitude > 1500) {
-            Log.v("WakeWordEngine", "Mic Audio Level: $maxAmplitude")
+    private fun processChunk(chunk: ShortArray) {
+        val melspec = this.melspec ?: return
+        val embedding = this.embedding ?: return
+        val wakeword = this.wakeword ?: return
+        val melIn = this.melIn ?: return
+        val melOut = this.melOut ?: return
+
+        // 1) Melspectrogram. Feed raw int16 sample values as float32 (NOT normalized to ±1).
+        melIn.rewind()
+        for (i in 0 until CHUNK) melIn.putFloat(chunk[i].toFloat())
+        melIn.rewind()
+        melOut.rewind()
+        melspec.run(melIn, melOut)
+        melOut.rewind()
+        for (f in 0 until melOutFrames) {
+            val frame = FloatArray(MEL_BINS)
+            for (b in 0 until MEL_BINS) {
+                frame[b] = melOut.getFloat() / 10f + 2f   // openWakeWord mel normalization
+            }
+            melBuffer.addLast(frame)
+        }
+        while (melBuffer.size > MEL_BUFFER_MAX) melBuffer.removeFirst()
+
+        // 2) One embedding from the newest 76 mel frames.
+        if (melBuffer.size >= EMB_WINDOW) {
+            val embIn = this.embIn ?: return
+            val embOut = this.embOut ?: return
+            embIn.rewind()
+            val start = melBuffer.size - EMB_WINDOW
+            for (f in 0 until EMB_WINDOW) {
+                val frame = melBuffer[start + f]
+                for (b in 0 until MEL_BINS) embIn.putFloat(frame[b])
+            }
+            embIn.rewind()
+            embOut.rewind()
+            embedding.run(embIn, embOut)
+            embOut.rewind()
+            val emb = FloatArray(EMB_DIM) { embOut.getFloat() }
+            embBuffer.addLast(emb)
+            while (embBuffer.size > EMB_BUFFER_MAX) embBuffer.removeFirst()
         }
 
-        // TODO: Implement Mel-Spectrogram feature extraction here
+        // 3) Classify from the newest 16 embeddings.
+        if (embBuffer.size >= WAKE_EMBEDDINGS) {
+            val wakeIn = this.wakeIn ?: return
+            val wakeOut = this.wakeOut ?: return
+            wakeIn.rewind()
+            val start = embBuffer.size - WAKE_EMBEDDINGS
+            for (e in 0 until WAKE_EMBEDDINGS) {
+                val emb = embBuffer[start + e]
+                for (d in 0 until EMB_DIM) wakeIn.putFloat(emb[d])
+            }
+            wakeIn.rewind()
+            wakeOut.rewind()
+            wakeword.run(wakeIn, wakeOut)
+            wakeOut.rewind()
+            handleScore(wakeOut.getFloat())
+        }
+    }
+
+    private fun handleScore(prob: Float) {
+        if (prob > 0.3f) Log.v(TAG, "wake score=$prob")
+        if (cooldown > 0) cooldown--
+
+        positiveStreak = if (prob >= THRESHOLD) positiveStreak + 1 else 0
+        if (positiveStreak >= PATIENCE && cooldown == 0) {
+            Log.d(TAG, "Wake word detected! score=$prob")
+            positiveStreak = 0
+            cooldown = COOLDOWN_CHUNKS
+            onDetected()
+        }
+    }
+
+    private fun resetBuffers() {
+        melBuffer.clear()
+        embBuffer.clear()
+        positiveStreak = 0
+        cooldown = 0
     }
 
     fun stop() {
@@ -106,7 +272,7 @@ class WakeWordEngine(
             audioRecord?.stop()
             audioRecord?.release()
         } catch (e: Exception) {
-            Log.e("WakeWordEngine", "Error stopping audio", e)
+            Log.e(TAG, "Error stopping audio", e)
         }
         audioRecord = null
     }
