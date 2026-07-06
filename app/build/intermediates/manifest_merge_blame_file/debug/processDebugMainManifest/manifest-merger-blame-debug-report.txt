@@ -66,168 +66,169 @@
 33-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:17:9-41
 34        android:supportsRtl="true"
 34-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:18:9-35
-35        android:theme="@style/Theme.Teya" >
-35-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:19:9-42
-36        <activity
-36-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:21:9-30:20
-37            android:name="com.teya.agent.SetupActivity"
-37-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:22:13-42
-38            android:exported="true"
-38-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:23:13-36
-39            android:screenOrientation="portrait"
-39-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:24:13-49
-40            android:theme="@style/Theme.Teya" >
-40-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:25:13-46
-41            <intent-filter>
-41-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:26:13-29:29
-42                <action android:name="android.intent.action.MAIN" />
-42-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:27:17-69
-42-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:27:25-66
-43
-44                <category android:name="android.intent.category.LAUNCHER" />
-44-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:28:17-77
-44-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:28:27-74
-45            </intent-filter>
-46        </activity>
-47        <activity
-47-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:32:9-36:49
-48            android:name="com.teya.agent.MainActivity"
-48-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:33:13-41
-49            android:exported="false"
-49-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:34:13-37
-50            android:screenOrientation="landscape"
-50-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:35:13-50
-51            android:theme="@style/Theme.Teya" />
-51-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:36:13-46
-52        <activity
-52-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:38:9-41:49
-53            android:name="com.teya.agent.SettingsActivity"
-53-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:39:13-45
-54            android:exported="false"
-54-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:40:13-37
-55            android:theme="@style/Theme.Teya" />
-55-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:41:13-46
-56
-57        <service
-57-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:43:9-47:68
-58            android:name="com.teya.agent.harness.HarnessService"
-58-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:44:13-51
-59            android:enabled="true"
-59-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:45:13-35
-60            android:exported="false"
-60-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:46:13-37
-61            android:foregroundServiceType="microphone|phoneCall" />
-61-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:47:13-65
-62        <service
-62-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:49:9-59:19
-63            android:name="com.teya.agent.telephony.TeyaInCallService"
-63-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:50:13-56
-64            android:exported="true"
-64-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:52:13-36
-65            android:permission="android.permission.BIND_INCALL_SERVICE" >
-65-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:51:13-72
-66            <meta-data
-66-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:53:13-55:40
-67                android:name="android.telecom.IN_CALL_SERVICE_UI"
-67-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:54:17-66
-68                android:value="true" />
-68-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:55:17-37
-69
-70            <intent-filter>
-70-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:56:13-58:29
-71                <action android:name="android.telecom.InCallService" />
-71-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:57:17-72
-71-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:57:25-69
-72            </intent-filter>
-73        </service>
-74
-75        <activity
-75-->[androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/a5fb5d8f7bcb0e6de85a314e88f1839b/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:23:9-25:39
-76            android:name="androidx.activity.ComponentActivity"
-76-->[androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/a5fb5d8f7bcb0e6de85a314e88f1839b/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:24:13-63
-77            android:exported="true" />
-77-->[androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/a5fb5d8f7bcb0e6de85a314e88f1839b/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:25:13-36
-78        <activity
-78-->[androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/1673d6eaa616ed1859337cecde07e106/transformed/ui-tooling-release/AndroidManifest.xml:23:9-25:39
-79            android:name="androidx.compose.ui.tooling.PreviewActivity"
-79-->[androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/1673d6eaa616ed1859337cecde07e106/transformed/ui-tooling-release/AndroidManifest.xml:24:13-71
-80            android:exported="true" />
-80-->[androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/1673d6eaa616ed1859337cecde07e106/transformed/ui-tooling-release/AndroidManifest.xml:25:13-36
-81
-82        <provider
-82-->[androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/aacaea7a8bdbda6a99b2691d98f54918/transformed/emoji2-1.3.0/AndroidManifest.xml:24:9-32:20
-83            android:name="androidx.startup.InitializationProvider"
-83-->[androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/aacaea7a8bdbda6a99b2691d98f54918/transformed/emoji2-1.3.0/AndroidManifest.xml:25:13-67
-84            android:authorities="com.teya.agent.androidx-startup"
-84-->[androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/aacaea7a8bdbda6a99b2691d98f54918/transformed/emoji2-1.3.0/AndroidManifest.xml:26:13-68
-85            android:exported="false" >
-85-->[androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/aacaea7a8bdbda6a99b2691d98f54918/transformed/emoji2-1.3.0/AndroidManifest.xml:27:13-37
-86            <meta-data
-86-->[androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/aacaea7a8bdbda6a99b2691d98f54918/transformed/emoji2-1.3.0/AndroidManifest.xml:29:13-31:52
-87                android:name="androidx.emoji2.text.EmojiCompatInitializer"
-87-->[androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/aacaea7a8bdbda6a99b2691d98f54918/transformed/emoji2-1.3.0/AndroidManifest.xml:30:17-75
-88                android:value="androidx.startup" />
-88-->[androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/aacaea7a8bdbda6a99b2691d98f54918/transformed/emoji2-1.3.0/AndroidManifest.xml:31:17-49
-89            <meta-data
-89-->[androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/9a031ae1d337f7287310d6a8b8fa0ff1/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:29:13-31:52
-90                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
-90-->[androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/9a031ae1d337f7287310d6a8b8fa0ff1/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:30:17-78
-91                android:value="androidx.startup" />
-91-->[androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/9a031ae1d337f7287310d6a8b8fa0ff1/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:31:17-49
-92            <meta-data
-92-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:29:13-31:52
-93                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
-93-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:30:17-85
-94                android:value="androidx.startup" />
-94-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:31:17-49
-95        </provider>
-96
-97        <service
-97-->[androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/89dfc453fa5cca3ec709521e3499293c/transformed/room-runtime/AndroidManifest.xml:24:9-28:63
-98            android:name="androidx.room.MultiInstanceInvalidationService"
-98-->[androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/89dfc453fa5cca3ec709521e3499293c/transformed/room-runtime/AndroidManifest.xml:25:13-74
-99            android:directBootAware="true"
-99-->[androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/89dfc453fa5cca3ec709521e3499293c/transformed/room-runtime/AndroidManifest.xml:26:13-43
-100            android:exported="false" />
-100-->[androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/89dfc453fa5cca3ec709521e3499293c/transformed/room-runtime/AndroidManifest.xml:27:13-37
-101
-102        <receiver
-102-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:34:9-52:20
-103            android:name="androidx.profileinstaller.ProfileInstallReceiver"
-103-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:35:13-76
-104            android:directBootAware="false"
-104-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:36:13-44
-105            android:enabled="true"
-105-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:37:13-35
-106            android:exported="true"
-106-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:38:13-36
-107            android:permission="android.permission.DUMP" >
-107-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:39:13-57
-108            <intent-filter>
-108-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:40:13-42:29
-109                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
-109-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:17-91
-109-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:25-88
-110            </intent-filter>
-111            <intent-filter>
-111-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:43:13-45:29
-112                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
-112-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:17-85
-112-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:25-82
-113            </intent-filter>
-114            <intent-filter>
-114-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:46:13-48:29
-115                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
-115-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:17-88
-115-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:25-85
-116            </intent-filter>
-117            <intent-filter>
-117-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:49:13-51:29
-118                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
-118-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:17-95
-118-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:25-92
-119            </intent-filter>
-120        </receiver>
-121    </application>
-122
-123</manifest>
+35        android:testOnly="true"
+36        android:theme="@style/Theme.Teya" >
+36-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:19:9-42
+37        <activity
+37-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:21:9-30:20
+38            android:name="com.teya.agent.SetupActivity"
+38-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:22:13-42
+39            android:exported="true"
+39-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:23:13-36
+40            android:screenOrientation="portrait"
+40-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:24:13-49
+41            android:theme="@style/Theme.Teya" >
+41-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:25:13-46
+42            <intent-filter>
+42-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:26:13-29:29
+43                <action android:name="android.intent.action.MAIN" />
+43-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:27:17-69
+43-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:27:25-66
+44
+45                <category android:name="android.intent.category.LAUNCHER" />
+45-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:28:17-77
+45-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:28:27-74
+46            </intent-filter>
+47        </activity>
+48        <activity
+48-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:32:9-36:49
+49            android:name="com.teya.agent.MainActivity"
+49-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:33:13-41
+50            android:exported="false"
+50-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:34:13-37
+51            android:screenOrientation="landscape"
+51-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:35:13-50
+52            android:theme="@style/Theme.Teya" />
+52-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:36:13-46
+53        <activity
+53-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:38:9-41:49
+54            android:name="com.teya.agent.SettingsActivity"
+54-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:39:13-45
+55            android:exported="false"
+55-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:40:13-37
+56            android:theme="@style/Theme.Teya" />
+56-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:41:13-46
+57
+58        <service
+58-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:43:9-47:68
+59            android:name="com.teya.agent.harness.HarnessService"
+59-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:44:13-51
+60            android:enabled="true"
+60-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:45:13-35
+61            android:exported="false"
+61-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:46:13-37
+62            android:foregroundServiceType="microphone|phoneCall" />
+62-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:47:13-65
+63        <service
+63-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:49:9-59:19
+64            android:name="com.teya.agent.telephony.TeyaInCallService"
+64-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:50:13-56
+65            android:exported="true"
+65-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:52:13-36
+66            android:permission="android.permission.BIND_INCALL_SERVICE" >
+66-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:51:13-72
+67            <meta-data
+67-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:53:13-55:40
+68                android:name="android.telecom.IN_CALL_SERVICE_UI"
+68-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:54:17-66
+69                android:value="true" />
+69-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:55:17-37
+70
+71            <intent-filter>
+71-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:56:13-58:29
+72                <action android:name="android.telecom.InCallService" />
+72-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:57:17-72
+72-->/Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml:57:25-69
+73            </intent-filter>
+74        </service>
+75
+76        <activity
+76-->[androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/a5fb5d8f7bcb0e6de85a314e88f1839b/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:23:9-25:39
+77            android:name="androidx.activity.ComponentActivity"
+77-->[androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/a5fb5d8f7bcb0e6de85a314e88f1839b/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:24:13-63
+78            android:exported="true" />
+78-->[androidx.compose.ui:ui-test-manifest:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/a5fb5d8f7bcb0e6de85a314e88f1839b/transformed/ui-test-manifest-1.6.8/AndroidManifest.xml:25:13-36
+79        <activity
+79-->[androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/1673d6eaa616ed1859337cecde07e106/transformed/ui-tooling-release/AndroidManifest.xml:23:9-25:39
+80            android:name="androidx.compose.ui.tooling.PreviewActivity"
+80-->[androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/1673d6eaa616ed1859337cecde07e106/transformed/ui-tooling-release/AndroidManifest.xml:24:13-71
+81            android:exported="true" />
+81-->[androidx.compose.ui:ui-tooling-android:1.6.8] /Users/adgapar/.gradle/caches/9.6.1/transforms/1673d6eaa616ed1859337cecde07e106/transformed/ui-tooling-release/AndroidManifest.xml:25:13-36
+82
+83        <provider
+83-->[androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/aacaea7a8bdbda6a99b2691d98f54918/transformed/emoji2-1.3.0/AndroidManifest.xml:24:9-32:20
+84            android:name="androidx.startup.InitializationProvider"
+84-->[androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/aacaea7a8bdbda6a99b2691d98f54918/transformed/emoji2-1.3.0/AndroidManifest.xml:25:13-67
+85            android:authorities="com.teya.agent.androidx-startup"
+85-->[androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/aacaea7a8bdbda6a99b2691d98f54918/transformed/emoji2-1.3.0/AndroidManifest.xml:26:13-68
+86            android:exported="false" >
+86-->[androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/aacaea7a8bdbda6a99b2691d98f54918/transformed/emoji2-1.3.0/AndroidManifest.xml:27:13-37
+87            <meta-data
+87-->[androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/aacaea7a8bdbda6a99b2691d98f54918/transformed/emoji2-1.3.0/AndroidManifest.xml:29:13-31:52
+88                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+88-->[androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/aacaea7a8bdbda6a99b2691d98f54918/transformed/emoji2-1.3.0/AndroidManifest.xml:30:17-75
+89                android:value="androidx.startup" />
+89-->[androidx.emoji2:emoji2:1.3.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/aacaea7a8bdbda6a99b2691d98f54918/transformed/emoji2-1.3.0/AndroidManifest.xml:31:17-49
+90            <meta-data
+90-->[androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/9a031ae1d337f7287310d6a8b8fa0ff1/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:29:13-31:52
+91                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+91-->[androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/9a031ae1d337f7287310d6a8b8fa0ff1/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:30:17-78
+92                android:value="androidx.startup" />
+92-->[androidx.lifecycle:lifecycle-process:2.8.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/9a031ae1d337f7287310d6a8b8fa0ff1/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:31:17-49
+93            <meta-data
+93-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:29:13-31:52
+94                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+94-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:30:17-85
+95                android:value="androidx.startup" />
+95-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:31:17-49
+96        </provider>
+97
+98        <service
+98-->[androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/89dfc453fa5cca3ec709521e3499293c/transformed/room-runtime/AndroidManifest.xml:24:9-28:63
+99            android:name="androidx.room.MultiInstanceInvalidationService"
+99-->[androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/89dfc453fa5cca3ec709521e3499293c/transformed/room-runtime/AndroidManifest.xml:25:13-74
+100            android:directBootAware="true"
+100-->[androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/89dfc453fa5cca3ec709521e3499293c/transformed/room-runtime/AndroidManifest.xml:26:13-43
+101            android:exported="false" />
+101-->[androidx.room:room-runtime-android:2.8.4] /Users/adgapar/.gradle/caches/9.6.1/transforms/89dfc453fa5cca3ec709521e3499293c/transformed/room-runtime/AndroidManifest.xml:27:13-37
+102
+103        <receiver
+103-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:34:9-52:20
+104            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+104-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:35:13-76
+105            android:directBootAware="false"
+105-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:36:13-44
+106            android:enabled="true"
+106-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:37:13-35
+107            android:exported="true"
+107-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:38:13-36
+108            android:permission="android.permission.DUMP" >
+108-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:39:13-57
+109            <intent-filter>
+109-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:40:13-42:29
+110                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+110-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:17-91
+110-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:25-88
+111            </intent-filter>
+112            <intent-filter>
+112-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:43:13-45:29
+113                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+113-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:17-85
+113-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:25-82
+114            </intent-filter>
+115            <intent-filter>
+115-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:46:13-48:29
+116                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+116-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:17-88
+116-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:25-85
+117            </intent-filter>
+118            <intent-filter>
+118-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:49:13-51:29
+119                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+119-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:17-95
+119-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/b7eaa822b8a9849993f7846b7cfcea65/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:25-92
+120            </intent-filter>
+121        </receiver>
+122    </application>
+123
+124</manifest>

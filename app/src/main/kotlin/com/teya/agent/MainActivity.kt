@@ -30,12 +30,17 @@ import com.teya.agent.ui.theme.TeyaTheme
 
 class MainActivity : ComponentActivity() {
     private lateinit var configManager: ConfigManager
-    private var agentState by mutableStateOf(AgentState.IDLE)
+    private val _agentState = mutableStateOf(AgentState.IDLE)
 
     private val stateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val stateName = intent?.getStringExtra("state") ?: return
-            agentState = AgentState.valueOf(stateName)
+            Log.d("MainActivity", "State update received: $stateName")
+            try {
+                _agentState.value = AgentState.valueOf(stateName)
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Invalid state name: $stateName", e)
+            }
         }
     }
 
@@ -68,7 +73,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             TeyaTheme {
                 MainScreen(
-                    state = agentState,
+                    state = _agentState.value,
                     onOrbClick = { 
                         Log.d("MainActivity", "Orb clicked, triggering voice loop")
                         val intent = Intent(this, HarnessService::class.java).apply {
@@ -92,14 +97,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        registerReceiver(stateReceiver, IntentFilter("com.teya.agent.STATE_UPDATE"), RECEIVER_NOT_EXPORTED)
+    override fun onStart() {
+        super.onStart()
+        val filter = IntentFilter("com.teya.agent.STATE_UPDATE")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(stateReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(stateReceiver, filter)
+        }
     }
 
-    override fun onPause() {
-        super.onPause()
-        unregisterReceiver(stateReceiver)
+    override fun onStop() {
+        super.onStop()
+        try {
+            unregisterReceiver(stateReceiver)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to unregister receiver", e)
+        }
     }
 
     private fun checkAndRequestPermissions() {
@@ -143,7 +157,7 @@ fun MainScreen(state: AgentState, onOrbClick: () -> Unit, onSettingsClick: () ->
         modifier = Modifier.fillMaxSize(),
         color = Color(0xFF0A0A0A)
     ) {
-        Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+        Box(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -156,6 +170,7 @@ fun MainScreen(state: AgentState, onOrbClick: () -> Unit, onSettingsClick: () ->
                 onClick = onSettingsClick,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
+                    .systemBarsPadding()
                     .padding(16.dp)
             ) {
                 Icon(
