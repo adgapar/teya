@@ -53,8 +53,8 @@ MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/adgapar/.gradle/cach
 MERGED from [androidx.tracing:tracing:1.0.0] /Users/adgapar/.gradle/caches/9.6.1/transforms/f2b5b919fc479139778fb0a34262f983/transformed/tracing-1.0.0/AndroidManifest.xml:17:1-24:12
 MERGED from [androidx.sqlite:sqlite-framework-android:2.6.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/7fcc5c599b5dfade204824f49dda45e3/transformed/sqlite-framework/AndroidManifest.xml:17:1-22:12
 MERGED from [androidx.sqlite:sqlite-android:2.6.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/fd494602b4254fd8588957c79d9a730e/transformed/sqlite/AndroidManifest.xml:17:1-22:12
-MERGED from [com.google.ai.edge.litert:litert:1.0.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/1d83f3538517594512ab56875b167dbf/transformed/litert-1.0.1/AndroidManifest.xml:2:1-11:12
-MERGED from [com.google.ai.edge.litert:litert-api:1.0.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/0ad1676421414d3be594ac4bcadfde0f/transformed/litert-api-1.0.1/AndroidManifest.xml:2:1-11:12
+MERGED from [com.google.ai.edge.litert:litert:1.4.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/8ffe0eb8775530116be9d424ef80ca5e/transformed/litert-1.4.1/AndroidManifest.xml:2:1-11:12
+MERGED from [com.google.ai.edge.litert:litert-api:1.4.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/4de8987c72a49e84e453d2d2944c2c71/transformed/litert-api-1.4.1/AndroidManifest.xml:2:1-11:12
 	package
 		INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml
 	android:versionName
@@ -128,10 +128,10 @@ MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.g
 MERGED from [androidx.profileinstaller:profileinstaller:1.3.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/d099445733b6d0a3d1167fd906fc7741/transformed/profileinstaller-1.3.1/AndroidManifest.xml:23:5-53:19
 MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/f4bd24e958661f7b2482768fa38a9064/transformed/startup-runtime-1.1.1/AndroidManifest.xml:25:5-31:19
 MERGED from [androidx.startup:startup-runtime:1.1.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/f4bd24e958661f7b2482768fa38a9064/transformed/startup-runtime-1.1.1/AndroidManifest.xml:25:5-31:19
-MERGED from [com.google.ai.edge.litert:litert:1.0.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/1d83f3538517594512ab56875b167dbf/transformed/litert-1.0.1/AndroidManifest.xml:9:5-20
-MERGED from [com.google.ai.edge.litert:litert:1.0.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/1d83f3538517594512ab56875b167dbf/transformed/litert-1.0.1/AndroidManifest.xml:9:5-20
-MERGED from [com.google.ai.edge.litert:litert-api:1.0.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/0ad1676421414d3be594ac4bcadfde0f/transformed/litert-api-1.0.1/AndroidManifest.xml:9:5-20
-MERGED from [com.google.ai.edge.litert:litert-api:1.0.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/0ad1676421414d3be594ac4bcadfde0f/transformed/litert-api-1.0.1/AndroidManifest.xml:9:5-20
+MERGED from [com.google.ai.edge.litert:litert:1.4.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/8ffe0eb8775530116be9d424ef80ca5e/transformed/litert-1.4.1/AndroidManifest.xml:9:5-20
+MERGED from [com.google.ai.edge.litert:litert:1.4.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/8ffe0eb8775530116be9d424ef80ca5e/transformed/litert-1.4.1/AndroidManifest.xml:9:5-20
+MERGED from [com.google.ai.edge.litert:litert-api:1.4.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/4de8987c72a49e84e453d2d2944c2c71/transformed/litert-api-1.4.1/AndroidManifest.xml:9:5-20
+MERGED from [com.google.ai.edge.litert:litert-api:1.4.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/4de8987c72a49e84e453d2d2944c2c71/transformed/litert-api-1.4.1/AndroidManifest.xml:9:5-20
 	android:extractNativeLibs
 		INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml
 	android:appComponentFactory
@@ -306,10 +306,10 @@ MERGED from [androidx.sqlite:sqlite-framework-android:2.6.2] /Users/adgapar/.gra
 MERGED from [androidx.sqlite:sqlite-framework-android:2.6.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/7fcc5c599b5dfade204824f49dda45e3/transformed/sqlite-framework/AndroidManifest.xml:20:5-44
 MERGED from [androidx.sqlite:sqlite-android:2.6.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/fd494602b4254fd8588957c79d9a730e/transformed/sqlite/AndroidManifest.xml:20:5-44
 MERGED from [androidx.sqlite:sqlite-android:2.6.2] /Users/adgapar/.gradle/caches/9.6.1/transforms/fd494602b4254fd8588957c79d9a730e/transformed/sqlite/AndroidManifest.xml:20:5-44
-MERGED from [com.google.ai.edge.litert:litert:1.0.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/1d83f3538517594512ab56875b167dbf/transformed/litert-1.0.1/AndroidManifest.xml:6:5-7:38
-MERGED from [com.google.ai.edge.litert:litert:1.0.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/1d83f3538517594512ab56875b167dbf/transformed/litert-1.0.1/AndroidManifest.xml:6:5-7:38
-MERGED from [com.google.ai.edge.litert:litert-api:1.0.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/0ad1676421414d3be594ac4bcadfde0f/transformed/litert-api-1.0.1/AndroidManifest.xml:6:5-7:38
-MERGED from [com.google.ai.edge.litert:litert-api:1.0.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/0ad1676421414d3be594ac4bcadfde0f/transformed/litert-api-1.0.1/AndroidManifest.xml:6:5-7:38
+MERGED from [com.google.ai.edge.litert:litert:1.4.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/8ffe0eb8775530116be9d424ef80ca5e/transformed/litert-1.4.1/AndroidManifest.xml:6:5-7:38
+MERGED from [com.google.ai.edge.litert:litert:1.4.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/8ffe0eb8775530116be9d424ef80ca5e/transformed/litert-1.4.1/AndroidManifest.xml:6:5-7:38
+MERGED from [com.google.ai.edge.litert:litert-api:1.4.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/4de8987c72a49e84e453d2d2944c2c71/transformed/litert-api-1.4.1/AndroidManifest.xml:6:5-7:38
+MERGED from [com.google.ai.edge.litert:litert-api:1.4.1] /Users/adgapar/.gradle/caches/9.6.1/transforms/4de8987c72a49e84e453d2d2944c2c71/transformed/litert-api-1.4.1/AndroidManifest.xml:6:5-7:38
 	android:targetSdkVersion
 		INJECTED from /Users/adgapar/GitHub/teya/app/src/main/AndroidManifest.xml
 	android:minSdkVersion

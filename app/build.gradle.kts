@@ -68,8 +68,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
 
     // AI / Wake Word
-    implementation("com.google.ai.edge.litert:litert-api:1.0.1")
-    implementation("com.google.ai.edge.litert:litert:1.0.1")
+    implementation("com.google.ai.edge.litert:litert:1.4.1")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
