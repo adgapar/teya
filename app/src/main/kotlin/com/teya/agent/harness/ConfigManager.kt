@@ -24,8 +24,8 @@ class ConfigManager(context: Context) {
     }
 
     var mistralApiKey: String?
-        get() = prefs.getString("mistral_api_key", null)
-        set(value) = prefs.edit().putString("mistral_api_key", value).apply()
+        get() = prefs.getString("mistral_api_key", null)?.trim()
+        set(value) = prefs.edit().putString("mistral_api_key", value?.trim()).apply()
 
     fun isConfigured(): Boolean {
         return !mistralApiKey.isNullOrBlank()

@@ -50,6 +50,10 @@
             android:exported="false"
             android:screenOrientation="landscape"
             android:theme="@style/Theme.Teya" />
+        <activity
+            android:name="com.teya.agent.SettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Teya" />
 
         <service
             android:name="com.teya.agent.harness.HarnessService"

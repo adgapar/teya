@@ -5,9 +5,11 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -44,6 +46,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         configManager = ConfigManager(this)
 
         if (!configManager.isConfigured()) {
@@ -58,11 +61,20 @@ class MainActivity : ComponentActivity() {
             TeyaTheme {
                 MainScreen(
                     onOrbClick = { 
-                        // Trigger the pipeline manually via Intent to Service
+                        Log.d("MainActivity", "Orb clicked, triggering voice loop")
                         val intent = Intent(this, HarnessService::class.java).apply {
                             action = HarnessService.ACTION_TRIGGER_VOICE
                         }
-                        startService(intent)
+                        try {
+                            // On Android 12+, we can start foreground services from foreground activity
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                startForegroundService(intent)
+                            } else {
+                                startService(intent)
+                            }
+                        } catch (e: Exception) {
+                            Log.e("MainActivity", "Failed to trigger voice", e)
+                        }
                     },
                     onSettingsClick = {
                         startActivity(Intent(this, SettingsActivity::class.java))
@@ -95,39 +107,47 @@ class MainActivity : ComponentActivity() {
 
     private fun startHarnessService() {
         val intent = Intent(this, HarnessService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to start service", e)
         }
     }
 }
 
 @Composable
 fun MainScreen(onOrbClick: () -> Unit, onSettingsClick: () -> Unit) {
-    // In a real app, state would be observed from the Service/ViewModel
     var agentState by remember { mutableStateOf(AgentState.IDLE) }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable { onOrbClick() }
-        ) {
-            AgentFace(state = agentState)
-        }
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Color(0xFF0A0A0A)
+    ) {
+        Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable { onOrbClick() }
+            ) {
+                AgentFace(state = agentState)
+            }
 
-        IconButton(
-            onClick = onSettingsClick,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Settings,
-                contentDescription = "Settings",
-                tint = Color.White.copy(alpha = 0.5f)
-            )
+            IconButton(
+                onClick = onSettingsClick,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    tint = Color.White.copy(alpha = 0.5f)
+                )
+            }
         }
     }
 }
