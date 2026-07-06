@@ -53,7 +53,9 @@ class HarnessService : Service() {
         val apiKey = configManager.mistralApiKey
         if (!apiKey.isNullOrBlank()) {
             Log.d(TAG, "Initializing Mistral brain with key")
-            brainClient = MistralClient(KtorClientFactory.create(), apiKey)
+            val mistralClient = MistralClient(KtorClientFactory.create(), apiKey)
+            brainClient = mistralClient
+            voicePipeline.setMistralClient(mistralClient)
         } else {
             Log.w(TAG, "No API key found, using stub brain")
             brainClient = object : BrainClient {
