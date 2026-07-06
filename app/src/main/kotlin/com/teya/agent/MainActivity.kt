@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.teya.agent.harness.ConfigManager
 import com.teya.agent.harness.HarnessService
@@ -31,15 +32,25 @@ import com.teya.agent.ui.theme.TeyaTheme
 class MainActivity : ComponentActivity() {
     private lateinit var configManager: ConfigManager
     private val _agentState = mutableStateOf(AgentState.IDLE)
+    private val _userText = mutableStateOf("")
+    private val _agentText = mutableStateOf("")
 
     private val stateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            val stateName = intent?.getStringExtra("state") ?: return
-            Log.d("MainActivity", "State update received: $stateName")
-            try {
-                _agentState.value = AgentState.valueOf(stateName)
-            } catch (e: Exception) {
-                Log.e("MainActivity", "Invalid state name: $stateName", e)
+            when (intent?.action) {
+                "com.teya.agent.STATE_UPDATE" -> {
+                    val stateName = intent.getStringExtra("state") ?: return
+                    Log.d("MainActivity", "State update received: $stateName")
+                    try {
+                        _agentState.value = AgentState.valueOf(stateName)
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Invalid state name: $stateName", e)
+                    }
+                }
+                HarnessService.ACTION_TRANSCRIPT -> {
+                    intent.getStringExtra("user")?.let { _userText.value = it }
+                    intent.getStringExtra("agent")?.let { _agentText.value = it }
+                }
             }
         }
     }
@@ -74,7 +85,9 @@ class MainActivity : ComponentActivity() {
             TeyaTheme {
                 MainScreen(
                     state = _agentState.value,
-                    onOrbClick = { 
+                    userText = _userText.value,
+                    agentText = _agentText.value,
+                    onOrbClick = {
                         Log.d("MainActivity", "Orb clicked, triggering voice loop")
                         val intent = Intent(this, HarnessService::class.java).apply {
                             action = HarnessService.ACTION_TRIGGER_VOICE
@@ -99,7 +112,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        val filter = IntentFilter("com.teya.agent.STATE_UPDATE")
+        val filter = IntentFilter().apply {
+            addAction("com.teya.agent.STATE_UPDATE")
+            addAction(HarnessService.ACTION_TRANSCRIPT)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(stateReceiver, filter, RECEIVER_NOT_EXPORTED)
         } else {
@@ -152,7 +168,13 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainScreen(state: AgentState, onOrbClick: () -> Unit, onSettingsClick: () -> Unit) {
+fun MainScreen(
+    state: AgentState,
+    userText: String,
+    agentText: String,
+    onOrbClick: () -> Unit,
+    onSettingsClick: () -> Unit
+) {
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = Color(0xFF0A0A0A)
@@ -178,6 +200,35 @@ fun MainScreen(state: AgentState, onOrbClick: () -> Unit, onSettingsClick: () ->
                     contentDescription = "Settings",
                     tint = Color.White.copy(alpha = 0.5f)
                 )
+            }
+
+            // Dev overlay: live state + last transcript + brain reply.
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .systemBarsPadding()
+                    .padding(16.dp)
+                    .fillMaxWidth(0.6f)
+            ) {
+                Text(
+                    text = "state: ${state.name.lowercase()}",
+                    color = Color.White.copy(alpha = 0.4f),
+                    fontSize = 12.sp
+                )
+                if (userText.isNotBlank()) {
+                    Text(
+                        text = "You: $userText",
+                        color = Color(0xFF9AD0FF),
+                        fontSize = 16.sp
+                    )
+                }
+                if (agentText.isNotBlank()) {
+                    Text(
+                        text = "Teya: $agentText",
+                        color = Color(0xFF9AFFC4),
+                        fontSize = 16.sp
+                    )
+                }
             }
         }
     }

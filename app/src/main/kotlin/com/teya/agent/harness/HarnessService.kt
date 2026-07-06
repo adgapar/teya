@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
 class HarnessService : Service() {
     companion object {
         const val ACTION_TRIGGER_VOICE = "com.teya.agent.action.TRIGGER_VOICE"
+        const val ACTION_TRANSCRIPT = "com.teya.agent.TRANSCRIPT_UPDATE"
         private const val CHANNEL_ID = "teya_harness_channel"
         private const val NOTIFICATION_ID = 1
         private const val TAG = "HarnessService"
@@ -100,22 +101,29 @@ class HarnessService : Service() {
 
             // 1. Listen + STT (VAD-based capture, then Voxtral transcription)
             updateUiState(AgentState.LISTENING)
+            sendDebug(user = "…", agent = "")   // clear previous turn in the dev overlay
             Log.d(TAG, "Listening for command...")
             val text = voicePipeline.listenForCommand()
             Log.d(TAG, "Input: $text")
 
             if (text.isBlank()) {
+                sendDebug(user = "(didn't catch that)")
                 updateUiState(AgentState.SPEAKING)
                 voicePipeline.textToSpeech("Sorry, I didn't catch that.")
                 updateUiState(AgentState.IDLE)
                 return
             }
+            sendDebug(user = text)
 
             updateUiState(AgentState.THINKING)
             // 2. Brain
             Log.d(TAG, "Thinking...")
             val response = brainClient.processText(text)
             Log.d(TAG, "Brain response: ${response.speechResponse}")
+
+            // Surface the brain output (and any tool call) in the dev overlay.
+            val toolSummary = response.toolCall?.let { "\n→ ${it.functionName}(${it.arguments})" } ?: ""
+            sendDebug(agent = (response.speechResponse + toolSummary).ifBlank { "(no reply)" })
 
             updateUiState(AgentState.SPEAKING)
             // 3. TTS (skip if the model only returned a tool call with no words)
@@ -130,7 +138,9 @@ class HarnessService : Service() {
                     Log.d(TAG, "Actuator: Placing call to $name")
                     val success = telephonyActuator.placeCall(name)
                     if (!success) {
-                        voicePipeline.textToSpeech("I'm sorry, I can't call $name. They are not on the allowlist.")
+                        val denied = "I'm sorry, I can't call $name. They are not on the allowlist."
+                        sendDebug(agent = denied)
+                        voicePipeline.textToSpeech(denied)
                     }
                 }
             }
@@ -139,6 +149,15 @@ class HarnessService : Service() {
             Log.e(TAG, "Error in voice trigger loop", e)
             updateUiState(AgentState.IDLE)
         }
+    }
+
+    private fun sendDebug(user: String? = null, agent: String? = null) {
+        val intent = Intent(ACTION_TRANSCRIPT).apply {
+            setPackage(packageName)
+            user?.let { putExtra("user", it) }
+            agent?.let { putExtra("agent", it) }
+        }
+        sendBroadcast(intent)
     }
 
     private fun updateUiState(state: AgentState) {
