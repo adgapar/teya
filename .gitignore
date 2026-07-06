@@ -8,8 +8,10 @@
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 .DS_Store
-/build
+# Ignore build output in every module (root was /build, which missed app/build/)
+build/
 /captures
+/.idea/inspectionProfiles
 .externalNativeBuild
 .cxx
 /google-services.json
