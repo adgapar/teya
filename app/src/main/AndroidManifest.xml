@@ -20,6 +20,9 @@
          alarm/timer assistant; SCHEDULE_EXACT_ALARM is the fallback path. -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Family calendar via the CalendarContract provider (read "what's on" + create events). -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
 
     <application
         android:allowBackup="true"

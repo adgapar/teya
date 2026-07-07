@@ -118,6 +118,77 @@ object AgentTools {
         },
     )
 
+    val addEvent = ToolSpec(
+        name = "add_event",
+        description = "Add an event to the family calendar. Resolve relative dates ('tomorrow', " +
+            "'next Tuesday') against the current date/time in the live device state.",
+        parameters = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {
+                putJsonObject("title") {
+                    put("type", "string")
+                    put("description", "What the event is, e.g. 'Football' or 'Dentist'.")
+                }
+                putJsonObject("start") {
+                    put("type", "string")
+                    put("description", "Local start date-time, ISO 'YYYY-MM-DDTHH:MM' (e.g. 2026-07-14T17:30).")
+                }
+                putJsonObject("duration_minutes") {
+                    put("type", "integer")
+                    put("description", "How long the event lasts, in minutes. Defaults to 60.")
+                }
+                putJsonObject("location") {
+                    put("type", "string")
+                    put("description", "Where it is, e.g. 'City stadium'. Optional.")
+                }
+                putJsonObject("repeat") {
+                    put("type", "string")
+                    put("description", "Recurrence: one of daily, weekly, monthly, yearly, weekdays. " +
+                        "For 'every Tuesday' use weekly with a Tuesday start. Omit for a one-off.")
+                }
+            }
+            putJsonArray("required") { add("title"); add("start") }
+        },
+    )
+
+    val getEvents = ToolSpec(
+        name = "get_events",
+        description = "Look up calendar events in a date range to answer 'what's on'. Compute the " +
+            "range from the live device state (e.g. 'Saturday' → that day 00:00 to 23:59).",
+        parameters = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {
+                putJsonObject("start") {
+                    put("type", "string")
+                    put("description", "Range start, ISO 'YYYY-MM-DDTHH:MM'. Defaults to now.")
+                }
+                putJsonObject("end") {
+                    put("type", "string")
+                    put("description", "Range end, ISO 'YYYY-MM-DDTHH:MM'. Defaults to a week ahead.")
+                }
+            }
+        },
+    )
+
+    val cancelEvent = ToolSpec(
+        name = "cancel_event",
+        description = "Remove an event from the family calendar by its title (e.g. 'football'). " +
+            "Removes the whole series if it repeats. This is the ONLY way to cancel an event — " +
+            "never re-add an event to try to remove it.",
+        parameters = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {
+                putJsonObject("title") {
+                    put("type", "string")
+                    put("description", "The event to remove, matched by name, e.g. 'dentist'.")
+                }
+            }
+            putJsonArray("required") { add("title") }
+        },
+    )
+
     /** All tools currently exposed to the brain. */
-    val all: List<ToolSpec> = listOf(placeCall, setTimer, cancelTimer, setAlarm, cancelAlarm)
+    val all: List<ToolSpec> = listOf(
+        placeCall, setTimer, cancelTimer, setAlarm, cancelAlarm, addEvent, getEvents, cancelEvent,
+    )
 }

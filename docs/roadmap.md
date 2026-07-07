@@ -34,7 +34,10 @@ _Last updated: 2026-07-07._
 
 ## 🔜 Next (recommended order)
 
-1. **Make the call feature actually work** — the product's headline, currently non-functional:
+1. **Make the call feature actually work** — currently non-functional. **Outbound only**: the device
+   is a personal home assistant, not a number anyone dials, so drop the inbound side —
+   `TeyaInCallService` + `ANSWER_PHONE_CALLS` + default-dialer-for-inbound are dead weight. Just
+   `ACTION_CALL` ("call Grandma"). See [[device-form-factor]].
    - ⚠️ **Hardware check:** the dev device is a dedicated phone with a **fresh SIM** — confirm the
      plan actually allows outbound cellular calls before assuming code is the blocker. Calls go over
      the **native cellular dialer + SIM only** — no Twilio/VoIP (zero-setup principle: no one will
@@ -42,7 +45,7 @@ _Last updated: 2026-07-07._
      name→number resolution + call intent) without a live connection until a callable SIM is in.
    - Populate the allowlist — Teya **seeds** it (blank-slate device has no contacts); parent-gated
      contact UI or DB seed — **C1**.
-   - Become the default dialer (`RoleManager` / `ROLE_DIALER`) or use `ACTION_CALL` for MVP — **C2**.
+   - Use `ACTION_CALL` for outbound — **C2**. (Default-dialer / `ROLE_DIALER` was for inbound; not needed.)
    - Exact-match single lookup + phone-number validation (no `LIKE` wildcard bypass) — **C3**.
    - Runtime permission recheck at call time — **H11**.
 2. **Wake word** — ✅ now works at ~1.5 m (software front-end: `NoiseSuppressor` + 6× gain, threshold
@@ -104,6 +107,11 @@ For anything with a companion app: **speak it** needs a data source (API/provide
 fires an intent. Weather is the canonical case — **decided: speak it** via a keyless API (e.g.
 Open-Meteo), with location from the household profile or native device location.
 
+> **Pattern — every create/set tool ships with its cancel/delete in the same slice.** A model that
+> lacks the inverse improvises and lies (calendar had no delete → it re-added events and claimed it
+> removed them; timers shipped set-only). Pair them, say "only way to cancel" in the prompt, and
+> scope destructive ops safely.
+
 **Add order (each is: `ToolSpec` in `AgentTools` → `when` branch in `executeTool` → mention in `TeyaPersona`):**
 1. ✅ time / date / location — done, but as **ambient context**, not a tool (`get_time` removed).
 2. ✅ `set_alarm` — done; `AlarmClock` + `EXTRA_SKIP_UI` (sets without foregrounding the clock app),
@@ -117,8 +125,13 @@ Open-Meteo), with location from the household profile or native device location.
    Known limit: active list is in-memory (a timer still fires + announces after process death, but
    can't be listed/cancelled until it goes off).
 3. **`get_weather`** — Open-Meteo (free, no key) + native device location (ambient) → spoken.
-4. **`calendar`** read/write (Calendar Provider) — "what's on today?", add events. This is also how
-   **reminders** work (decided): write a calendar event + reminder; system notification fires.
+4. **`calendar`** (`calendar/CalendarManager.kt`) — hybrid backing (synced Google calendar if
+   present → else existing writable/local calendar). ✅ **Slice 1 verified live**: `add_event`
+   (title/start/duration/location + `repeat`→RRULE recurrence), `get_events` (Instances expands
+   recurrences), today's remaining events in the ambient context. Follow-on slices:
+   **(a) advance voice-reminders** (reuse the timer `AlarmManager`+announce → "football in 30 min");
+   **(b) attendees/email invites** (needs family emails from the onboarding profile; only real on a
+   synced Google calendar); **(c) leave-time / distance** (event location + ambient location).
 5. **`send_message`** — SMS / messenger intent to an allowlisted contact; safety-gated like calls.
 6. Device state & control — battery, volume/DND, open-app/launch intents.
 

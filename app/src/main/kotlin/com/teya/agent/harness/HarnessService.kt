@@ -16,6 +16,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.teya.agent.R
 import com.teya.agent.brain.*
+import com.teya.agent.calendar.CalendarManager
 import com.teya.agent.persona.AgentTools
 import com.teya.agent.persona.TeyaPersona
 import com.teya.agent.safety.ContactAllowlistManager
@@ -27,6 +28,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -57,6 +61,7 @@ class HarnessService : Service() {
     private lateinit var telephonyActuator: TelephonyActuator
     private lateinit var allowlistManager: ContactAllowlistManager
     private lateinit var timerManager: TimerManager
+    private lateinit var calendarManager: CalendarManager
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -70,6 +75,7 @@ class HarnessService : Service() {
         telephonyActuator = TelephonyActuator(this, allowlistManager)
         voicePipeline = VoicePipeline(this)
         timerManager = TimerManager(this)
+        calendarManager = CalendarManager(this)
         
         val apiKey = configManager.mistralApiKey
         if (!apiKey.isNullOrBlank()) {
@@ -336,21 +342,86 @@ class HarnessService : Service() {
                 }
             }
         }
+        "add_event" -> {
+            val title = tool.arguments["title"]?.takeIf { it.isNotBlank() }
+            val startMillis = tool.arguments["start"]?.let { parseIsoToMillis(it) }
+            if (title == null || startMillis == null) {
+                "I couldn't add it — I need at least a title and a start time."
+            } else {
+                val duration = tool.arguments["duration_minutes"]?.toIntOrNull()?.takeIf { it > 0 } ?: 60
+                val location = tool.arguments["location"]?.takeIf { it.isNotBlank() }
+                val rrule = repeatToRrule(tool.arguments["repeat"])
+                val id = withContext(Dispatchers.IO) {
+                    calendarManager.addEvent(title, startMillis, duration, location, rrule)
+                }
+                if (id != null) {
+                    "Added \"$title\"" + (if (rrule != null) ", repeating" else "") +
+                        (location?.let { " at $it" } ?: "") + "."
+                } else {
+                    "I couldn't add that to the calendar."
+                }
+            }
+        }
+        "get_events" -> {
+            val start = tool.arguments["start"]?.let { parseIsoToMillis(it) } ?: System.currentTimeMillis()
+            val end = tool.arguments["end"]?.let { parseIsoToMillis(it) } ?: (start + 7 * 24 * 3600_000L)
+            val events = withContext(Dispatchers.IO) { calendarManager.events(start, end) }
+            if (events.isEmpty()) {
+                "Nothing is scheduled in that period."
+            } else {
+                events.joinToString("; ") { e ->
+                    val whenStr = Instant.ofEpochMilli(e.beginMillis).atZone(ZoneId.systemDefault())
+                        .format(DateTimeFormatter.ofPattern("EEE d MMM, h:mm a", Locale.ENGLISH))
+                    "${e.title} — $whenStr" + (e.location?.let { " at $it" } ?: "")
+                }
+            }
+        }
+        "cancel_event" -> {
+            val query = tool.arguments["title"]?.takeIf { it.isNotBlank() }
+            if (query == null) {
+                "Which event should I cancel? Tell me its name."
+            } else {
+                val deleted = withContext(Dispatchers.IO) { calendarManager.deleteEventsByTitle(query) }
+                when {
+                    deleted.isEmpty() -> "I couldn't find an event matching \"$query\" to cancel."
+                    deleted.size == 1 -> "Removed \"${deleted[0]}\" from the calendar."
+                    else -> "Removed ${deleted.size} events matching \"$query\": ${deleted.joinToString(", ")}."
+                }
+            }
+        }
         else -> "Unknown tool: ${tool.functionName}"
+    }
+
+    /** Parse an ISO local date-time ("2026-07-14T17:30") or date to epoch millis; null if unparseable. */
+    private fun parseIsoToMillis(iso: String): Long? {
+        val zone = ZoneId.systemDefault()
+        return runCatching { LocalDateTime.parse(iso).atZone(zone).toInstant().toEpochMilli() }
+            .recoverCatching { LocalDate.parse(iso).atStartOfDay(zone).toInstant().toEpochMilli() }
+            .getOrNull()
+    }
+
+    /** Map a friendly repeat word to an RFC-5545 RRULE (weekday of a weekly rule comes from the start). */
+    private fun repeatToRrule(repeat: String?): String? = when (repeat?.lowercase()?.trim()) {
+        "daily" -> "FREQ=DAILY"
+        "weekly" -> "FREQ=WEEKLY"
+        "monthly" -> "FREQ=MONTHLY"
+        "yearly" -> "FREQ=YEARLY"
+        "weekdays" -> "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
+        else -> null
     }
 
     /**
      * The "live device state" block injected into the model's context every turn (ambient facts,
-     * not tools): current time + location. The model reads these directly instead of spending a
-     * tool round-trip to learn "now" / "where". Keep it small — only cheap, ubiquitous, read-only
-     * facts belong here.
+     * not tools): time, location, running timers, and today's remaining events. The model reads
+     * these directly instead of spending a tool round-trip. Kept small — cheap, ubiquitous facts
+     * only. Runs off the main thread (location + calendar are content-provider reads).
      */
-    private fun buildLiveContext(): String {
+    private suspend fun buildLiveContext(): String = withContext(Dispatchers.IO) {
         val now = LocalDateTime.now()
+        val zone = ZoneId.systemDefault()
         // 12-hour format ("9:05 PM") so the model never has to do a 24h→12h conversion (it fumbles
         // that — reads "21:05" as "quarter past nine"). Hand it the time it will actually speak.
         val time = now.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy, h:mm a", Locale.ENGLISH))
-        val zone = ZoneId.systemDefault()
         val loc = lastKnownLocation()
         val locLine = if (loc != null) {
             "%.4f, %.4f (latitude, longitude)".format(loc.latitude, loc.longitude)
@@ -360,18 +431,25 @@ class HarnessService : Service() {
         // Active timers ride in the ambient context so "how long left?" needs no tool round-trip.
         val timersLine = timerManager.active().joinToString("; ") { t ->
             val remaining = ((t.endAtMillis - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
-            val name = t.label.ifBlank { "unnamed" }
-            "$name: ${remaining / 60}m ${remaining % 60}s left"
+            "${t.label.ifBlank { "unnamed" }}: ${remaining / 60}m ${remaining % 60}s left"
         }.ifBlank { "none" }
+        // Today's remaining events, so "what's on today?" is free.
+        val endOfDay = now.toLocalDate().atTime(23, 59, 59).atZone(zone).toInstant().toEpochMilli()
+        val eventsLine = calendarManager.events(System.currentTimeMillis(), endOfDay).joinToString("; ") { e ->
+            val at = Instant.ofEpochMilli(e.beginMillis).atZone(zone)
+                .format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH))
+            "${e.title} at $at"
+        }.ifBlank { "nothing scheduled" }
         val context = """
             Live device state (authoritative — use these directly, do not ask the user):
             - Now: $time ($zone)
             - Location: $locLine
             - Active timers: $timersLine
+            - Today's remaining events: $eventsLine
         """.trimIndent()
         // TODO(H2): gate behind BuildConfig.DEBUG — this line logs location (PII).
         Log.d(TAG, "Live context: ${context.replace("\n", " | ")}")
-        return context
+        context
     }
 
     /** Most-recent cached fix across providers; instant (no async wait). Null if none / no permission. */
