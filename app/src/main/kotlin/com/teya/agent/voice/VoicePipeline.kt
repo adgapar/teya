@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.media.MediaDataSource
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.util.Log
@@ -202,56 +203,45 @@ class VoicePipeline(private val context: Context) {
             return
         }
 
-        withContext(Dispatchers.IO) {
-            try {
-                val tempFile = File(context.cacheDir, "tts_output.mp3")
-                client.synthesizeSpeech(text) { channel ->
-                    val inputStream = channel.toInputStream()
-                    FileOutputStream(tempFile).use { output ->
-                        inputStream.copyTo(output)
+        // Fetch + decode off the main thread; the API returns base64 audio in JSON (see MistralClient).
+        val audio = withContext(Dispatchers.IO) { client.synthesizeSpeech(text) }
+        if (audio == null || audio.isEmpty()) {
+            Log.e("VoicePipeline", "TTS produced no audio, skipping playback")
+            return
+        }
+
+        // Play from memory — no temp file on disk.
+        withContext(Dispatchers.Main) {
+            suspendCancellableCoroutine<Unit> { continuation ->
+                val mediaPlayer = MediaPlayer()
+                try {
+                    mediaPlayer.setDataSource(ByteArrayMediaDataSource(audio))
+                    mediaPlayer.setOnCompletionListener {
+                        Log.d("VoicePipeline", "Playback finished")
+                        it.release()
+                        if (continuation.isActive) continuation.resume(Unit)
                     }
-                }
-
-                // If synthesis failed, no bytes were written — don't try to play silence.
-                if (!tempFile.exists() || tempFile.length() == 0L) {
-                    Log.e("VoicePipeline", "TTS produced no audio, skipping playback")
-                    return@withContext
-                }
-
-                // Play and wait for completion
-                withContext(Dispatchers.Main) {
-                    suspendCancellableCoroutine<Unit> { continuation ->
-                        val mediaPlayer = MediaPlayer()
-                        mediaPlayer.setDataSource(tempFile.absolutePath)
-
-                        mediaPlayer.setOnCompletionListener {
-                            Log.d("VoicePipeline", "Playback finished")
-                            it.release()
-                            if (continuation.isActive) continuation.resume(Unit)
-                        }
-
-                        mediaPlayer.setOnErrorListener { mp, what, extra ->
-                            Log.e("VoicePipeline", "MediaPlayer Error: $what, $extra")
-                            mp.release()
-                            if (continuation.isActive) continuation.resume(Unit)
-                            true
-                        }
-
-                        mediaPlayer.prepare()
-                        mediaPlayer.start()
-
-                        continuation.invokeOnCancellation {
-                            try {
-                                mediaPlayer.stop()
-                                mediaPlayer.release()
-                            } catch (e: Exception) {
-                                // Ignore
-                            }
+                    mediaPlayer.setOnErrorListener { mp, what, extra ->
+                        Log.e("VoicePipeline", "MediaPlayer Error: $what, $extra")
+                        mp.release()
+                        if (continuation.isActive) continuation.resume(Unit)
+                        true
+                    }
+                    mediaPlayer.prepare()
+                    mediaPlayer.start()
+                    continuation.invokeOnCancellation {
+                        try {
+                            mediaPlayer.stop()
+                            mediaPlayer.release()
+                        } catch (e: Exception) {
+                            // Ignore
                         }
                     }
+                } catch (e: Exception) {
+                    Log.e("VoicePipeline", "Error playing TTS", e)
+                    try { mediaPlayer.release() } catch (_: Exception) {}
+                    if (continuation.isActive) continuation.resume(Unit)
                 }
-            } catch (e: Exception) {
-                Log.e("VoicePipeline", "Error playing TTS", e)
             }
         }
     }
@@ -259,5 +249,17 @@ class VoicePipeline(private val context: Context) {
     fun stop() {
         wakeWordActive = false
         wakeWordEngine.stop()
+    }
+
+    /** Lets MediaPlayer read mp3 bytes straight from memory — no temp file on disk. */
+    private class ByteArrayMediaDataSource(private val data: ByteArray) : MediaDataSource() {
+        override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
+            if (position >= data.size) return -1
+            val count = minOf(size, data.size - position.toInt())
+            System.arraycopy(data, position.toInt(), buffer, offset, count)
+            return count
+        }
+        override fun getSize(): Long = data.size.toLong()
+        override fun close() {}
     }
 }

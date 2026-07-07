@@ -13,6 +13,8 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.teya.agent.R
 import com.teya.agent.brain.*
+import com.teya.agent.persona.AgentTools
+import com.teya.agent.persona.TeyaPersona
 import com.teya.agent.safety.ContactAllowlistManager
 import com.teya.agent.telephony.TelephonyActuator
 import com.teya.agent.ui.face.AgentState
@@ -54,7 +56,12 @@ class HarnessService : Service() {
         val apiKey = configManager.mistralApiKey
         if (!apiKey.isNullOrBlank()) {
             Log.d(TAG, "Initializing Mistral brain with key")
-            val mistralClient = MistralClient(KtorClientFactory.create(), apiKey)
+            val mistralClient = MistralClient(
+                KtorClientFactory.create(),
+                apiKey,
+                TeyaPersona.systemPrompt,
+                AgentTools.all
+            )
             brainClient = mistralClient
             voicePipeline.setMistralClient(mistralClient)
         } else {

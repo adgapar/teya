@@ -62,14 +62,22 @@ data class MistralChoice(
 
 @Serializable
 data class MistralTTSRequest(
-    val model: String = "voxtral-mini-tts-latest",
+    // No defaults on purpose: the Json config uses encodeDefaults=false, so default-valued
+    // fields are omitted from the body. The REST field is `voice` (not `voice_id`); a request
+    // without it returns 400 "Either ref_audio or voice must be provided."
+    val model: String,
     val input: String,
-    // "default" is NOT a real preset; Voxtral requires a valid saved/preset voice id.
-    @SerialName("voice_id") val voiceId: String = "neutral_female",
-    @SerialName("response_format") val responseFormat: String = "mp3"
+    val voice: String,
+    @SerialName("response_format") val responseFormat: String
 )
 
 @Serializable
 data class MistralTranscriptionResponse(
     val text: String
+)
+
+@Serializable
+data class MistralTTSResponse(
+    // /audio/speech returns the audio base64-encoded inside JSON, not raw bytes.
+    @SerialName("audio_data") val audioData: String
 )
