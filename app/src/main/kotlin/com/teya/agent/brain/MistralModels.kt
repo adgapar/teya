@@ -81,3 +81,20 @@ data class MistralTTSResponse(
     // /audio/speech returns the audio base64-encoded inside JSON, not raw bytes.
     @SerialName("audio_data") val audioData: String
 )
+
+// Streaming TTS: same endpoint with stream=true + response_format=pcm. No defaults — the JSON
+// config uses encodeDefaults=false, which would drop default-valued fields from the body.
+@Serializable
+data class MistralTTSStreamRequest(
+    val model: String,
+    val input: String,
+    val voice: String,
+    @SerialName("response_format") val responseFormat: String,
+    val stream: Boolean
+)
+
+// One `speech.audio.delta` SSE event's data payload; audio_data is base64 float32-LE PCM.
+@Serializable
+data class MistralTTSDelta(
+    @SerialName("audio_data") val audioData: String? = null
+)

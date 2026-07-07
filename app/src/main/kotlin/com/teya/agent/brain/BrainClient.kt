@@ -2,8 +2,14 @@ package com.teya.agent.brain
 
 // Simple interface for the LLM brain
 interface BrainClient {
-    suspend fun processText(input: String): BrainResponse
+    suspend fun processText(history: List<ChatMessage>): BrainResponse
 }
+
+/** One turn in the conversation. [role] is "user" or "assistant". */
+data class ChatMessage(
+    val role: String,
+    val content: String
+)
 
 data class BrainResponse(
     val speechResponse: String,

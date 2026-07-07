@@ -12,6 +12,8 @@ import io.ktor.utils.io.*
 import com.teya.agent.persona.ToolSpec
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class MistralClient(
     private val httpClient: HttpClient,
@@ -60,17 +62,17 @@ class MistralClient(
         return response.text
     }
 
-    override suspend fun processText(input: String): BrainResponse {
-        Log.d("MistralClient", "Processing text: ${input}")
+    override suspend fun processText(history: List<ChatMessage>): BrainResponse {
+        Log.d("MistralClient", "Processing ${history.size} message(s)")
+        val messages = ArrayList<MistralMessage>(history.size + 1)
+        messages.add(MistralMessage(role = "system", content = systemPrompt))
+        history.forEach { messages.add(MistralMessage(role = it.role, content = it.content)) }
         val httpResponse = httpClient.post("${baseUrl}/chat/completions") {
             header(HttpHeaders.Authorization, "Bearer ${cleanApiKey}")
             contentType(ContentType.Application.Json)
             setBody(MistralChatRequest(
                 model = "mistral-large-latest",
-                messages = listOf(
-                    MistralMessage(role = "system", content = systemPrompt),
-                    MistralMessage(role = "user", content = input)
-                ),
+                messages = messages,
                 tools = mistralTools,
                 toolChoice = "auto"
             ))
@@ -133,6 +135,81 @@ class MistralClient(
         } catch (e: Exception) {
             Log.e("MistralClient", "Failed to decode TTS audio", e)
             null
+        }
+    }
+
+    /**
+     * Low-latency streaming TTS. POSTs stream=true + response_format=pcm and reads the SSE
+     * response, invoking [onChunk] with each decoded PCM chunk (float32, 24 kHz, mono) as it
+     * arrives — so playback can start ~0.8s in instead of waiting for the whole clip. Returns
+     * true if any audio was streamed, false on failure (caller can fall back to the mp3 path).
+     */
+    suspend fun streamSpeechPcm(text: String, onChunk: suspend (FloatArray) -> Unit): Boolean {
+        if (text.isBlank()) return false
+        Log.d("MistralClient", "Streaming TTS: ${text}")
+        var gotAudio = false
+        try {
+            httpClient.preparePost("${baseUrl}/audio/speech") {
+                header(HttpHeaders.Authorization, "Bearer ${cleanApiKey}")
+                header(HttpHeaders.Accept, "text/event-stream")
+                contentType(ContentType.Application.Json)
+                setBody(MistralTTSStreamRequest(
+                    model = "voxtral-mini-tts-latest",
+                    input = text,
+                    voice = ttsVoice,
+                    responseFormat = "pcm",
+                    stream = true
+                ))
+            }.execute { response ->
+                if (response.status != HttpStatusCode.OK) {
+                    Log.e("MistralClient", "TTS stream error: ${response.status} - ${response.bodyAsText()}")
+                    logAvailableVoices()
+                    return@execute
+                }
+                val channel = response.bodyAsChannel()
+                var event = ""
+                while (!channel.isClosedForRead) {
+                    val line = channel.readUTF8Line() ?: break
+                    when {
+                        line.startsWith("event:") -> event = line.removePrefix("event:").trim()
+                        line.startsWith("data:") -> {
+                            if (event == "speech.audio.done") break
+                            if (event == "speech.audio.delta") {
+                                val data = line.removePrefix("data:").trim()
+                                val b64 = try {
+                                    json.decodeFromString<MistralTTSDelta>(data).audioData
+                                } catch (e: Exception) {
+                                    null
+                                }
+                                if (!b64.isNullOrEmpty()) {
+                                    val bytes = Base64.decode(b64, Base64.DEFAULT)
+                                    val floats = FloatArray(bytes.size / 4)
+                                    ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+                                        .asFloatBuffer().get(floats)
+                                    onChunk(floats)
+                                    gotAudio = true
+                                }
+                            }
+                        }
+                        line.isEmpty() -> event = ""
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("MistralClient", "TTS streaming failed", e)
+        }
+        return gotAudio
+    }
+
+    /** Fire a cheap request to warm the TLS/connection pool, so the first real call isn't slow. */
+    suspend fun warmUp() {
+        try {
+            httpClient.get("${baseUrl}/models") {
+                header(HttpHeaders.Authorization, "Bearer ${cleanApiKey}")
+            }
+            Log.d("MistralClient", "Connection warmed")
+        } catch (e: Exception) {
+            Log.d("MistralClient", "Warmup failed (ignored)", e)
         }
     }
 

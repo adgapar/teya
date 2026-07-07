@@ -2,8 +2,10 @@ package com.teya.agent.voice
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.media.AudioTrack
 import android.media.MediaDataSource
 import android.media.MediaPlayer
 import android.media.MediaRecorder
@@ -11,6 +13,7 @@ import android.util.Log
 import com.teya.agent.brain.MistralClient
 import io.ktor.utils.io.jvm.javaio.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -27,10 +30,11 @@ class VoicePipeline(private val context: Context) {
         private const val SAMPLE_RATE = 16000
         private const val FRAME_MS = 20
         private const val FRAME_SAMPLES = SAMPLE_RATE / (1000 / FRAME_MS) // 320 samples @ 20ms
-        private const val SILENCE_RMS_THRESHOLD = 500.0                   // energy floor for "speech"
+        private const val SILENCE_RMS_THRESHOLD = 700.0                   // energy floor for "speech"
         private const val TRAILING_SILENCE_MS = 800                       // silence that ends a command
-        private const val MAX_INITIAL_SILENCE_MS = 4000                   // give up if nobody speaks
-        private const val MAX_RECORDING_MS = 12000                        // hard cap on a single command
+        private const val DEFAULT_INITIAL_SILENCE_MS = 4000               // give up if nobody speaks (default)
+        private const val MAX_RECORDING_MS = 10000                        // hard cap on a single command
+        private const val TTS_SAMPLE_RATE = 24000                         // Voxtral PCM output rate
     }
 
     private val wakeWordEngine = WakeWordEngine(context) {
@@ -58,37 +62,41 @@ class VoicePipeline(private val context: Context) {
     }
 
     /**
-     * Records a spoken command using simple energy-based VAD (stops after a short
-     * trailing silence), then transcribes it via Voxtral. The always-on wake-word
-     * recorder is paused for the duration to avoid microphone contention.
-     * Returns "" on any failure (no client, no speech, transcription error).
+     * Records a spoken command using simple energy-based VAD (stops after a short trailing
+     * silence, or gives up after [maxInitialSilenceMs] if no speech starts), then transcribes it
+     * via Voxtral. The caller must pause the wake-word recorder first ([pauseWakeWord]) to avoid
+     * microphone contention. Returns "" on any failure or silence.
      */
-    suspend fun listenForCommand(): String = withContext(Dispatchers.IO) {
-        val client = mistralClient ?: run {
-            Log.e("VoicePipeline", "MistralClient not set, cannot transcribe")
-            return@withContext ""
-        }
-
-        // Free the mic from the always-on wake-word recorder.
-        if (wakeWordActive) wakeWordEngine.stop()
-        try {
-            val wavFile = recordWithVad()
-            if (wavFile == null) {
-                Log.d("VoicePipeline", "No command audio captured")
+    suspend fun listenForCommand(maxInitialSilenceMs: Int = DEFAULT_INITIAL_SILENCE_MS): String =
+        withContext(Dispatchers.IO) {
+            val client = mistralClient ?: run {
+                Log.e("VoicePipeline", "MistralClient not set, cannot transcribe")
                 return@withContext ""
             }
-            client.transcribe(wavFile)
-        } catch (e: Exception) {
-            Log.e("VoicePipeline", "Error during STT", e)
-            ""
-        } finally {
-            // Resume wake-word listening.
-            if (wakeWordActive) wakeWordEngine.start()
+            try {
+                val wavFile = recordWithVad(maxInitialSilenceMs) ?: run {
+                    Log.d("VoicePipeline", "No command audio captured")
+                    return@withContext ""
+                }
+                client.transcribe(wavFile)
+            } catch (e: Exception) {
+                Log.e("VoicePipeline", "Error during STT", e)
+                ""
+            }
         }
+
+    /** Pause the always-on wake-word recorder to free the mic for command recording. */
+    fun pauseWakeWord() {
+        if (wakeWordActive) wakeWordEngine.stop()
+    }
+
+    /** Resume wake-word listening (e.g. after a conversation ends). */
+    fun resumeWakeWord() {
+        if (wakeWordActive) wakeWordEngine.start()
     }
 
     @SuppressLint("MissingPermission")
-    private fun recordWithVad(): File? {
+    private fun recordWithVad(maxInitialSilenceMs: Int): File? {
         val minBuffer = AudioRecord.getMinBufferSize(
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
@@ -150,7 +158,7 @@ class VoicePipeline(private val context: Context) {
                 }
 
                 if (speechStarted && trailingSilenceMs >= TRAILING_SILENCE_MS) break
-                if (!speechStarted && elapsedMs >= MAX_INITIAL_SILENCE_MS) break
+                if (!speechStarted && elapsedMs >= maxInitialSilenceMs) break
             }
         } catch (e: Exception) {
             Log.e("VoicePipeline", "Recording error", e)
@@ -197,20 +205,92 @@ class VoicePipeline(private val context: Context) {
 
     suspend fun textToSpeech(text: String) {
         if (text.isBlank()) return
-
         val client = mistralClient ?: run {
             Log.e("VoicePipeline", "MistralClient not set, cannot speak")
             return
         }
+        // Prefer low-latency streaming PCM; fall back to whole-clip mp3 if streaming yields nothing.
+        if (!streamToSpeaker(client, text)) {
+            Log.w("VoicePipeline", "Streaming TTS failed; falling back to mp3")
+            playMp3(client, text)
+        }
+    }
 
-        // Fetch + decode off the main thread; the API returns base64 audio in JSON (see MistralClient).
+    /**
+     * Streams Voxtral PCM (float32/24kHz/mono) into an AudioTrack as it arrives. Converts each
+     * chunk to int16 (universally supported; float32 output isn't) and routes as USAGE_MEDIA to
+     * match the mp3 path. Calls stop() before draining so short clips (e.g. "Yes?") play out.
+     */
+    private suspend fun streamToSpeaker(client: MistralClient, text: String): Boolean =
+        withContext(Dispatchers.IO) {
+            var track: AudioTrack? = null
+            try {
+                val minBuf = AudioTrack.getMinBufferSize(
+                    TTS_SAMPLE_RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT
+                )
+                val audioTrack = AudioTrack.Builder()
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                            .build()
+                    )
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(TTS_SAMPLE_RATE)
+                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                            .build()
+                    )
+                    .setBufferSizeInBytes(maxOf(minBuf, TTS_SAMPLE_RATE)) // ~0.5s (2 bytes/frame)
+                    .setTransferMode(AudioTrack.MODE_STREAM)
+                    .build()
+                track = audioTrack
+                audioTrack.play()
+
+                var totalFrames = 0
+                val got = client.streamSpeechPcm(text) { floats ->
+                    val shorts = ShortArray(floats.size)
+                    for (i in floats.indices) {
+                        val v = floats[i] * 32767f
+                        shorts[i] = when {
+                            v >= 32767f -> Short.MAX_VALUE
+                            v <= -32768f -> Short.MIN_VALUE
+                            else -> v.toInt().toShort()
+                        }
+                    }
+                    audioTrack.write(shorts, 0, shorts.size, AudioTrack.WRITE_BLOCKING)
+                    totalFrames += shorts.size
+                }
+                if (!got || totalFrames == 0) return@withContext false
+
+                // stop() drains the buffered tail in MODE_STREAM; poll until it plays out (with a
+                // no-progress bail so we never hang if the head stalls short of the end).
+                try { audioTrack.stop() } catch (_: Exception) {}
+                var guard = 0; var last = -1; var stable = 0
+                while (guard++ < 1000) {
+                    val pos = audioTrack.playbackHeadPosition
+                    if (pos >= totalFrames) break
+                    if (pos == last) { if (++stable > 25) break } else { stable = 0; last = pos }
+                    delay(20)
+                }
+                Log.d("VoicePipeline", "Playback finished (streamed $totalFrames frames)")
+                true
+            } catch (e: Exception) {
+                Log.e("VoicePipeline", "AudioTrack streaming error", e)
+                false
+            } finally {
+                try { track?.release() } catch (_: Exception) {}
+            }
+        }
+
+    /** Whole-clip fallback: decode base64 mp3 and play from memory (no disk). */
+    private suspend fun playMp3(client: MistralClient, text: String) {
         val audio = withContext(Dispatchers.IO) { client.synthesizeSpeech(text) }
         if (audio == null || audio.isEmpty()) {
             Log.e("VoicePipeline", "TTS produced no audio, skipping playback")
             return
         }
-
-        // Play from memory — no temp file on disk.
         withContext(Dispatchers.Main) {
             suspendCancellableCoroutine<Unit> { continuation ->
                 val mediaPlayer = MediaPlayer()

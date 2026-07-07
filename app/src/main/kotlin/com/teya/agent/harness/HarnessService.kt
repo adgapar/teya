@@ -23,6 +23,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 class HarnessService : Service() {
     companion object {
@@ -31,10 +32,13 @@ class HarnessService : Service() {
         private const val CHANNEL_ID = "teya_harness_channel"
         private const val NOTIFICATION_ID = 1
         private const val TAG = "HarnessService"
+        private const val FOLLOWUP_LISTEN_MS = 8000  // wait this long for a follow-up before ending
+        private const val MAX_HISTORY = 10           // bounded conversation history sent to the model
     }
 
     private val job = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.Main + job)
+    private val conversationActive = AtomicBoolean(false)
 
     private lateinit var voicePipeline: VoicePipeline
     private lateinit var brainClient: BrainClient
@@ -64,10 +68,11 @@ class HarnessService : Service() {
             )
             brainClient = mistralClient
             voicePipeline.setMistralClient(mistralClient)
+            scope.launch { mistralClient.warmUp() }  // warm the TLS/connection pool at startup
         } else {
             Log.w(TAG, "No API key found, using stub brain")
             brainClient = object : BrainClient {
-                override suspend fun processText(input: String): BrainResponse {
+                override suspend fun processText(history: List<ChatMessage>): BrainResponse {
                     return BrainResponse("Please configure your Mistral API key in settings.")
                 }
             }
@@ -79,9 +84,7 @@ class HarnessService : Service() {
         
         if (intent?.action == ACTION_TRIGGER_VOICE) {
             Log.d(TAG, "Manual trigger received")
-            scope.launch {
-                handleVoiceTrigger()
-            }
+            onTrigger()
         } else {
             Log.d(TAG, "Service started, initializing wake word loop")
             startAgentLoop()
@@ -93,69 +96,89 @@ class HarnessService : Service() {
     private fun startAgentLoop() {
         voicePipeline.startListening {
             Log.d(TAG, "Wake word detected!")
-            scope.launch {
-                handleVoiceTrigger()
+            onTrigger()
+        }
+    }
+
+    /** Entry point for a tap or wake-word trigger. Guards against overlapping conversations. */
+    private fun onTrigger() {
+        if (!conversationActive.compareAndSet(false, true)) {
+            Log.d(TAG, "Conversation already active — ignoring trigger")
+            return
+        }
+        scope.launch {
+            try {
+                runConversation()
+            } finally {
+                conversationActive.set(false)
             }
         }
     }
 
-    private suspend fun handleVoiceTrigger() {
+    /**
+     * A multi-turn conversation: prompt once, then keep listening for follow-ups (no wake word
+     * needed) until the user is silent for FOLLOWUP_LISTEN_MS. History is kept so the model has
+     * context across turns. The wake-word recorder is paused for the whole session.
+     */
+    private suspend fun runConversation() {
+        val history = mutableListOf<ChatMessage>()
+        voicePipeline.pauseWakeWord()
         try {
-            // Prompt the user that we're listening.
             updateUiState(AgentState.SPEAKING)
             Log.d(TAG, "Prompting...")
             voicePipeline.textToSpeech("Yes?")
 
-            // 1. Listen + STT (VAD-based capture, then Voxtral transcription)
-            updateUiState(AgentState.LISTENING)
-            sendDebug(user = "…", agent = "")   // clear previous turn in the dev overlay
-            Log.d(TAG, "Listening for command...")
-            val text = voicePipeline.listenForCommand()
-            Log.d(TAG, "Input: $text")
-
-            if (text.isBlank()) {
-                sendDebug(user = "(didn't catch that)")
-                updateUiState(AgentState.SPEAKING)
-                voicePipeline.textToSpeech("Sorry, I didn't catch that.")
-                updateUiState(AgentState.IDLE)
-                return
-            }
-            sendDebug(user = text)
-
-            updateUiState(AgentState.THINKING)
-            // 2. Brain
-            Log.d(TAG, "Thinking...")
-            val response = brainClient.processText(text)
-            Log.d(TAG, "Brain response: ${response.speechResponse}")
-
-            // Surface the brain output (and any tool call) in the dev overlay.
-            val toolSummary = response.toolCall?.let { "\n→ ${it.functionName}(${it.arguments})" } ?: ""
-            sendDebug(agent = (response.speechResponse + toolSummary).ifBlank { "(no reply)" })
-
-            updateUiState(AgentState.SPEAKING)
-            // 3. TTS (skip if the model only returned a tool call with no words)
-            if (response.speechResponse.isNotBlank()) {
-                voicePipeline.textToSpeech(response.speechResponse)
-            }
-
-            // 4. Actuator
-            response.toolCall?.let { tool ->
-                if (tool.functionName == "place_call") {
-                    val name = tool.arguments["name"] ?: ""
-                    Log.d(TAG, "Actuator: Placing call to $name")
-                    val success = telephonyActuator.placeCall(name)
-                    if (!success) {
-                        val denied = "I'm sorry, I can't call $name. They are not on the allowlist."
-                        sendDebug(agent = denied)
-                        voicePipeline.textToSpeech(denied)
-                    }
+            while (true) {
+                updateUiState(AgentState.LISTENING)
+                sendDebug(user = "…", agent = "")
+                Log.d(TAG, "Listening for command...")
+                val text = voicePipeline.listenForCommand(FOLLOWUP_LISTEN_MS)
+                if (text.isBlank()) {
+                    Log.d(TAG, "No follow-up heard — ending conversation")
+                    break
                 }
+                sendDebug(user = text)
+                history.add(ChatMessage("user", text))
+                trimHistory(history)
+
+                updateUiState(AgentState.THINKING)
+                Log.d(TAG, "Thinking...")
+                val response = brainClient.processText(history)
+                Log.d(TAG, "Brain response: ${response.speechResponse}")
+
+                val toolSummary = response.toolCall?.let { "\n→ ${it.functionName}(${it.arguments})" } ?: ""
+                sendDebug(agent = (response.speechResponse + toolSummary).ifBlank { "(action)" })
+                history.add(ChatMessage("assistant", response.speechResponse.ifBlank { "(action taken)" }))
+
+                updateUiState(AgentState.SPEAKING)
+                if (response.speechResponse.isNotBlank()) {
+                    voicePipeline.textToSpeech(response.speechResponse)
+                }
+                response.toolCall?.let { handleToolCall(it) }
             }
-            updateUiState(AgentState.IDLE)
         } catch (e: Exception) {
-            Log.e(TAG, "Error in voice trigger loop", e)
+            Log.e(TAG, "Error in conversation", e)
+        } finally {
+            voicePipeline.resumeWakeWord()
             updateUiState(AgentState.IDLE)
         }
+    }
+
+    private suspend fun handleToolCall(tool: ToolCall) {
+        if (tool.functionName == "place_call") {
+            val name = tool.arguments["name"] ?: ""
+            Log.d(TAG, "Actuator: Placing call to $name")
+            val success = telephonyActuator.placeCall(name)
+            if (!success) {
+                val denied = "I'm sorry, I can't call $name. They are not on the allowlist."
+                sendDebug(agent = denied)
+                voicePipeline.textToSpeech(denied)
+            }
+        }
+    }
+
+    private fun trimHistory(history: MutableList<ChatMessage>) {
+        while (history.size > MAX_HISTORY) history.removeAt(0)
     }
 
     private fun sendDebug(user: String? = null, agent: String? = null) {
