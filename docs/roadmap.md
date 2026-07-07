@@ -138,8 +138,20 @@ Open-Meteo), with location from the household profile or native device location.
    **(a) advance voice-reminders** (reuse the timer `AlarmManager`+announce → "football in 30 min");
    **(b) attendees/email invites** (needs family emails from the onboarding profile; only real on a
    synced Google calendar); **(c) leave-time / distance** (event location + ambient location).
-5. **`send_message`** — SMS / messenger intent to an allowlisted contact; safety-gated like calls.
-6. Device state & control — battery, volume/DND, open-app/launch intents.
+5. ✅ **Shopping list** (`shopping/ShoppingListManager.kt`) — Teya-owned, persistent
+   (SharedPreferences). `add_to_shopping_list` / `remove` / `read` / `clear`; comma-separated
+   multi-item; model groups by aisle at read time. Verified live.
+6. **Expense tracker** — voice logging + **deterministic math** (the key design: the LLM extracts &
+   classifies, a tool computes; the model never sums — see the deterministic-math principle).
+   - `log_expense(amount, item, quantity, category)` — from "paid 3.50 for 1 kg of tomatoes"; the
+     LLM parses the amount/item/qty and classifies the category, date stamped from ambient `now`.
+   - Persistent dated store (SharedPreferences/Room), like the shopping list.
+   - **`query_expenses(period, category)`** — filters + aggregates **in code** (total / count /
+     by-category breakdown) and returns exact figures for the model to phrase. LLM never adds up.
+   - Ship the inverse in the same slice: `delete_expense` / correct a mis-logged entry.
+   - Open Qs: currency (from locale?), category taxonomy, period vocabulary (today/week/month).
+7. **`send_message`** — SMS / messenger intent to an allowlisted contact; safety-gated like calls.
+8. Device state & control — battery, volume/DND, open-app/launch intents.
 
 ## 🧊 Backlog / ideas
 
