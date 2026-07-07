@@ -18,7 +18,11 @@ data class MistralMessage(
     // Nullable: assistant messages that carry a tool_call return content = null,
     // which would otherwise crash deserialization into a non-null String.
     val content: String? = null,
-    @SerialName("tool_calls") val toolCalls: List<MistralToolCall>? = null
+    @SerialName("tool_calls") val toolCalls: List<MistralToolCall>? = null,
+    // Set only on role="tool" result messages, correlating the result to the call
+    // (tool_call_id) and naming the tool. Null (omitted) on system/user/assistant turns.
+    @SerialName("tool_call_id") val toolCallId: String? = null,
+    val name: String? = null,
 )
 
 @Serializable

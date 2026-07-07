@@ -12,7 +12,18 @@ _Last updated: 2026-07-07._
 - **Voice loop**, all Mistral, no disk: Voxtral STT → Mistral LLM (tool calling) → Voxtral TTS.
 - **TTS working**: correct `voice` field + base64-in-JSON decode; default voice **Marie – Happy** (`fr_marie_happy`).
 - **Streaming TTS**: `stream:true` + PCM SSE → `AudioTrack` (int16), ~0.8 s to first word, mp3 fallback.
-- **Conversation mode**: multi-turn, bounded history (context), silence timeout, re-entrancy guard (fixes audit C6, M7).
+- **Conversation mode**: multi-turn, bounded history (context), silence timeout, re-entrancy guard (fixes audit C6).
+- **Tool-result feedback loop (M7)**: the harness now runs the tool the model asks for, feeds the
+  result back, and lets the model phrase the spoken reply (bounded, multi-round). This is the
+  plumbing every *query* tool needs. `place_call` now also routes its result through the model
+  (cleaner confirm/deny).
+- **First native tools on the loop**: `set_timer` / `set_alarm` (`AlarmClock` + `EXTRA_SKIP_UI`,
+  so they set without foregrounding the clock app) — verified live.
+- **Ambient context (time + location)**: a small "live device state" block (current time in
+  12-hour form + last-known location) is injected into the system prompt **every turn**, so the
+  model answers time/date/location with **no tool round-trip**. `get_time` the tool was removed
+  (ambient replaces it). Location via `getLastKnownLocation`; the model infers the city from raw
+  coords. Verified live. (Location is PII in the prompt/logs → gate logs behind DEBUG — audit H2.)
 - **Persona extracted** to `com.teya.agent.persona`; capability-style prompt; one-sentence / English-only.
 - HTTP timeouts (C5), connection warmup, VAD tuning.
 - **Wake word working at ~1.5 m** (openWakeWord `hey_jarvis`). Fixed the near-field-only problem
@@ -24,12 +35,13 @@ _Last updated: 2026-07-07._
 ## 🔜 Next (recommended order)
 
 1. **Make the call feature actually work** — the product's headline, currently non-functional:
-   - ⚠️ **Hardware blocker:** the current dev device has **no SIM / phone number**, so it cannot
-     place a cellular call regardless of code. Resolve first: (a) add a SIM+plan to the device, or
-     (b) route calls over **data/VoIP** (Twilio, or hand off to WhatsApp/Signal via intent), or
-     (c) for now, build + test only the *plumbing* (allowlist + name→number resolution + call intent)
-     without a live connection.
-   - Populate the allowlist (parent-gated contact UI or DB seed) — **C1**.
+   - ⚠️ **Hardware check:** the dev device is a dedicated phone with a **fresh SIM** — confirm the
+     plan actually allows outbound cellular calls before assuming code is the blocker. Calls go over
+     the **native cellular dialer + SIM only** — no Twilio/VoIP (zero-setup principle: no one will
+     configure an account). If the plan can't call, build + test the *plumbing* (allowlist +
+     name→number resolution + call intent) without a live connection until a callable SIM is in.
+   - Populate the allowlist — Teya **seeds** it (blank-slate device has no contacts); parent-gated
+     contact UI or DB seed — **C1**.
    - Become the default dialer (`RoleManager` / `ROLE_DIALER`) or use `ACTION_CALL` for MVP — **C2**.
    - Exact-match single lookup + phone-number validation (no `LIKE` wildcard bypass) — **C3**.
    - Runtime permission recheck at call time — **H11**.
@@ -57,11 +69,63 @@ A guided, conversational setup that captures household context and feeds it into
 - **Setup UX** — make onboarding itself agentic/conversational (Teya asks, family answers) rather
   than forms, storing a structured "household profile" the harness reads.
 
+## 📱 Native capabilities — the phone *is* the platform
+
+The reason Teya lives on a phone (not a smart speaker) is to command the device's **entire native
+Android surface**. The dev device is dedicated, in developer mode, with **every permission
+pre-granted** — a blank slate (no pre-loaded contacts, fresh SIM). So **runtime-permission cost is
+not a design axis**; group work by *how* Teya reaches a capability, not by what it's allowed to touch.
+
+> **Hard constraint — zero *household* setup.** The bar: the family plugs in a phone and it works.
+> The disqualifier is **household setup burden** — "no one will set it up." This is NOT "only
+> LLM/STT/TTS forever": a **keyless / no-account API** (e.g. weather) or a **native SDK that needs no
+> household config** is fine, decided per-capability as specific painless work. Still banned:
+> anything the family must configure — Twilio/VoIP numbers, smart-home hubs, per-service accounts.
+> Calls = native cellular dialer + SIM; messaging = native SMS / installed-messenger intents.
+
+Two mechanisms:
+- **Direct APIs / content providers** — data flows *both ways*, so Teya can speak the answer.
+  Uses the tool-result feedback loop (done). Examples: time (done), alarms/timers, calendar,
+  location, audio/volume, battery, telephony.
+- **Intents into installed apps** — hand off / launch. Mostly fire-and-forget; an app generally
+  can't hand data *back* to speak. Examples: open a maps app for navigation, share to a messenger.
+
+**Stay resident — don't hand off the screen.** Launching another app *backgrounds Teya*, and modern
+Android won't reliably let a backgrounded app pull itself back (background-activity-start limits) — so
+the user would have to tap Teya again. Therefore **speak-it via system APIs is the default**;
+app-launch is the rare exception. For the exceptions + re-engagement we rely on the **always-on wake
+word** (mic never stops — talk to Teya over any app) and the **overlay permission**
+(`SYSTEM_ALERT_WINDOW`) — floats the orb on top *and* is the documented exception that lets Teya
+resurface herself. **Calls** are the one legitimate full-takeover: hand off for the call, re-engage
+via wake word after (longer term, default dialer / `ROLE_DIALER` (C2) lets Teya host the call itself).
+*Needs on-device validation — OEM overlay quirks on the Samsung A34.*
+
+For anything with a companion app: **speak it** needs a data source (API/provider); **show it** just
+fires an intent. Weather is the canonical case — **decided: speak it** via a keyless API (e.g.
+Open-Meteo), with location from the household profile or native device location.
+
+**Add order (each is: `ToolSpec` in `AgentTools` → `when` branch in `executeTool` → mention in `TeyaPersona`):**
+1. ✅ time / date / location — done, but as **ambient context**, not a tool (`get_time` removed).
+2. ✅ `set_alarm` — done; `AlarmClock` + `EXTRA_SKIP_UI` (sets without foregrounding the clock app),
+   `SET_ALARM` permission. `set_timer` shipped the same way but is being **reworked** in (2b).
+2b. ✅ **Timers → Teya-owned** (`timers/TimerManager.kt`): native `AlarmManager`, re-enters
+   `HarnessService` via `ACTION_TIMER_FIRED` to announce in her own voice. **Set + fire-announce
+   verified live** (fired on time at +30s, spoke "Time's up — your pasta timer is done"). Active
+   timers ride in the **ambient context** (time-left is free); `set_timer` / `cancel_timer` are
+   tools. **`cancel_alarm`** added for the system Clock (`ACTION_DISMISS_ALARM` by label/time/next/all).
+   *Built + installed; cancel_timer / cancel_alarm / time-left paths pending a live test.*
+   Known limit: active list is in-memory (a timer still fires + announces after process death, but
+   can't be listed/cancelled until it goes off).
+3. **`get_weather`** — Open-Meteo (free, no key) + native device location (ambient) → spoken.
+4. **`calendar`** read/write (Calendar Provider) — "what's on today?", add events. This is also how
+   **reminders** work (decided): write a calendar event + reminder; system notification fires.
+5. **`send_message`** — SMS / messenger intent to an allowlisted contact; safety-gated like calls.
+6. Device state & control — battery, volume/DND, open-app/launch intents.
+
 ## 🧊 Backlog / ideas
 
 - Settings **voice picker** (live from `/audio/voices`) + persist choice.
-- More tools/capabilities (reminders, smart home, messaging) — extend `AgentTools`.
-- Feed tool results back to the model for confirm/repair (**M7** follow-on).
+- More capabilities beyond the native surface (smart home hub, media/music providers).
 - Re-open cue (soft chime) when the mic re-opens mid-conversation.
 - UI: fix orb wave animation + idle-gate the 24/7 animations (**H8/H9**); StateFlow instead of broadcasts (**M3**).
 - Release readiness: R8/ProGuard + signing config (**H6**); LiteRT version-catalog cleanup (**H7**).

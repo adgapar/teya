@@ -11,6 +11,15 @@
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+    <!-- Set alarms/timers via AlarmClock intents; required to use EXTRA_SKIP_UI (no clock-app UI). -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <!-- Location for the ambient "live device state" (weather, "where am I"). Dedicated device. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Teya-owned countdown timers via AlarmManager. USE_EXACT_ALARM (auto-granted) suits an
+         alarm/timer assistant; SCHEDULE_EXACT_ALARM is the fallback path. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
         android:allowBackup="true"

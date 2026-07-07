@@ -10,7 +10,10 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.utils.io.*
 import com.teya.agent.persona.ToolSpec
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -62,11 +65,29 @@ class MistralClient(
         return response.text
     }
 
-    override suspend fun processText(history: List<ChatMessage>): BrainResponse {
+    override suspend fun processText(history: List<ChatMessage>, liveContext: String?): BrainResponse {
         Log.d("MistralClient", "Processing ${history.size} message(s)")
         val messages = ArrayList<MistralMessage>(history.size + 1)
-        messages.add(MistralMessage(role = "system", content = systemPrompt))
-        history.forEach { messages.add(MistralMessage(role = it.role, content = it.content)) }
+        // Fold live device state (time/location) into the system message so it's authoritative
+        // ground truth for the model — no tool round-trip needed to learn "now" or "where".
+        val system = if (liveContext.isNullOrBlank()) systemPrompt else "$systemPrompt\n\n$liveContext"
+        messages.add(MistralMessage(role = "system", content = system))
+        history.forEach { m ->
+            messages.add(MistralMessage(
+                role = m.role,
+                content = m.content,
+                toolCalls = m.toolCalls?.map { tc ->
+                    MistralToolCall(
+                        id = tc.id,
+                        type = "function",
+                        // Mistral wants arguments as a JSON string; re-encode the map we parsed.
+                        function = MistralFunctionCall(tc.functionName, json.encodeToString(tc.arguments)),
+                    )
+                },
+                toolCallId = m.toolCallId,
+                name = m.name,
+            ))
+        }
         val httpResponse = httpClient.post("${baseUrl}/chat/completions") {
             header(HttpHeaders.Authorization, "Bearer ${cleanApiKey}")
             contentType(ContentType.Application.Json)
@@ -89,13 +110,18 @@ class MistralClient(
         
         val toolCall = choice.message.toolCalls?.firstOrNull()?.let {
             Log.d("MistralClient", "Tool call detected: ${it.function.name} with ${it.function.arguments}")
+            // Parse into a JsonObject and flatten each value to a string, so numeric/boolean
+            // args (e.g. duration_seconds: 600) survive — decoding straight into Map<String,String>
+            // would reject a non-string value and drop the whole arg map.
             val args = try {
-                json.decodeFromString<Map<String, String>>(it.function.arguments)
+                json.decodeFromString<JsonObject>(it.function.arguments).mapValues { (_, v) ->
+                    (v as? JsonPrimitive)?.content ?: v.toString()
+                }
             } catch (e: Exception) {
                 Log.e("MistralClient", "Failed to parse tool arguments", e)
                 emptyMap()
             }
-            ToolCall(it.function.name, args)
+            ToolCall(it.id, it.function.name, args)
         }
 
         return BrainResponse(
