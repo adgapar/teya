@@ -5,6 +5,8 @@ import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.audiofx.AutomaticGainControl
+import android.media.audiofx.NoiseSuppressor
 import android.util.Log
 import org.tensorflow.lite.Interpreter
 import java.io.FileInputStream
@@ -51,8 +53,15 @@ class WakeWordEngine(
         private const val WAKE_EMBEDDINGS = 16    // embeddings the classifier consumes
         private const val WAKE_INPUT = WAKE_EMBEDDINGS * EMB_DIM // 1536
 
-        private const val THRESHOLD = 0.5f        // openWakeWord default
-        private const val PATIENCE = 2            // consecutive chunks over threshold before firing
+        private const val THRESHOLD = 0.2f        // pre-trained hey_jarvis scores this setup weakly
+                                                  // (~0.1-0.43, inconsistent); ambient peaks ~0.01-0.1.
+                                                  // A custom "Hey Teya" model is the durable fix.
+
+        private const val PATIENCE = 1            // frames over threshold before firing; 1 is safe here
+                                                  // (ambient peaks ~0.03, threshold 0.2 — huge margin)
+        private const val INPUT_GAIN = 6.0f       // software boost before the mel model — AGC isn't
+                                                  // available on this device, so we lift the quiet
+                                                  // far-field signal here (NoiseSuppressor cleans first)
         private const val COOLDOWN_CHUNKS = 25    // ~2 s suppression after a detection
 
         private const val MEL_BUFFER_MAX = 970    // ~10 s of mel frames
@@ -77,8 +86,12 @@ class WakeWordEngine(
     private val embBuffer = ArrayDeque<FloatArray>() // each entry: FloatArray(96)
     private var positiveStreak = 0
     private var cooldown = 0
+    private var peakScore = 0f       // diagnostic
+    private var scoreLogCounter = 0  // diagnostic
 
     private var audioRecord: AudioRecord? = null
+    private var agc: AutomaticGainControl? = null
+    private var noiseSuppressor: NoiseSuppressor? = null
     @Volatile private var isRunning = false
 
     init {
@@ -129,6 +142,26 @@ class WakeWordEngine(
     private fun directFloatBuffer(floats: Int): ByteBuffer =
         ByteBuffer.allocateDirect(floats * 4).order(ByteOrder.nativeOrder())
 
+    /** Attach AGC + noise suppression to the capture session to help far-field detection. */
+    private fun enableAudioEffects(sessionId: Int) {
+        try {
+            if (AutomaticGainControl.isAvailable()) {
+                agc = AutomaticGainControl.create(sessionId)?.also { it.setEnabled(true) }
+                Log.d(TAG, "AGC available, enabled=${agc?.enabled}")
+            } else {
+                Log.d(TAG, "AGC NOT available on this device")
+            }
+            if (NoiseSuppressor.isAvailable()) {
+                noiseSuppressor = NoiseSuppressor.create(sessionId)?.also { it.setEnabled(true) }
+                Log.d(TAG, "NoiseSuppressor available, enabled=${noiseSuppressor?.enabled}")
+            } else {
+                Log.d(TAG, "NoiseSuppressor NOT available on this device")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to enable audio effects", e)
+        }
+    }
+
     @SuppressLint("MissingPermission")
     fun start() {
         if (isRunning) return
@@ -142,7 +175,7 @@ class WakeWordEngine(
             SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
         )
         audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,  // speech-tuned front-end (vs raw MIC)
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
@@ -154,6 +187,7 @@ class WakeWordEngine(
             audioRecord = null
             return
         }
+        enableAudioEffects(audioRecord!!.audioSessionId)
 
         isRunning = true
         try {
@@ -195,7 +229,9 @@ class WakeWordEngine(
 
         // 1) Melspectrogram. Feed raw int16 sample values as float32 (NOT normalized to ±1).
         melIn.rewind()
-        for (i in 0 until CHUNK) melIn.putFloat(chunk[i].toFloat())
+        for (i in 0 until CHUNK) {
+            melIn.putFloat((chunk[i] * INPUT_GAIN).coerceIn(-32768f, 32767f))
+        }
         melIn.rewind()
         melOut.rewind()
         melspec.run(melIn, melOut)
@@ -247,7 +283,13 @@ class WakeWordEngine(
     }
 
     private fun handleScore(prob: Float) {
-        if (prob > 0.3f) Log.v(TAG, "wake score=$prob")
+        // Diagnostic: log the peak score every ~4s so we can see whether the model responds to speech.
+        if (prob > peakScore) peakScore = prob
+        if (++scoreLogCounter >= 50) {
+            if (peakScore > 0.05f) Log.d(TAG, "peak wake score (last ~4s) = $peakScore")
+            peakScore = 0f
+            scoreLogCounter = 0
+        }
         if (cooldown > 0) cooldown--
 
         positiveStreak = if (prob >= THRESHOLD) positiveStreak + 1 else 0
@@ -268,6 +310,10 @@ class WakeWordEngine(
 
     fun stop() {
         isRunning = false
+        try { agc?.release() } catch (_: Exception) {}
+        try { noiseSuppressor?.release() } catch (_: Exception) {}
+        agc = null
+        noiseSuppressor = null
         try {
             audioRecord?.stop()
             audioRecord?.release()

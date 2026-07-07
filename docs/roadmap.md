@@ -15,7 +15,10 @@ _Last updated: 2026-07-07._
 - **Conversation mode**: multi-turn, bounded history (context), silence timeout, re-entrancy guard (fixes audit C6, M7).
 - **Persona extracted** to `com.teya.agent.persona`; capability-style prompt; one-sentence / English-only.
 - HTTP timeouts (C5), connection warmup, VAD tuning.
-- **Wake-word pipeline implemented & working** (openWakeWord 3-model chain, `hey_jarvis`; threshold tuned to 0.2). ⚠️ *But only near-field (~5 cm from the mic) — the pre-trained model scores this setup too weakly (~0.1–0.43) for room-scale use.*
+- **Wake word working at ~1.5 m** (openWakeWord `hey_jarvis`). Fixed the near-field-only problem
+  with a software audio front-end: `VOICE_RECOGNITION` source + `NoiseSuppressor` + **6× software gain**
+  (device has no hardware AGC), threshold 0.2, patience 1. Ambient floor ~0.03 vs detections ~0.26–0.34.
+  Further range / commercial use still needs a custom "Hey Teya" model + likely a mic array.
 - Repo hygiene: `.gitignore` build output + `.env`; `.env.example`; voice catalog (`docs/mistral-voices.md`).
 
 ## 🔜 Next (recommended order)
@@ -30,13 +33,10 @@ _Last updated: 2026-07-07._
    - Become the default dialer (`RoleManager` / `ROLE_DIALER`) or use `ACTION_CALL` for MVP — **C2**.
    - Exact-match single lookup + phone-number validation (no `LIKE` wildcard bypass) — **C3**.
    - Runtime permission recheck at call time — **H11**.
-2. **Wake word** — diagnosed: it fires, but **only ~5 cm from the mic** (pre-trained `hey_jarvis`
-   scores this setup too weakly at room distance). Not viable as a hands-free home assistant yet.
-   Durable fix: **train a custom "Hey Teya" model** on real samples (drop-in classifier swap;
-   `hey_jarvis` is also dev-only / non-commercial — see `THIRD_PARTY_MODELS.md`). Note: far-field
-   wake-word is genuinely hard — may also need better mic capture / gain / noise handling, and
-   possibly a "Hey Teya" trained with far-field + augmented samples. Tap-to-talk remains the
-   reliable interaction until then.
+2. **Wake word** — ✅ now works at ~1.5 m (software front-end: `NoiseSuppressor` + 6× gain, threshold
+   0.2 / patience 1). Remaining: **train a custom "Hey Teya" model** for further range + commercial use
+   (`hey_jarvis` is dev-only / non-commercial — see `THIRD_PARTY_MODELS.md`); true whole-room likely
+   also needs a mic array. Tuning knobs live in `WakeWordEngine` (`THRESHOLD`, `INPUT_GAIN`, `PATIENCE`).
 3. **Security pass** — no plaintext key fallback (**C4**), `allowBackup=false` (**H1**), gate PII logs behind `BuildConfig.DEBUG` (**H2**).
 4. **Resource leaks** — close TFLite interpreters + `HttpClient` in `onDestroy` (**H3/H4**).
 
