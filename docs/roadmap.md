@@ -15,7 +15,7 @@ _Last updated: 2026-07-07._
 - **Conversation mode**: multi-turn, bounded history (context), silence timeout, re-entrancy guard (fixes audit C6, M7).
 - **Persona extracted** to `com.teya.agent.persona`; capability-style prompt; one-sentence / English-only.
 - HTTP timeouts (C5), connection warmup, VAD tuning.
-- **Wake-word pipeline implemented** (openWakeWord 3-model chain, `hey_jarvis`) — ⚠️ *not yet confirmed firing on device*.
+- **Wake-word pipeline implemented & working** (openWakeWord 3-model chain, `hey_jarvis`; threshold tuned to 0.2). ⚠️ *But only near-field (~5 cm from the mic) — the pre-trained model scores this setup too weakly (~0.1–0.43) for room-scale use.*
 - Repo hygiene: `.gitignore` build output + `.env`; `.env.example`; voice catalog (`docs/mistral-voices.md`).
 
 ## 🔜 Next (recommended order)
@@ -30,9 +30,32 @@ _Last updated: 2026-07-07._
    - Become the default dialer (`RoleManager` / `ROLE_DIALER`) or use `ACTION_CALL` for MVP — **C2**.
    - Exact-match single lookup + phone-number validation (no `LIKE` wildcard bypass) — **C3**.
    - Runtime permission recheck at call time — **H11**.
-2. **Wake word** — diagnose why "Hey Jarvis" never fired (Logcat scores/threshold); then train a custom **"Hey Teya"** classifier (drop-in swap, `hey_jarvis` is dev-only / non-commercial — see `THIRD_PARTY_MODELS.md`).
+2. **Wake word** — diagnosed: it fires, but **only ~5 cm from the mic** (pre-trained `hey_jarvis`
+   scores this setup too weakly at room distance). Not viable as a hands-free home assistant yet.
+   Durable fix: **train a custom "Hey Teya" model** on real samples (drop-in classifier swap;
+   `hey_jarvis` is also dev-only / non-commercial — see `THIRD_PARTY_MODELS.md`). Note: far-field
+   wake-word is genuinely hard — may also need better mic capture / gain / noise handling, and
+   possibly a "Hey Teya" trained with far-field + augmented samples. Tap-to-talk remains the
+   reliable interaction until then.
 3. **Security pass** — no plaintext key fallback (**C4**), `allowBackup=false` (**H1**), gate PII logs behind `BuildConfig.DEBUG` (**H2**).
 4. **Resource leaks** — close TFLite interpreters + `HttpClient` in `onDestroy` (**H3/H4**).
+
+## 🏠 Household setup & personalization (agentic onboarding)
+
+A guided, conversational setup that captures household context and feeds it into STT/LLM/TTS.
+
+- **Languages** — capture the language(s) the household speaks during setup, and pass an explicit
+  `language` to Voxtral STT so it stops auto-detecting wrong (observed: Voxtral guessed Chinese).
+  Pick TTS voice(s) to match. *Verify the transcription API's language parameter.*
+- **Household context (names & members)** — capture family members' names + relationships at setup.
+  Use it two ways: (a) bias STT toward those names if the API supports a prompt/vocabulary hint, so
+  names transcribe correctly; (b) inject into the agent's system prompt so it understands references
+  ("call her", "tell Mom"). This is also the natural source for the **call allowlist** (C1).
+- **Per-speaker voice ID / learning (stretch — research)** — recognize *who* is speaking and adapt
+  per person. Voxtral doesn't expose speaker identity, so this needs separate speaker
+  diarization/verification (on-device model or a service) — feasibility + approach TBD.
+- **Setup UX** — make onboarding itself agentic/conversational (Teya asks, family answers) rather
+  than forms, storing a structured "household profile" the harness reads.
 
 ## 🧊 Backlog / ideas
 
