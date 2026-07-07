@@ -108,7 +108,8 @@ class MistralClient(
         val response: MistralChatResponse = httpResponse.body()
         val choice = response.choices.firstOrNull() ?: return BrainResponse("I have no words.")
         
-        val toolCall = choice.message.toolCalls?.firstOrNull()?.let {
+        // Execute EVERY tool the model asked for (parallel tool-calling), not just the first.
+        val toolCalls = choice.message.toolCalls.orEmpty().map {
             Log.d("MistralClient", "Tool call detected: ${it.function.name} with ${it.function.arguments}")
             // Parse into a JsonObject and flatten each value to a string, so numeric/boolean
             // args (e.g. duration_seconds: 600) survive — decoding straight into Map<String,String>
@@ -126,7 +127,7 @@ class MistralClient(
 
         return BrainResponse(
             speechResponse = choice.message.content ?: "",
-            toolCall = toolCall
+            toolCalls = toolCalls
         )
     }
 

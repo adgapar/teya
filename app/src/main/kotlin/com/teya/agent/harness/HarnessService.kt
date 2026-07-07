@@ -20,6 +20,7 @@ import com.teya.agent.calendar.CalendarManager
 import com.teya.agent.persona.AgentTools
 import com.teya.agent.persona.TeyaPersona
 import com.teya.agent.safety.ContactAllowlistManager
+import com.teya.agent.shopping.ShoppingListManager
 import com.teya.agent.telephony.TelephonyActuator
 import com.teya.agent.timers.TimerManager
 import com.teya.agent.ui.face.AgentState
@@ -62,6 +63,7 @@ class HarnessService : Service() {
     private lateinit var allowlistManager: ContactAllowlistManager
     private lateinit var timerManager: TimerManager
     private lateinit var calendarManager: CalendarManager
+    private lateinit var shoppingList: ShoppingListManager
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -76,6 +78,7 @@ class HarnessService : Service() {
         voicePipeline = VoicePipeline(this)
         timerManager = TimerManager(this)
         calendarManager = CalendarManager(this)
+        shoppingList = ShoppingListManager(this)
         
         val apiKey = configManager.mistralApiKey
         if (!apiKey.isNullOrBlank()) {
@@ -226,29 +229,32 @@ class HarnessService : Service() {
         val liveContext = buildLiveContext()
         repeat(MAX_TOOL_ROUNDS) {
             val response = brainClient.processText(history, liveContext)
-            val toolCall = response.toolCall
-            if (toolCall == null) {
+            if (response.toolCalls.isEmpty()) {
                 Log.d(TAG, "Brain response: ${response.speechResponse}")
                 sendDebug(agent = response.speechResponse.ifBlank { "(no reply)" })
                 history.add(ChatMessage(role = "assistant", content = response.speechResponse))
                 return response.speechResponse
             }
-            // The model wants to act: record the call, execute it, feed the result back.
-            Log.d(TAG, "Tool call: ${toolCall.functionName}(${toolCall.arguments})")
-            sendDebug(agent = "→ ${toolCall.functionName}(${toolCall.arguments})")
+            // The model asked for one or more tools. Record the assistant turn with ALL of them,
+            // then run each (sequentially in code — no races on shared stores) and feed every
+            // result back keyed by its tool_call_id before the next round.
+            sendDebug(agent = response.toolCalls.joinToString(", ") { "→ ${it.functionName}(${it.arguments})" })
             history.add(ChatMessage(
                 role = "assistant",
                 content = response.speechResponse.ifBlank { null },
-                toolCalls = listOf(toolCall),
+                toolCalls = response.toolCalls,
             ))
-            val result = executeTool(toolCall)
-            Log.d(TAG, "Tool result: $result")
-            history.add(ChatMessage(
-                role = "tool",
-                content = result,
-                toolCallId = toolCall.id,
-                name = toolCall.functionName,
-            ))
+            for (toolCall in response.toolCalls) {
+                Log.d(TAG, "Tool call: ${toolCall.functionName}(${toolCall.arguments})")
+                val result = executeTool(toolCall)
+                Log.d(TAG, "Tool result: $result")
+                history.add(ChatMessage(
+                    role = "tool",
+                    content = result,
+                    toolCallId = toolCall.id,
+                    name = toolCall.functionName,
+                ))
+            }
         }
         val fallback = "Sorry, I got a bit tangled up just now."
         history.add(ChatMessage(role = "assistant", content = fallback))
@@ -389,8 +395,40 @@ class HarnessService : Service() {
                 }
             }
         }
+        "add_to_shopping_list" -> {
+            val items = splitItems(tool.arguments["items"])
+            if (items.isEmpty()) {
+                "What should I add to the shopping list?"
+            } else {
+                val added = shoppingList.add(items)
+                when {
+                    added.isEmpty() -> "That's already on the list."
+                    added.size == 1 -> "Added ${added[0]} to the shopping list."
+                    else -> "Added ${added.joinToString(", ")} to the shopping list."
+                }
+            }
+        }
+        "remove_from_shopping_list" -> {
+            val removed = shoppingList.remove(splitItems(tool.arguments["items"]))
+            if (removed.isEmpty()) "I didn't find that on the list."
+            else "Removed ${removed.joinToString(", ")} from the shopping list."
+        }
+        "read_shopping_list" -> {
+            val items = shoppingList.items()
+            if (items.isEmpty()) "The shopping list is empty."
+            // Hand the model the raw list; it groups by category (dairy, produce, …) when speaking.
+            else "Shopping list (${items.size} items): ${items.joinToString(", ")}."
+        }
+        "clear_shopping_list" -> {
+            val n = shoppingList.clear()
+            if (n == 0) "The shopping list was already empty." else "Cleared the shopping list ($n items)."
+        }
         else -> "Unknown tool: ${tool.functionName}"
     }
+
+    /** Split a free-text item string ("milk, eggs and bread") into individual trimmed items. */
+    private fun splitItems(raw: String?): List<String> =
+        raw?.split(Regex("\\s*(?:,|;|\\band\\b|\\n)\\s*"))?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
 
     /** Parse an ISO local date-time ("2026-07-14T17:30") or date to epoch millis; null if unparseable. */
     private fun parseIsoToMillis(iso: String): Long? {

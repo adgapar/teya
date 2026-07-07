@@ -26,7 +26,8 @@ data class ChatMessage(
 
 data class BrainResponse(
     val speechResponse: String,
-    val toolCall: ToolCall? = null
+    /** All tools the model asked for in this response — run them all (batch), then feed results back. */
+    val toolCalls: List<ToolCall> = emptyList()
 )
 
 data class ToolCall(

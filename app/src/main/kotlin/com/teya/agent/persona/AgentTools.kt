@@ -187,8 +187,60 @@ object AgentTools {
         },
     )
 
+    val addToShoppingList = ToolSpec(
+        name = "add_to_shopping_list",
+        description = "Add one or more items to the family shopping list. Use for 'we need X', " +
+            "'add X', 'we're out of X'. Pass several at once comma-separated (e.g. 'milk, eggs, bread').",
+        parameters = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {
+                putJsonObject("items") {
+                    put("type", "string")
+                    put("description", "Item(s) to buy, comma-separated for several.")
+                }
+            }
+            putJsonArray("required") { add("items") }
+        },
+    )
+
+    val removeFromShoppingList = ToolSpec(
+        name = "remove_from_shopping_list",
+        description = "Remove one or more items from the shopping list (bought, or added by mistake). " +
+            "Comma-separate several. This is the only way to take things off the list.",
+        parameters = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {
+                putJsonObject("items") {
+                    put("type", "string")
+                    put("description", "Item(s) to remove, comma-separated for several.")
+                }
+            }
+            putJsonArray("required") { add("items") }
+        },
+    )
+
+    val readShoppingList = ToolSpec(
+        name = "read_shopping_list",
+        description = "Read back the current shopping list, e.g. when someone is heading to the shop " +
+            "and asks what to buy.",
+        parameters = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {}
+        },
+    )
+
+    val clearShoppingList = ToolSpec(
+        name = "clear_shopping_list",
+        description = "Empty the whole shopping list, e.g. after the shopping is done.",
+        parameters = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {}
+        },
+    )
+
     /** All tools currently exposed to the brain. */
     val all: List<ToolSpec> = listOf(
         placeCall, setTimer, cancelTimer, setAlarm, cancelAlarm, addEvent, getEvents, cancelEvent,
+        addToShoppingList, removeFromShoppingList, readShoppingList, clearShoppingList,
     )
 }

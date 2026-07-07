@@ -19,6 +19,12 @@ _Last updated: 2026-07-07._
   (cleaner confirm/deny).
 - **First native tools on the loop**: `set_timer` / `set_alarm` (`AlarmClock` + `EXTRA_SKIP_UI`,
   so they set without foregrounding the clock app) — verified live.
+- **Parallel tool-calling**: the loop runs *every* tool the model returns in a response (was
+  `firstOrNull` → dropped the rest), sequentially in code (no store races), feeding each result back
+  by `tool_call_id`. Batch when independent, chain across rounds when dependent. Verified live.
+- **Shopping list** (`shopping/ShoppingListManager.kt`): Teya-owned, **persistent** (SharedPreferences,
+  survives reboots). `add` / `remove` / `read` / `clear` — comma-separated multi-item add; the model
+  groups by aisle at read time (categorization = LLM's job, not stored). Verified live.
 - **Ambient context (time + location)**: a small "live device state" block (current time in
   12-hour form + last-known location) is injected into the system prompt **every turn**, so the
   model answers time/date/location with **no tool round-trip**. `get_time` the tool was removed
