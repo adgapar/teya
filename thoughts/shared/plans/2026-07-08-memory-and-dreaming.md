@@ -2,12 +2,14 @@
 date: 2026-07-08T15:00:00Z
 topic: "Memory: persona blocks, categories, forgetting-curve decay + a nightly dreamer"
 tags: [memory, dreaming, decay, persona, room, rag, embeddings, admin, mistral-small]
-status: planned
+status: in-progress
 ---
 
 # Memory — persona blocks, category-driven decay, and a nightly "dreamer"
 
-_Status: **planned** (2026-07-08). Design converged in discussion; not yet implemented. Builds on the
+_Status: **slices 0–5 implemented** (2026-07-09); 0–3 live-verified on-device, 4–5 built + compiling
+(pending a live run). Only the dreamer's **LLM consolidation** of episodic detail is deferred (slice
+5b below). Builds on the
 dormant Room schema (`MemoryEntry` / `Persona` tables, seeded in `Migration(1,2)`, currently
 read/written by nobody) and the render-block pattern already proven by
 `HouseholdManager.profileContextBlock()`._
@@ -173,19 +175,24 @@ Extend the Admin console (`SettingsActivity`) — it already lists this as a pla
 
 ## Implementation slices (each independently shippable + testable)
 
-0. **Schema + plumbing.** `Migration(2,3)` (new columns), `MemoryEntry` fields, `MemoryManager`
-   skeleton, `MemoryDao` queries. Flip `MistralClient` to `mistral-small`.
-1. **Persona memory live.** `remember` / `forget` tools; assemble persona blocks into the context
-   block (always-load members); mention in persona. Categories in from the start. *No RAG, no dreamer
-   yet* — but memory already works for the family case. Verify: "remember Sam is allergic to peanuts"
-   → next turn "what can't Sam eat?".
-2. **Admin Memory section.** Review/edit/delete + counts. **Sequenced early on purpose** — we need to
-   *see* what slice 1 writes before trusting more automation on top.
-3. **General pool + RAG.** `mistral-embed` on write; `search_memory` tool; brute-force cosine.
-4. **Decay + reinforcement.** Strength on the forgetting curve; access bumps it; render/`search_memory`
-   filter by tier.
-5. **The dreamer.** `DreamWorker` nightly: deterministic decay/re-tier + one `mistral-small`
-   consolidation pass; "last dream run" surfaced in Admin.
+0. ✅ **Schema + plumbing.** `Migration(2,3)`, `MemoryEntry` fields, `MemoryManager`, `MemoryDao`.
+   (The `mistral-small` flip landed separately.) Live-verified.
+1. ✅ **Persona memory live.** `remember` / `forget`; persona blocks assembled into context
+   (always-load members); categories from the start. **Verified live** (allergy/Real-Madrid write → recall, no tool round-trip).
+2. ✅ **Admin Memory section.** Review (grouped per member + General) / delete / monitor counts.
+   Sequenced early on purpose. **Verified live.**
+3. ✅ **General pool + RAG.** `mistral-embed` on write; `search_memory` tool; brute-force cosine;
+   general pool made **search-only** (not always-loaded). **Verified live** (wifi-password write → `search_memory` recall).
+4. ✅ **Decay + reinforcement.** `runDecay()`: strength = 0.5^(daysSinceLastAccess / halfLife),
+   per-category half-lives (FACT ~perm / ROUTINE 120d / PREFERENCE 45d / EPISODIC 3d); re-tier
+   HOT↔COLD at 0.5, prune dead EPISODIC (<0.05); recall resets strength to 1.0. *Built + compiling;
+   visible cooling needs elapsed days.*
+5. ✅ **The dreamer (deterministic half).** Nightly ~3 AM via **AlarmManager** — not WorkManager
+   (avoids a new dep that would break `--offline`; reuses the timer-reentry pattern, `ACTION_RUN_DREAM`).
+   Admin "Run dream now" + last-run monitor. *Built + compiling; pending a live run.*
+5b. ⏳ **Deferred — LLM consolidation.** One `mistral-small` pass distilling recent EPISODIC detail
+   into durable facts. Needs the **T1 episodic capture** (end-of-session summaries) it would consume,
+   which doesn't exist yet — so both land together in a later slice.
 
 ## Open questions (non-blocking)
 
