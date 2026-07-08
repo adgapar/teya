@@ -1,12 +1,13 @@
-# teya
+# Teya
 
 > *A family agent for the home — a warm, intelligent presence that listens, understands, remembers, and does. Built on a spare Android phone.*
 
-**Status:** Vision & design stage (June 2026). Product and harness names are still TBD; `teya` is the working repo name.
+**Status:** Working prototype (July 2026). A dedicated Android device runs the full voice loop, the animated face, the first native tools, and a household profile that makes Teya contextual (knows the family, their names, and the languages they speak).
 
 ### Documents
 
 - **This file** — the vision: the problem, the product, and why now.
+- **[docs/roadmap.md](./docs/roadmap.md)** — current status: what's built and what's next.
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** — how we build it: the technical decisions and the reasoning behind them.
 
 ---
@@ -17,7 +18,7 @@ Current voice assistants (Alexa, Siri, Google Assistant) are deeply disappointin
 
 The result: people use them to set timers and play music, then ignore the rest.
 
-At the same time, modern AI (Claude, Gemini, GPT-4) is genuinely intelligent — but it sits behind a chat interface, disconnected from the physical and digital infrastructure of the home.
+At the same time, modern AI is genuinely intelligent — but it sits behind a chat interface, disconnected from the physical and digital infrastructure of the home.
 
 The gap between these two worlds is the opportunity.
 
@@ -105,7 +106,6 @@ The face and personality should be **gender neutral** — calm, warm, wise, belo
 
 ### Calling & staying in touch
 - "Call Dad", "Call Grandma" — the agent places a normal phone call to anyone on the family contacts list, completely hands-free. Especially valuable for young kids who can't (or shouldn't) navigate a dialer themselves.
-- Answering calls hands-free and putting them on speaker, so the wall device doubles as the family phone.
 
 > **Safety by design:** the agent can only call people on an approved family **contacts allowlist**. A spoken name ("call Dad") is matched against that list, and anything not on it is refused — there is no path to dialing an unknown, arbitrary, or premium number. A child can reach exactly the people they're allowed to, and no one else. The allowlist *is* the security model.
 
@@ -148,15 +148,15 @@ The harness being built here is an **agent framework** — it gives the AI brain
 ## 7. The Harness — Technical Architecture
 
 ```
-[Family face & name]      ← the visible product (name TBD)
-        |
-   THE HARNESS             ← what this project builds (name TBD)
-        |
-   _____|_________________________________
+        Teya               ← the family-facing product (face + personality)
+         |
+   THE HARNESS             ← the agent framework this repo builds
+         |
+   ______|________________________________
   |          |           |               |
-Android    AI Model   Smart home     Family data
-phone HW   (Claude/    (WiFi/BT/     (calendar,
-           Gemini)      Matter)       memory,
+Android    AI Model    Smart home    Family data
+phone HW   (Mistral)   (WiFi/BT/     (calendar,
+                        Matter)       memory,
                                       contacts)
 ```
 
@@ -169,16 +169,25 @@ phone HW   (Claude/    (WiFi/BT/     (calendar,
 5. **App integrations** — WhatsApp, calendar, shopping, smart home APIs
 6. **Face rendering** — animated face that reflects the agent's state
 
-### What's missing today to build this
+### The AI backend — Mistral (swappable)
 
-| Gap | Status |
+The AI runs on **Mistral**: one European provider that covers many of the agent's needs at once —
+speech-to-text, the reasoning LLM (with tool calling), and text-to-speech. It's chosen for strong
+performance-per-cost and for keeping the stack on European AI. The harness treats the provider as
+swappable behind a single interface, so **other providers can be added later where Mistral falls
+short** — for example, languages its speech models don't yet voice.
+
+### What's built, what's next
+
+| Piece | Status |
 |---|---|
-| Good animated face app | Doesn't exist in polished form |
-| Unified AI with persistent family memory | Getting close |
-| Reliable app integrations | Patchy but improving |
-| Wake word + always-on without battery drain | Solvable with plugged-in dedicated phone |
+| Animated face | ✅ Built — a particle-field face that morphs per state |
+| Voice loop (STT → LLM + tools → TTS) | ✅ Built, streaming, running on a dedicated device |
+| Household profile / family memory | ✅ Members, aliases, languages, home; deeper per-person memory next |
+| App integrations | Growing — calendar, timers/alarms, shopping list live; calling next |
+| Always-on wake word, plugged in | ✅ Working at ~1.5 m; a custom "Hey Teya" model for range + commercial use is next |
 
-A compelling v1 is buildable today with an old Android phone, an animated face layer, and Claude or Gemini as the AI backend. Hardware cost: near zero.
+A working v1 already runs on a dedicated Android phone — the animated face, the full voice loop, the first native tools, and the household profile — with Mistral as the AI backend. Hardware cost: near zero.
 
 ---
 
@@ -214,7 +223,3 @@ The best way to understand what this project is building:
 
 That's the feeling this project is chasing. Not a smart speaker. Not a robot. A **presence** — warm, capable, always there, belonging to the whole family.
 
----
-
-*Report compiled from design exploration sessions — April 2026*
-*Name (product + harness): TBD*
