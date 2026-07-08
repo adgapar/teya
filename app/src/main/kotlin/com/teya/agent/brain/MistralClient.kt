@@ -60,12 +60,20 @@ class MistralClient(
      */
     suspend fun transcribe(audioFile: File, contextBias: List<String> = emptyList()): String {
         val mime = if (audioFile.extension.equals("wav", ignoreCase = true)) "audio/wav" else "audio/mpeg"
+        // context_bias (comma_separated input method) rejects any item containing whitespace or a
+        // comma, so a multi-word name/alias (a first + last together) 400s the whole request. Split
+        // every term into single tokens and drop empties/dupes so each item is always valid.
+        val biasTerms = contextBias
+            .flatMap { it.split(Regex("[\\s,]+")) }
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
         val httpResponse = httpClient.post("${baseUrl}/audio/transcriptions") {
             header(HttpHeaders.Authorization, "Bearer ${cleanApiKey}")
             setBody(MultiPartFormDataContent(
                 formData {
                     append("model", "voxtral-mini-latest")
-                    contextBias.forEach { term -> append("context_bias", term) }
+                    biasTerms.forEach { term -> append("context_bias", term) }
                     append("file", audioFile.readBytes(), Headers.build {
                         append(HttpHeaders.ContentType, mime)
                         append(HttpHeaders.ContentDisposition, "filename=\"${audioFile.name}\"")
