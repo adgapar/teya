@@ -149,3 +149,47 @@ data class MistralTTSStreamRequest(
 data class MistralTTSDelta(
     @SerialName("audio_data") val audioData: String? = null
 )
+
+// Voxtral Realtime (barge-in speech detection) — streamed over a WebSocket, not REST. There is no
+// public wire-protocol doc (only a high-level Python SDK call); these shapes are reverse-engineered
+// from mistralai/client-python's generated models (src/mistralai/client/models/realtime*.py) and
+// extra/realtime/{connection,transcription}.py. No default values on `type` fields on purpose: this
+// project's Json uses encodeDefaults=false (see CLAUDE.md gotchas), which would silently omit a
+// default-valued field the server requires to dispatch the message.
+
+@Serializable
+data class RealtimeAudioFormat(
+    val encoding: String,
+    @SerialName("sample_rate") val sampleRate: Int
+)
+
+@Serializable
+data class RealtimeSessionUpdatePayload(
+    @SerialName("audio_format") val audioFormat: RealtimeAudioFormat,
+    @SerialName("target_streaming_delay_ms") val targetStreamingDelayMs: Int
+)
+
+@Serializable
+data class RealtimeSessionUpdateMessage(
+    val type: String,
+    val session: RealtimeSessionUpdatePayload
+)
+
+@Serializable
+data class RealtimeInputAudioAppend(
+    val type: String,
+    val audio: String // base64-encoded raw pcm_s16le bytes
+)
+
+@Serializable
+data class RealtimeInputAudioFlush(val type: String)
+
+@Serializable
+data class RealtimeInputAudioEnd(val type: String)
+
+/** Tolerant envelope for incoming events — we only need `type` to dispatch and `text` for deltas. */
+@Serializable
+data class RealtimeEventEnvelope(
+    val type: String? = null,
+    val text: String? = null
+)

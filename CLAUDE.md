@@ -29,7 +29,7 @@ Key files:
 ## Config / models
 - Mistral API key: entered in-app (EncryptedSharedPreferences via `ConfigManager`); also in **`.env`** (gitignored,
   `MISTRAL_API_KEY`) for CLI/curl.
-- Models: chat `mistral-large-latest`; STT `voxtral-mini-latest`; TTS `voxtral-mini-tts-latest`, voice `fr_marie_happy`
+- Models: chat `mistral-small-latest`; STT `voxtral-mini-latest`; TTS `voxtral-mini-tts-latest`, voice `fr_marie_happy`
   (catalog: `docs/mistral-voices.md`).
 
 ## Build / install / test  (device is on wireless adb)

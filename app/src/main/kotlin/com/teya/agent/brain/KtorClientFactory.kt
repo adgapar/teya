@@ -5,6 +5,7 @@ import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.logging.*
+import io.ktor.client.plugins.websocket.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 
@@ -28,6 +29,8 @@ object KtorClientFactory {
                 connectTimeoutMillis = 10000
                 socketTimeoutMillis = 30000
             }
+            // Voxtral Realtime (barge-in speech detection) — see MistralRealtimeClient.
+            install(WebSockets)
         }
     }
 }

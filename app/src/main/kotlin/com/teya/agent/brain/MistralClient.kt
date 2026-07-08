@@ -4,12 +4,17 @@ import android.util.Base64
 import android.util.Log
 import io.ktor.client.*
 import io.ktor.client.call.*
+import io.ktor.client.plugins.websocket.*
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.utils.io.*
+import io.ktor.websocket.*
 import com.teya.agent.persona.ToolSpec
+import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -28,10 +33,17 @@ class MistralClient(
     private val baseUrl = "https://api.mistral.ai/v1"
     private val json = Json { ignoreUnknownKeys = true }
     private val cleanApiKey = apiKey.replace(Regex("[^\\x20-\\x7E]"), "").trim()
+    // Deliberately the small model, not the largest available — cheap and quick, matching a
+    // home-appliance voice loop's latency needs over maximal reasoning power (see README).
+    private val chatModel = "mistral-small-latest"
     // "Marie - Happy" (fr_fr, female) — warm, radiant tone (a light French accent over English).
     // The `voice` field accepts slug or id (both verified). See docs/mistral-voices.md for all 30.
     // TODO: make this user-configurable in a Settings voice picker.
     private val ttsVoice = "fr_marie_happy"
+    // Voxtral Realtime (barge-in) — see detectBargeInSpeech. Delay is the fast end of Mistral's
+    // documented 240ms-2400ms range: barge-in latency matters more than transcript accuracy here.
+    private val realtimeModel = "voxtral-mini-transcribe-realtime-2602"
+    private val realtimeTargetDelayMs = 240
 
     // Persona (systemPrompt) and capabilities (tools) live outside this provider client —
     // see com.teya.agent.persona. Here we only adapt the provider-agnostic tool specs into
@@ -40,13 +52,20 @@ class MistralClient(
         MistralTool(function = MistralFunctionDef(it.name, it.description, it.parameters))
     }
 
-    suspend fun transcribe(audioFile: File): String {
+    /**
+     * [contextBias] maps to Mistral's `context_bias` multipart field (array of bias terms), sent
+     * as one repeated form part per term — unverified against Mistral's exact wire format, since
+     * their docs don't show a raw example. No `language` field: it only accepts a single code, and
+     * a multi-language household can't be reduced to one without hurting the others' accuracy.
+     */
+    suspend fun transcribe(audioFile: File, contextBias: List<String> = emptyList()): String {
         val mime = if (audioFile.extension.equals("wav", ignoreCase = true)) "audio/wav" else "audio/mpeg"
         val httpResponse = httpClient.post("${baseUrl}/audio/transcriptions") {
             header(HttpHeaders.Authorization, "Bearer ${cleanApiKey}")
             setBody(MultiPartFormDataContent(
                 formData {
                     append("model", "voxtral-mini-latest")
+                    contextBias.forEach { term -> append("context_bias", term) }
                     append("file", audioFile.readBytes(), Headers.build {
                         append(HttpHeaders.ContentType, mime)
                         append(HttpHeaders.ContentDisposition, "filename=\"${audioFile.name}\"")
@@ -72,7 +91,7 @@ class MistralClient(
             header(HttpHeaders.Authorization, "Bearer ${cleanApiKey}")
             contentType(ContentType.Application.Json)
             setBody(MistralChatRequest(
-                model = "mistral-large-latest",
+                model = chatModel,
                 messages = messages,
                 tools = mistralTools,
                 toolChoice = "auto"
@@ -170,7 +189,7 @@ class MistralClient(
                 header(HttpHeaders.Accept, "text/event-stream")
                 contentType(ContentType.Application.Json)
                 setBody(MistralChatStreamRequest(
-                    model = "mistral-large-latest",
+                    model = chatModel,
                     messages = messages,
                     tools = mistralTools,
                     toolChoice = "auto",
@@ -323,6 +342,128 @@ class MistralClient(
             Log.e("MistralClient", "TTS streaming failed", e)
         }
         return gotAudio
+    }
+
+    /**
+     * Real barge-in detection: streams mic audio to Voxtral Realtime (a genuine streaming STT
+     * model over WebSocket — `voxtral-mini-transcribe-realtime-2602`) while Teya is
+     * thinking/speaking, and calls [onSpeechDetected] the first time the server recognizes actual
+     * words. This is deliberately semantic, not a loudness/VAD guess: the caller (VoicePipeline)
+     * feeds this the same raw 16kHz mono int16 chunks the wake-word engine already captures, only
+     * while armed. Best-effort — any connection/protocol error just means no interruption fires
+     * this turn (logged, not thrown); [audioChunks] closing (harness disarming) ends the session
+     * normally.
+     *
+     * Wire protocol has no public doc beyond the Python SDK's high-level call — reverse-engineered
+     * from mistralai/client-python (see MistralModels.kt's RealtimeXxx types for the source note).
+     */
+    suspend fun detectBargeInSpeech(
+        audioChunks: ReceiveChannel<ByteArray>,
+        onSpeechDetected: suspend () -> Unit,
+    ) {
+        try {
+            httpClient.webSocket(
+                urlString = "wss://api.mistral.ai/v1/audio/transcriptions/realtime?model=$realtimeModel",
+                request = { header(HttpHeaders.Authorization, "Bearer $cleanApiKey") }
+            ) {
+                if (!awaitSessionCreated()) return@webSocket
+                sendRealtimeJson(
+                    RealtimeSessionUpdateMessage(
+                        type = "session.update",
+                        session = RealtimeSessionUpdatePayload(
+                            audioFormat = RealtimeAudioFormat(encoding = "pcm_s16le", sampleRate = 16000),
+                            targetStreamingDelayMs = realtimeTargetDelayMs,
+                        )
+                    )
+                )
+
+                var detected = false
+                coroutineScope {
+                    val sender = launch {
+                        var sent = 0
+                        for (chunk in audioChunks) {
+                            val b64 = Base64.encodeToString(chunk, Base64.NO_WRAP)
+                            // Dump payload heads at the start AND mid-stream — the first chunk of
+                            // an armed window often lands right on AudioRecord's post-restart
+                            // warm-up silence (expected, not a bug); a mid-stream chunk still being
+                            // all-zero after 8s would mean the capture itself carries no signal.
+                            if (sent == 0 || sent == 100) {
+                                Log.d("MistralClient", "Barge-in: chunk #$sent raw bytes=${chunk.size} b64Len=${b64.length} b64Head=${b64.take(40)}")
+                            }
+                            sendRealtimeJson(
+                                RealtimeInputAudioAppend(
+                                    type = "input_audio.append",
+                                    audio = b64,
+                                )
+                            )
+                            // Log periodically, not just at the end — a barge-in session normally
+                            // ends by cancellation (turn finishes), which skips code after the loop.
+                            if (++sent % 25 == 0) Log.d("MistralClient", "Barge-in: sent $sent audio chunks so far")
+                        }
+                        Log.d("MistralClient", "Barge-in: sent $sent audio chunks total")
+                        runCatching { sendRealtimeJson(RealtimeInputAudioFlush(type = "input_audio.flush")) }
+                        runCatching { sendRealtimeJson(RealtimeInputAudioEnd(type = "input_audio.end")) }
+                    }
+                    for (frame in incoming) {
+                        if (frame !is Frame.Text) continue
+                        val text = frame.readText()
+                        val envelope = try {
+                            json.decodeFromString<RealtimeEventEnvelope>(text)
+                        } catch (e: Exception) {
+                            Log.d("MistralClient", "Barge-in: unparseable event: $text")
+                            continue
+                        }
+                        // Log every event verbatim — cheap, and the only way to see what Mistral is
+                        // actually hearing (language detection, segments, etc.) instead of flying blind.
+                        Log.d("MistralClient", "Barge-in event: type=${envelope.type} text=${envelope.text}")
+                        when (envelope.type) {
+                            "transcription.text.delta", "transcription.segment" ->
+                                if (!detected && !envelope.text.isNullOrBlank()) {
+                                    detected = true
+                                    Log.d("MistralClient", "Barge-in: recognized speech (\"${envelope.text}\")")
+                                    onSpeechDetected()
+                                }
+                            "error" -> {
+                                Log.w("MistralClient", "Realtime barge-in error: $text")
+                                break
+                            }
+                            "transcription.done" -> break
+                        }
+                    }
+                    sender.cancel()
+                }
+            }
+        } catch (e: Exception) {
+            Log.d("MistralClient", "Realtime barge-in session ended: ${e.message}")
+        }
+    }
+
+    private suspend fun DefaultClientWebSocketSession.awaitSessionCreated(): Boolean {
+        for (frame in incoming) {
+            if (frame !is Frame.Text) continue
+            val text = frame.readText()
+            val envelope = try {
+                json.decodeFromString<RealtimeEventEnvelope>(text)
+            } catch (e: Exception) {
+                Log.d("MistralClient", "Barge-in: unparseable handshake event: $text")
+                continue
+            }
+            when (envelope.type) {
+                "session.created" -> {
+                    Log.d("MistralClient", "Barge-in: realtime session created")
+                    return true
+                }
+                "error" -> {
+                    Log.e("MistralClient", "Realtime handshake error: $text")
+                    return false
+                }
+            }
+        }
+        return false
+    }
+
+    private suspend inline fun <reified T> DefaultClientWebSocketSession.sendRealtimeJson(message: T) {
+        send(Frame.Text(json.encodeToString(message)))
     }
 
     /** Fire a cheap request to warm the TLS/connection pool, so the first real call isn't slow. */
