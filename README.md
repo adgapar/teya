@@ -30,7 +30,7 @@ A **smart family agent** that lives in the home as a physical presence — a glo
 
 The key shift: from *command executor* to *family coordinator*.
 
-> "We're out of milk" → it adds it to the shopping list or orders it.  
+> "We're out of milk" → it adds it to the shopping list.  
 > "The kids need to be at football at 5 and I have a meeting until 4:30" → it checks both parents' calendars and suggests who can take them.  
 > "Message Ana that we'll be 20 minutes late" → done.
 
@@ -90,14 +90,9 @@ The face and personality should be **gender neutral** — calm, warm, wise, belo
 ## 5. Family Use Cases
 
 ### Home logistics
-- Shopping list management and ordering
+- Shopping list management by voice
 - Calendar coordination across all family members
 - School and activity reminders pushed to everyone's devices
-
-### Meals & food
-- Dinner suggestions based on fridge contents
-- Weekly meal planning and automatic shopping list generation
-- Ordering from favourite restaurants ("the usual")
 
 ### Kids
 - Homework help — patient, at the child's level
@@ -114,15 +109,13 @@ The face and personality should be **gender neutral** — calm, warm, wise, belo
 - Booking appointments that don't clash with school
 - Holiday research with budget constraints
 
-### On the go (phone)
-- Same assistant available on personal phones
-- Hands-free operation while driving
-- Continuity — picks up where the home device left off
-
 ### Admin
-- Monitoring bills and subscriptions
-- Spending summaries
-- Trial cancellation reminders
+- Voice-logged expenses and spending summaries ("paid 12 for lunch" → weekly and by-category totals)
+- Reminders the family sets by voice ("remind us to cancel the trial on the 15th")
+
+### Locked down by design
+
+Teya is a **boxed home appliance, not a phone you carry**. It works only in its home-assistant role — no personal-phone or on-the-go mode. It runs on **fresh, neutral accounts** created just to operate the device and reach people, never the family's personal Google, social, or banking logins — so there's **nothing personal on it to hijack or steal**. Together with the calling allowlist, that makes it safe to leave on a wall within reach of kids and guests.
 
 ### The deeper value
 
