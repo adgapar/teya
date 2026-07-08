@@ -67,19 +67,18 @@ The phone does not replace Arduino for low-level electronics — it replaces it 
 
 ## 4. The Face
 
-An animated face on the phone screen changes the relationship with the device entirely. Research shows people trust a face more, engage with it more naturally, and interact with it less transactionally — especially children.
+An animated, living presence on the screen changes the relationship with the device entirely — people engage more naturally, and less transactionally, with something that feels alive than with a blank box or a flat waveform bar. Especially children.
 
 ### Design direction
 
-- **Not a human face** — abstract enough to not trigger uncanny valley
-- **Soft robotic** — glowing, geometric, expressive
-- **Emotionally readable** — the face conveys state:
-  - *Listening* — eyes widen, subtle lean
-  - *Thinking* — eyes shift, processing animation
-  - *Alerting* — colour change, expression shift
-  - *Happy to help* vs *uncertain*
+It is **not** a face with eyes and a mouth — that risks the uncanny valley and dates quickly. It's a single **field of ~830 points** that reassembles into a different living form for each state, so the presence reads through **motion and colour**, not features:
 
-The face is literally a light source — warm, ambient, always present. This is both a design principle and a possible naming inspiration.
+- *Idle* — a slow rolling sea (sea-blue)
+- *Listening* — rings drawn inward, like an inhale (aqua)
+- *Thinking* — an orbiting swirl (violet)
+- *Speaking* — a waveform ribbon that fans at the loud peaks (amber)
+
+The points glow additively, so the screen is literally a **warm ambient light source** on the wall. A live transcript sits centred over the field — the words it hears while listening, its reply while speaking.
 
 ### Gender
 
