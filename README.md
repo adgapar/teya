@@ -186,33 +186,23 @@ A working v1 already runs on a dedicated Android phone — the animated face, th
 
 ## 8. Competitive Landscape
 
-| Product | What it does well | What it lacks |
-|---|---|---|
-| Amazon Alexa | Voice control, smart home | Dumb, no real AI, forgets everything |
-| Google Nest Hub | Screen + voice | Not truly agentic, no personality |
-| Apple HomePod | Audio quality, Apple ecosystem | Closed, no screen, weak AI |
-| Meta Portal | Video calling, face tracking | Discontinued, limited scope |
-| Rabbit R1 / Humane Pin | Agentic AI hardware | No home presence, early stage |
+The incumbents each solved one piece and stopped there. Amazon's Alexa and Google's Nest Hub brought voice control and smart-home routines into the mainstream, but both are essentially command parsers: they don't reason, they forget everything between requests, and they carry no sense of the family they live with. Apple's HomePod is a polished speaker locked inside Apple's ecosystem, with no screen and the weakest assistant of the three. Meta's Portal bet on video calling and was quietly discontinued. The newer AI gadgets — Rabbit's R1, Humane's Pin — put a real model in a pocket device but have no home presence, and both have largely faltered.
 
-Nobody has built the warm, intelligent, family-aware, agentic home presence yet. The space is open.
+So the thing families actually want has not been built: a warm, intelligent presence that knows the household, acts on its behalf, and lives in the home rather than in a pocket or a distant cloud. That space is still wide open.
 
 ---
 
 ## 9. Why Now
 
-- **LLMs are finally good enough** to understand family context and intent reliably
-- **Android phones are cheap** — old devices are widely available and powerful enough
-- **Smart home standards** (Matter) are finally converging, making integrations easier
-- **Agentic AI frameworks** (tool use, multi-step reasoning) are maturing rapidly
-- The market has been primed by Alexa/Google — families already have the habit, they just want it to actually work
+Everything this needs has arrived at roughly the same moment. Large language models are finally good enough to understand family context and messy, real-world intent reliably, and the agentic patterns around them — tool use, multi-step reasoning — have matured from demos into something dependable. The hardware is effectively free: capable Android phones are sitting unused in drawers everywhere. Smart-home integration, for years a tangle of incompatible ecosystems, is converging on Matter. And the market is already primed — a decade of Alexa and Google Assistant taught families the habit of talking to their home; they are simply waiting for it to actually work.
 
 ---
 
 ## 10. The Emotional Core
 
-The best way to understand what this project is building:
+The best way to understand what this project is building is a feeling:
 
-> A home should feel like it's looking after you. Not because you programmed it to, but because it knows you.
+> A home should feel like it's looking after you — not because you programmed it to, but because it knows you.
 
-That's the feeling this project is chasing. Not a smart speaker. Not a robot. A **presence** — warm, capable, always there, belonging to the whole family.
+That is what Teya is chasing. Not a smart speaker and not a robot, but a genuine presence: warm, capable, always there, and belonging to the whole family.
 
