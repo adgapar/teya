@@ -8,7 +8,7 @@ _Last updated: 2026-07-07._
 
 ## ✅ Done
 
-- Android app + always-on foreground service (`HarnessService`), animated orb (`AgentFace`), dev transcript overlay.
+- Android app + always-on foreground service (`HarnessService`), **particle-field voice face** (`AgentFace`), centred live transcript.
 - **Voice loop**, all Mistral, no disk: Voxtral STT → Mistral LLM (tool calling) → Voxtral TTS.
 - **TTS working**: correct `voice` field + base64-in-JSON decode; default voice **Marie – Happy** (`fr_marie_happy`).
 - **Streaming TTS**: `stream:true` + PCM SSE → `AudioTrack` (int16), ~0.8 s to first word, mp3 fallback.
@@ -36,6 +36,15 @@ _Last updated: 2026-07-07._
   with a software audio front-end: `VOICE_RECOGNITION` source + `NoiseSuppressor` + **6× software gain**
   (device has no hardware AGC), threshold 0.2, patience 1. Ambient floor ~0.03 vs detections ~0.26–0.34.
   Further range / commercial use still needs a custom "Hey Teya" model + likely a mic array.
+- **Voice face redesign — one field of points that morphs per state** (`AgentFace`): ~830 points
+  reassemble into a form per mode — idle **sea** (rolling perspective grid), listening **inhale
+  rings** (drawn inward), thinking **swirl** (orbiting), speaking **waveform ribbon** (banded dots,
+  fanning at loud peaks). Per-state colour (sea-blue / aqua / violet / amber), additive glow,
+  per-point easing for the morph, driven by a frame clock (`withFrameNanos`). Replaces the old
+  filled orb + the `System.currentTimeMillis()` wave hack and idle-gates the animation (**H8/H9**).
+  **Live transcript moved to screen centre** (`MainActivity`): the user's words while listening,
+  Teya's reply while speaking. Dead `OrbStyle` scaffolding removed; Settings back to API-key only.
+  *Built + compiles; pending a live on-device test.* Direction locked via an interactive preview.
 - Repo hygiene: `.gitignore` build output + `.env`; `.env.example`; voice catalog (`docs/mistral-voices.md`).
 
 ## 🔜 Next (recommended order)
@@ -158,5 +167,5 @@ Open-Meteo), with location from the household profile or native device location.
 - Settings **voice picker** (live from `/audio/voices`) + persist choice.
 - More capabilities beyond the native surface (smart home hub, media/music providers).
 - Re-open cue (soft chime) when the mic re-opens mid-conversation.
-- UI: fix orb wave animation + idle-gate the 24/7 animations (**H8/H9**); StateFlow instead of broadcasts (**M3**).
+- UI: StateFlow instead of broadcasts (**M3**). (Orb wave animation + idle-gate done in the particle-face rewrite.)
 - Release readiness: R8/ProGuard + signing config (**H6**); LiteRT version-catalog cleanup (**H7**).

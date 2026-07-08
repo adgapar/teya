@@ -20,6 +20,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -27,6 +32,8 @@ import com.teya.agent.harness.ConfigManager
 import com.teya.agent.harness.HarnessService
 import com.teya.agent.ui.face.AgentFace
 import com.teya.agent.ui.face.AgentState
+import com.teya.agent.ui.face.FaceBackground
+import com.teya.agent.ui.face.stateColor
 import com.teya.agent.ui.theme.TeyaTheme
 
 class MainActivity : ComponentActivity() {
@@ -80,7 +87,7 @@ class MainActivity : ComponentActivity() {
         }
 
         checkAndRequestPermissions()
-        
+
         setContent {
             TeyaTheme {
                 MainScreen(
@@ -177,7 +184,7 @@ fun MainScreen(
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = Color(0xFF0A0A0A)
+        color = FaceBackground
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Box(
@@ -187,6 +194,18 @@ fun MainScreen(
             ) {
                 AgentFace(state = state)
             }
+
+            // Live transcript, centred over the field (the user's words while listening,
+            // Teya's reply while speaking).
+            CenteredTranscript(
+                state = state,
+                userText = userText,
+                agentText = agentText,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .fillMaxWidth()
+                    .padding(horizontal = 40.dp)
+            )
 
             IconButton(
                 onClick = onSettingsClick,
@@ -202,34 +221,75 @@ fun MainScreen(
                 )
             }
 
-            // Dev overlay: live state + last transcript + brain reply.
-            Column(
+            // Small dev state indicator.
+            Text(
+                text = state.name.lowercase(),
+                color = Color.White.copy(alpha = 0.3f),
+                fontSize = 12.sp,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .systemBarsPadding()
                     .padding(16.dp)
-                    .fillMaxWidth(0.6f)
-            ) {
-                Text(
-                    text = "state: ${state.name.lowercase()}",
-                    color = Color.White.copy(alpha = 0.4f),
-                    fontSize = 12.sp
-                )
-                if (userText.isNotBlank()) {
-                    Text(
-                        text = "You: $userText",
-                        color = Color(0xFF9AD0FF),
-                        fontSize = 16.sp
-                    )
-                }
-                if (agentText.isNotBlank()) {
-                    Text(
-                        text = "Teya: $agentText",
-                        color = Color(0xFF9AFFC4),
-                        fontSize = 16.sp
-                    )
-                }
-            }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CenteredTranscript(
+    state: AgentState,
+    userText: String,
+    agentText: String,
+    modifier: Modifier = Modifier
+) {
+    // Pick what to show based on the state, like a voice agent's transcript.
+    val role: String
+    val line: String
+    when (state) {
+        AgentState.SPEAKING -> { role = "Teya"; line = agentText }
+        AgentState.THINKING -> {
+            // STT result is available now — Voxtral transcribes once listening ends.
+            val heard = userText.takeIf { it.isNotBlank() && it != "…" } ?: ""
+            role = if (heard.isBlank()) "" else "You"; line = heard
+        }
+        AgentState.LISTENING -> { role = ""; line = "Listening…" }
+        AgentState.IDLE -> {
+            if (agentText.isNotBlank()) { role = "Teya"; line = agentText }
+            else { role = ""; line = "Say “Hey Teya”" }
+        }
+    }
+
+    // Teya's reply streams token-by-token from the model (agentText updates live as chunks arrive),
+    // so render it as it comes, with a caret while she's still speaking.
+    val display = if (state == AgentState.SPEAKING && line.isNotEmpty()) "$line▌" else line
+
+    val shadow = Shadow(color = Color.Black.copy(alpha = 0.85f), offset = Offset(0f, 2f), blurRadius = 30f)
+
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (role.isNotBlank()) {
+            Text(
+                text = role.uppercase(),
+                color = stateColor(state),
+                fontSize = 12.sp,
+                letterSpacing = 3.sp,
+                fontWeight = FontWeight.Medium,
+                style = TextStyle(shadow = shadow)
+            )
+            Spacer(Modifier.height(10.dp))
+        }
+        if (line.isNotBlank()) {
+            Text(
+                text = display,
+                color = if (role.isBlank()) Color.White.copy(alpha = 0.5f) else Color.White,
+                fontSize = if (role.isBlank()) 15.sp else 19.sp,
+                lineHeight = 25.sp,
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.Medium,
+                style = TextStyle(shadow = shadow)
+            )
         }
     }
 }
