@@ -49,19 +49,20 @@ The insight that makes this project viable: **a spare Android phone is a superch
 | No microphone | Mic + speaker built in |
 | Fragile ecosystem | Millions of existing apps |
 
-A wall-mounted Android phone (even an old €50 device, plugged in) becomes the **single visible node** of an invisible home network. Everything else — smart bulbs, locks, sensors, calendars, messaging apps — is hidden infrastructure. The face on the wall is the only interface the family needs to see.
+A wall-mounted Android phone (even an old €50 device, plugged in) becomes the **single visible node** of an invisible home network. Everything else — smart bulbs, locks, calendars, messaging apps — is hidden infrastructure. The face on the wall is the only interface the family needs to see.
 
-### What the phone controls via Android
+**No server, no local agent stack.** Today's AI-agent wave runs heavy — people buy Mac Minis to host coding agents and orchestration frameworks locally. Teya needs none of it: the intelligence lives in the cloud, reached with a few API calls per turn, so the hardware is just a cheap phone that makes those calls, renders the face, and drives the device. The point isn't autonomous coding on expensive silicon — it's **everyday family life, delivered from the cheapest hardware that can already do it**.
 
-- **Bluetooth** → speakers, locks, wearables
-- **WiFi** → smart bulbs, plugs, thermostats
-- **USB OTG** → connects to low-level sensors (soil moisture, door sensors via ESP32 chips)
-- **Camera** → motion detection, package delivery alerts
-- **NFC** → tap to trigger automations
-- **Notifications API** → reads and acts on all apps
-- **Google Home / Matter SDK** → controls the entire smart home ecosystem
+### What the phone commands via Android
 
-The phone does not replace Arduino for low-level electronics — it replaces it as the **coordination brain**. Cheap ESP32 chips still handle physical sensors; the phone is the hub they report to.
+The agent works through the phone's **own native surface** — no DIY electronics, no wiring:
+
+- **Telephony** → place calls over the cellular dialer + SIM ("call Grandma")
+- **Messaging** → SMS and installed-messenger apps
+- **Calendar, alarms & timers** → the family's schedule
+- **Location & audio** → "home"/weather context, volume, playback
+- **Notifications** → read and act on what other apps surface
+- **Google Home / Matter** → the smart-home ecosystem (bulbs, plugs, locks, thermostats)
 
 ---
 
