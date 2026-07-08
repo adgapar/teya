@@ -221,16 +221,6 @@ fun MainScreen(
                 )
             }
 
-            // Small dev state indicator.
-            Text(
-                text = state.name.lowercase(),
-                color = Color.White.copy(alpha = 0.3f),
-                fontSize = 12.sp,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .systemBarsPadding()
-                    .padding(16.dp)
-            )
         }
     }
 }
