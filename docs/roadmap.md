@@ -4,7 +4,7 @@ Living status doc. Design lives in [ARCHITECTURE.md](../ARCHITECTURE.md); the fu
 is [thoughts/shared/research/2026-07-06-project-audit.md](../thoughts/shared/research/2026-07-06-project-audit.md).
 Audit IDs (C1, H2, …) below refer to that file.
 
-_Last updated: 2026-07-07._
+_Last updated: 2026-07-08._
 
 ## ✅ Done
 
@@ -14,10 +14,12 @@ _Last updated: 2026-07-07._
 - **Streaming TTS**: `stream:true` + PCM SSE → `AudioTrack` (int16), ~0.8 s to first word, mp3 fallback.
 - **Streaming LLM**: `MistralClient.streamChat` reads the chat `chat.completion.chunk` SSE (mirrors the
   TTS SSE reader), accumulating `delta.content` and assembling `delta.tool_calls` by `index`. The
-  harness (`respond()`) streams the reply text to the centred transcript **live** as tokens arrive
-  and queues each completed sentence to a parallel TTS consumer (Channel) so speech starts while the
-  model is still generating — killing the dead "thinking" pause. Tool rounds stay silent (THINKING)
-  and the tool loop is unchanged. *Built + installed; pending a live on-device test.*
+  harness (`respond()`) queues each completed sentence to a parallel TTS consumer (Channel) so
+  speech starts while the model is still generating — killing the dead "thinking" pause. The centred
+  transcript is revealed **from the speaker** — one sentence at a time as each is voiced, with a
+  char-by-char typewriter — so the caption **tracks the audio** instead of racing ahead of it (it
+  self-resyncs at each sentence boundary). Tool rounds stay silent (THINKING) and the tool loop is
+  unchanged. Verified live.
 - **Conversation mode**: multi-turn, bounded history (context), silence timeout, re-entrancy guard (fixes audit C6).
 - **Tool-result feedback loop (M7)**: the harness now runs the tool the model asks for, feeds the
   result back, and lets the model phrase the spoken reply (bounded, multi-round). This is the
@@ -36,7 +38,21 @@ _Last updated: 2026-07-07._
   model answers time/date/location with **no tool round-trip**. `get_time` the tool was removed
   (ambient replaces it). Location via `getLastKnownLocation`; the model infers the city from raw
   coords. Verified live. (Location is PII in the prompt/logs → gate logs behind DEBUG — audit H2.)
-- **Persona extracted** to `com.teya.agent.persona`; capability-style prompt; one-sentence / English-only.
+- **Persona extracted** to `com.teya.agent.persona`; capability-style prompt; one short sentence,
+  reply-language driven by the household profile (was English-only).
+- **Household onboarding + Admin + contextual profile** (`household/`): guided 4-step first-run
+  wizard (`SetupActivity` — API key · members · languages · home) and an **Admin** console
+  (`SettingsActivity`, opened by **long-pressing the face** — gear removed; responsive **two-pane
+  landscape / stacked portrait** + manual rotate toggle). Members live in **native Contacts**
+  (`ContactsRepository` — Google-account sync when present, else local; feeds the call list) with
+  first/last, **aliases** (what the family calls them), email, phone, **birthday** (Contacts Event);
+  Teya's private brain (full alias list + future KNOWN people/memory) in **Room v2** (`Migration(1,2)`
+  CREATE-only, DB singleton). `HouseholdManager.profileContextBlock()` injects the roster (+ birthdays
+  + shared-alias disambiguation) and a **reply-language directive** into the live context every turn —
+  fully **generic / config-driven** (speakable = household ∩ TTS-9; match the user's message language,
+  ignore device location). Dark-theme Compose (`HouseholdComposables`) matching the particle face.
+  **Verified live on-device** (migration, Contacts round-trip, both orientations). Ported from the
+  design-locked plan `thoughts/shared/plans/2026-07-08-household-onboarding.md`.
 - HTTP timeouts (C5), connection warmup, VAD tuning.
 - **Wake word working at ~1.5 m** (openWakeWord `hey_jarvis`). Fixed the near-field-only problem
   with a software audio front-end: `VOICE_RECOGNITION` source + `NoiseSuppressor` + **6× software gain**
@@ -76,22 +92,27 @@ _Last updated: 2026-07-07._
 3. **Security pass** — no plaintext key fallback (**C4**), `allowBackup=false` (**H1**), gate PII logs behind `BuildConfig.DEBUG` (**H2**).
 4. **Resource leaks** — close TFLite interpreters + `HttpClient` in `onDestroy` (**H3/H4**).
 
-## 🏠 Household setup & personalization (agentic onboarding)
+## 🏠 Household setup & personalization
 
-A guided, conversational setup that captures household context and feeds it into STT/LLM/TTS.
+**v1 shipped** (see the Done bullet above): guided form onboarding + Admin, members in Contacts
+(names/aliases/email/phone/birthday), languages, home, and the profile context block. Remaining:
 
-- **Languages** — capture the language(s) the household speaks during setup, and pass an explicit
-  `language` to Voxtral STT so it stops auto-detecting wrong (observed: Voxtral guessed Chinese).
-  Pick TTS voice(s) to match. *Verify the transcription API's language parameter.*
-- **Household context (names & members)** — capture family members' names + relationships at setup.
-  Use it two ways: (a) bias STT toward those names if the API supports a prompt/vocabulary hint, so
-  names transcribe correctly; (b) inject into the agent's system prompt so it understands references
-  ("call her", "tell Mom"). This is also the natural source for the **call allowlist** (C1).
+- ✅ **Languages** — captured at setup (the 13 Voxtral STT languages; 9 speakable flagged 🔊). The
+  reply language is controlled by the **prompt directive**, not an STT param. **STT stays
+  auto-detect** — accepted: accurate on real sentences, and single-language homes (the common case)
+  are unambiguous; only multilingual homes see mis-detection on one-word greetings (e.g. "hello" →
+  "hola"), which the model self-corrects. *Optional later: pin the STT `language` when exactly one
+  household language is set.*
+- ✅ **Household context (names & members)** — captured and injected into the profile context block
+  ("call Dad", "tell Mama"). Also the natural source for the **call allowlist** (C1). *Not yet: bias
+  STT toward member names (prompt/vocabulary hint) so unusual names transcribe correctly.*
 - **Per-speaker voice ID / learning (stretch — research)** — recognize *who* is speaking and adapt
-  per person. Voxtral doesn't expose speaker identity, so this needs separate speaker
-  diarization/verification (on-device model or a service) — feasibility + approach TBD.
-- **Setup UX** — make onboarding itself agentic/conversational (Teya asks, family answers) rather
-  than forms, storing a structured "household profile" the harness reads.
+  per person (resolves shared nicknames like "Dad" = two people automatically, instead of asking).
+  Voxtral doesn't expose speaker identity → needs separate diarization/verification. Feasibility TBD.
+- **Conversational onboarding (deferred)** — v1 is a **form** on purpose (STT isn't reliable before
+  the language is set — chicken/egg). A later agentic setup (Teya asks, family answers) could layer on.
+- **KNOWN people + memory** — the deferred half of the Room schema (`persona` / `memory_entry`
+  tables exist); see the Backlog "Implement memory" item + the Admin People/Memory sections.
 
 ## 📱 Native capabilities — the phone *is* the platform
 

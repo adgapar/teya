@@ -2,20 +2,23 @@
 date: 2026-07-08T12:00:00Z
 topic: "Household onboarding + settings + contextual profile"
 tags: [onboarding, settings, household, persona, room, languages]
-status: design-locked
+status: implemented
 ---
 
 # Household onboarding + settings + contextual profile
 
-_Status: design locked (2026-07-08), prototype approved, **not yet ported to the app**._
+_Status: **implemented** (2026-07-08) — v1 ported to the app and verified live on-device. See the
+roadmap Done bullet "Household onboarding + Admin + contextual profile". Deferred items (KNOWN
+people + memory, per-speaker voice ID, conversational onboarding, STT name-biasing) remain per the
+Scope section below._
 _Prototype (design source of truth): the "Teya · Onboarding & Settings" Claude artifact — guided
-form, aliases model, Voxtral-13 languages. Iterate UI there first (see the prototype-in-artifacts
-preference), then implement in Compose._
+form, aliases model, Voxtral-13 languages._
 
-> **Next session — start here.** Design is fully locked; build from the "File-by-file (port checklist)"
-> at the bottom. The only two references you need are this plan + the prototype artifact. No code is
-> ported yet beyond the already-committed particle face and the removed dev status indicator.
-> Optional first step: prototype the **landscape two-pane Admin** as an artifact before writing it.
+> **Delta from the plan as built:** birthdays added to members (Contacts Event + profile block +
+> date picker); the reply-language directive was made fully generic/config-driven (match the user's
+> message language, ignore device location — no hardcoded language names); the transcript reveal was
+> reworked to track the audio (per-sentence + char typewriter). Admin two-pane landscape was built
+> directly in Compose (not prototyped as a separate artifact). STT left on auto-detect (accepted).
 
 ## Goal
 A guided first-run onboarding + editable Settings that capture a **household profile**, and wire it
