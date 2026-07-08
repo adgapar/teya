@@ -31,9 +31,12 @@ interface MemoryDao {
     @Query("SELECT * FROM memory_entry WHERE tier = 'HOT' ORDER BY strength DESC, addedAt DESC")
     suspend fun hot(): List<MemoryEntry>
 
-    /** All general-pool rows (not about a specific person) — the RAG search set (brute-force cosine). */
-    @Query("SELECT * FROM memory_entry WHERE subjectType = 'GENERAL'")
-    suspend fun general(): List<MemoryEntry>
+    /**
+     * The RAG search set: every row NOT in the always-loaded persona block — the general pool plus
+     * any cooled (COLD) persona memory. (HOT persona memory is already visible in context.)
+     */
+    @Query("SELECT * FROM memory_entry WHERE NOT (subjectType = 'CONTACT' AND tier = 'HOT')")
+    suspend fun searchable(): List<MemoryEntry>
 
     @Insert
     suspend fun insert(entry: MemoryEntry): Long

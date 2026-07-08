@@ -1,8 +1,10 @@
 package com.teya.agent.harness
 
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -49,6 +51,7 @@ class HarnessService : Service() {
         const val ACTION_TRIGGER_VOICE = "com.teya.agent.action.TRIGGER_VOICE"
         const val ACTION_TRANSCRIPT = "com.teya.agent.TRANSCRIPT_UPDATE"
         const val ACTION_TIMER_FIRED = "com.teya.agent.action.TIMER_FIRED"
+        const val ACTION_RUN_DREAM = "com.teya.agent.action.RUN_DREAM"
         const val EXTRA_TIMER_LABEL = "timer_label"
         const val EXTRA_TIMER_ID = "timer_id"
         private const val CHANNEL_ID = "teya_harness_channel"
@@ -58,6 +61,8 @@ class HarnessService : Service() {
         private const val BARGE_IN_GAP_MS = 900L      // deliberate pause after each sentence — see runConversation's speaker loop
         private const val MAX_HISTORY = 10           // bounded conversation history sent to the model
         private const val MAX_TOOL_ROUNDS = 4        // cap tool→result→model loops per user turn
+        private const val DREAM_REQUEST_CODE = 7     // PendingIntent id for the nightly dream alarm
+        private const val DREAM_HOUR = 3             // run the dreamer at ~3 AM (device idle + charging)
     }
 
     private val job = SupervisorJob()
@@ -113,6 +118,8 @@ class HarnessService : Service() {
                 }
             }
         }
+
+        scheduleDream()  // nightly memory decay/consolidation (~3 AM, AlarmManager)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -129,6 +136,10 @@ class HarnessService : Service() {
                 Log.d(TAG, "Timer fired: id=$id label='$label'")
                 if (id != -1) timerManager.onFired(id)
                 announceTimer(label)
+            }
+            ACTION_RUN_DREAM -> {
+                Log.d(TAG, "Dream alarm fired — running memory decay")
+                scope.launch { runDream() }
             }
             else -> {
                 Log.d(TAG, "Service started, initializing wake word loop")
@@ -147,6 +158,33 @@ class HarnessService : Service() {
             },
             onBargeIn = { onBargeIn() }
         )
+    }
+
+    /** Run the memory "dreamer" (deterministic decay/re-tier/prune) and record it for the Admin monitor. */
+    private suspend fun runDream() {
+        val summary = withContext(Dispatchers.IO) { memoryManager.runDecay() }
+        ConfigManager(this).apply { lastDreamAt = summary.at; lastDreamNote = summary.note() }
+        Log.d(TAG, "Dream done: ${summary.note()}")
+    }
+
+    /** Schedule the nightly dreamer (~3 AM) via AlarmManager — the wall device is idle + charging then. */
+    private fun scheduleDream() {
+        val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val pi = PendingIntent.getService(
+            this, DREAM_REQUEST_CODE,
+            Intent(this, HarnessService::class.java).setAction(ACTION_RUN_DREAM),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        am.setInexactRepeating(AlarmManager.RTC, nextDreamTimeMillis(), AlarmManager.INTERVAL_DAY, pi)
+        Log.d(TAG, "Dream scheduled for next ${DREAM_HOUR}:00")
+    }
+
+    /** Epoch millis of the next DREAM_HOUR o'clock local time (today if still ahead, else tomorrow). */
+    private fun nextDreamTimeMillis(): Long {
+        val now = LocalDateTime.now()
+        var next = now.toLocalDate().atTime(DREAM_HOUR, 0)
+        if (!next.isAfter(now)) next = next.plusDays(1)
+        return next.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
     }
 
     /** Entry point for a tap or wake-word trigger. Guards against overlapping conversations. */

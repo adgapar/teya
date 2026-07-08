@@ -37,15 +37,19 @@ import androidx.compose.ui.unit.sp
 fun MemorySectionBody(
     memories: List<MemoryEntry>?,
     members: List<Member>,
+    lastDreamText: String?,
+    onRunDream: () -> Unit,
     onDelete: (Int) -> Unit,
 ) {
     if (memories == null) { Note("Loading memories…"); return }
     if (memories.isEmpty()) {
         Note("Nothing remembered yet. Teya saves facts, preferences and routines when the family asks her to.")
+        Spacer(Modifier.height(12.dp))
+        DreamerControl(lastDreamText, onRunDream)
         return
     }
 
-    MemorySummary(memories)
+    MemorySummary(memories, lastDreamText, onRunDream)
     Spacer(Modifier.height(16.dp))
 
     // Group per member (persona memory) by lookupKey; everything else falls under "General".
@@ -67,7 +71,7 @@ fun MemorySectionBody(
 }
 
 @Composable
-private fun MemorySummary(memories: List<MemoryEntry>) {
+private fun MemorySummary(memories: List<MemoryEntry>, lastDreamText: String?, onRunDream: () -> Unit) {
     val hot = memories.count { it.tier == MemoryManager.TIER_HOT }
     val cold = memories.size - hot
     val byCat = memories.groupingBy { it.category }.eachCount()
@@ -89,8 +93,21 @@ private fun MemorySummary(memories: List<MemoryEntry>) {
                 Spacer(Modifier.height(2.dp))
                 Text(cats, color = TeyaColors.Muted2, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
             }
+            Spacer(Modifier.height(14.dp))
+            DreamerControl(lastDreamText, onRunDream)
         }
     }
+}
+
+/** The dreamer monitor + manual trigger — last run info and a "Run dream now" button (debug/testing). */
+@Composable
+private fun DreamerControl(lastDreamText: String?, onRunDream: () -> Unit) {
+    Text(
+        "Dreamer — ${lastDreamText ?: "not run yet"}",
+        color = TeyaColors.Muted2, fontSize = 11.sp, fontFamily = FontFamily.Monospace,
+    )
+    Spacer(Modifier.height(8.dp))
+    SecondaryButton("Run dream now", Modifier.fillMaxWidth(), onRunDream)
 }
 
 @Composable

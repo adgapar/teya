@@ -44,6 +44,16 @@ class ConfigManager(context: Context) {
         get() = prefs.getBoolean("home_confirmed", false)
         set(value) = prefs.edit().putBoolean("home_confirmed", value).apply()
 
+    /** When the memory "dreamer" (decay/consolidation) last ran; 0 = never. Shown in Admin. */
+    var lastDreamAt: Long
+        get() = prefs.getLong("last_dream_at", 0L)
+        set(value) = prefs.edit().putLong("last_dream_at", value).apply()
+
+    /** One-line summary of the last dream run (what it cooled/pruned), for the Admin monitor. */
+    var lastDreamNote: String
+        get() = prefs.getString("last_dream_note", "") ?: ""
+        set(value) = prefs.edit().putString("last_dream_note", value).apply()
+
     fun isConfigured(): Boolean {
         return !mistralApiKey.isNullOrBlank()
     }

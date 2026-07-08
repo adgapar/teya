@@ -4,6 +4,7 @@ import android.content.Context
 import com.teya.agent.safety.TeyaDatabase
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
@@ -76,7 +77,9 @@ class MemoryManager(context: Context) {
     suspend fun search(query: String, queryEmbedding: FloatArray?, topK: Int = 5): List<MemoryEntry> {
         val q = query.trim().lowercase()
         if (q.isEmpty()) return emptyList()
-        val pool = dao.general()
+        // Everything not in the always-loaded persona block: the general pool + any cooled (COLD)
+        // persona memories that dropped out of context. This is what recall reaches for.
+        val pool = dao.searchable()
         if (pool.isEmpty()) return emptyList()
 
         val ranked = if (queryEmbedding != null) {
@@ -90,8 +93,10 @@ class MemoryManager(context: Context) {
             keywordMatch(pool, q, topK)
         }
 
+        // Recall reinforces: reset to full strength + stamp access time ("use it or lose it"). The
+        // next dream run re-promotes a reinforced COLD memory back to HOT.
         val now = System.currentTimeMillis()
-        ranked.forEach { dao.reinforce(it.id, (it.strength + REINFORCE_BOOST).coerceAtMost(1f), now) }
+        ranked.forEach { dao.reinforce(it.id, 1.0f, now) }
         return ranked
     }
 
@@ -103,6 +108,45 @@ class MemoryManager(context: Context) {
 
     /** Delete one memory by id — the Admin review screen's manual "forget". */
     suspend fun delete(id: Int) = dao.delete(id)
+
+    /**
+     * The "dreamer"'s deterministic half: recompute every memory's strength on the forgetting curve
+     * (per-category half-life since [MemoryEntry.lastAccessedAt]), re-tier HOT↔COLD, and prune dead
+     * EPISODIC rows. Pure math, no LLM — safe to run nightly (HarnessService's dream alarm) or on
+     * demand from Admin. Returns a summary for the monitor/log. (LLM consolidation of episodic detail
+     * into durable facts is a later slice.)
+     */
+    suspend fun runDecay(now: Long = System.currentTimeMillis()): DreamSummary {
+        val all = dao.getAll()
+        var cooled = 0
+        var pruned = 0
+        all.forEach { e ->
+            val s = strengthNow(e, now)
+            if (e.category == CAT_EPISODIC && s < DEAD_THRESHOLD) {
+                dao.delete(e.id)
+                pruned++
+            } else {
+                val tier = if (s >= HOT_THRESHOLD) TIER_HOT else TIER_COLD
+                dao.retier(e.id, s, tier)
+                if (tier == TIER_COLD && e.tier == TIER_HOT) cooled++
+            }
+        }
+        return DreamSummary(scanned = all.size, cooled = cooled, pruned = pruned, at = now)
+    }
+
+    /** Retention on the forgetting curve: 1.0 at last access, halving every [halfLifeDays] since. */
+    private fun strengthNow(e: MemoryEntry, now: Long): Float {
+        val elapsedDays = (now - e.lastAccessedAt).coerceAtLeast(0L) / 86_400_000.0
+        return 0.5.pow(elapsedDays / halfLifeDays(e.category)).toFloat().coerceIn(0f, 1f)
+    }
+
+    /** Per-category half-life in days — FACT ~ permanent, EPISODIC fades fast (see the plan's table). */
+    private fun halfLifeDays(category: String): Double = when (category.uppercase()) {
+        CAT_EPISODIC -> 3.0
+        CAT_PREFERENCE -> 45.0
+        CAT_ROUTINE -> 120.0
+        else -> 3650.0   // FACT (and anything unknown): effectively permanent
+    }
 
     /**
      * The "What you remember" block folded into the live context every turn: the HOT memories,
@@ -149,11 +193,18 @@ class MemoryManager(context: Context) {
         const val TIER_HOT = "HOT"
         const val TIER_COLD = "COLD"
 
-        /** How much a search hit bumps strength (reinforcement); capped at 1.0. */
-        private const val REINFORCE_BOOST = 0.25f
         /** Minimum cosine similarity for a semantic search hit to count (filters out junk matches). */
         private const val MIN_SIM = 0.35f
+        /** Strength at/above which a memory stays HOT (always-loaded); below → COLD (search-only). */
+        private const val HOT_THRESHOLD = 0.5f
+        /** Below this, a decayed EPISODIC memory is pruned for good (durable categories only cool). */
+        private const val DEAD_THRESHOLD = 0.05f
     }
+}
+
+/** What a dream run did — surfaced in the Admin monitor + logs. */
+data class DreamSummary(val scanned: Int, val cooled: Int, val pruned: Int, val at: Long) {
+    fun note(): String = "scanned $scanned · cooled $cooled · pruned $pruned"
 }
 
 /** float32-LE round-trip for storing an embedding vector in a Room BLOB column. */

@@ -75,6 +75,7 @@ class SettingsActivity : ComponentActivity() {
 
     private val loadedMembers = mutableStateOf<List<Member>?>(null)
     private val loadedMemories = mutableStateOf<List<MemoryEntry>?>(null)
+    private val lastDream = mutableStateOf<String?>(null)
     private val home = mutableStateOf(LocationProbe.Home("Detecting location…", ""))
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -83,6 +84,7 @@ class SettingsActivity : ComponentActivity() {
         config = ConfigManager(this)
         household = HouseholdManager(this)
         memory = MemoryManager(this)
+        lastDream.value = dreamText()
 
         lifecycleScope.launch { loadedMembers.value = household.members() }
         lifecycleScope.launch { loadedMemories.value = memory.all() }
@@ -92,6 +94,7 @@ class SettingsActivity : ComponentActivity() {
             AdminScreen(
                 membersLoaded = loadedMembers.value,
                 memoriesLoaded = loadedMemories.value,
+                lastDreamText = lastDream.value,
                 initialLanguages = config.languages,
                 initialHomeConfirmed = config.homeConfirmed,
                 initialApiKey = config.mistralApiKey ?: "",
@@ -100,6 +103,14 @@ class SettingsActivity : ComponentActivity() {
                 onClose = ::finish,
                 onDeleteMemory = { id ->
                     lifecycleScope.launch { memory.delete(id); loadedMemories.value = memory.all() }
+                },
+                onRunDream = {
+                    lifecycleScope.launch {
+                        val s = memory.runDecay()
+                        config.lastDreamAt = s.at; config.lastDreamNote = s.note()
+                        loadedMemories.value = memory.all()
+                        lastDream.value = dreamText()
+                    }
                 },
                 onSave = { members, langs, homeConfirmed, apiKey ->
                     config.mistralApiKey = apiKey.trim()
@@ -120,6 +131,15 @@ class SettingsActivity : ComponentActivity() {
                 ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             else ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
     }
+
+    /** Human-readable "last dream run" line for the Admin monitor, or null if it never ran. */
+    private fun dreamText(): String? {
+        val at = config.lastDreamAt
+        if (at == 0L) return null
+        val days = (System.currentTimeMillis() - at) / 86_400_000L
+        val ago = when { days <= 0L -> "today"; days == 1L -> "yesterday"; else -> "${days}d ago" }
+        return "${config.lastDreamNote} ($ago)"
+    }
 }
 
 private enum class AdminSection(val title: String) {
@@ -130,6 +150,7 @@ private enum class AdminSection(val title: String) {
 private fun AdminScreen(
     membersLoaded: List<Member>?,
     memoriesLoaded: List<MemoryEntry>?,
+    lastDreamText: String?,
     initialLanguages: List<String>,
     initialHomeConfirmed: Boolean,
     initialApiKey: String,
@@ -137,6 +158,7 @@ private fun AdminScreen(
     onToggleRotation: () -> Unit,
     onClose: () -> Unit,
     onDeleteMemory: (Int) -> Unit,
+    onRunDream: () -> Unit,
     onSave: (List<Member>, List<String>, Boolean, String) -> Unit,
 ) {
     Box(Modifier.fillMaxSize().background(TeyaColors.Page)) {
@@ -164,10 +186,12 @@ private fun AdminScreen(
             Box(Modifier.weight(1f)) {
                 if (portrait) {
                     PortraitContent(members, onMembersChange, langs, onToggleLang, home, homeConfirmed,
-                        { homeConfirmed = it }, apiKey, { apiKey = it }, memoriesLoaded, onDeleteMemory)
+                        { homeConfirmed = it }, apiKey, { apiKey = it }, memoriesLoaded, lastDreamText,
+                        onRunDream, onDeleteMemory)
                 } else {
                     LandscapeContent(members, onMembersChange, langs, onToggleLang, home, homeConfirmed,
-                        { homeConfirmed = it }, apiKey, { apiKey = it }, memoriesLoaded, onDeleteMemory)
+                        { homeConfirmed = it }, apiKey, { apiKey = it }, memoriesLoaded, lastDreamText,
+                        onRunDream, onDeleteMemory)
                 }
             }
 
@@ -215,13 +239,13 @@ private fun PortraitContent(
     langs: List<String>, onToggleLang: (String) -> Unit,
     home: LocationProbe.Home, homeConfirmed: Boolean, onHomeConfirmedChange: (Boolean) -> Unit,
     apiKey: String, onApiKeyChange: (String) -> Unit,
-    memories: List<MemoryEntry>?, onDeleteMemory: (Int) -> Unit,
+    memories: List<MemoryEntry>?, lastDreamText: String?, onRunDream: () -> Unit, onDeleteMemory: (Int) -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp).padding(top = 8.dp)
     ) {
         SectionBlock(AdminSection.HOUSEHOLD) { HouseholdSectionBody(members, onMembersChange) }
-        SectionBlock(AdminSection.MEMORY) { MemorySectionBody(memories, members, onDeleteMemory) }
+        SectionBlock(AdminSection.MEMORY) { MemorySectionBody(memories, members, lastDreamText, onRunDream, onDeleteMemory) }
         SectionBlock(AdminSection.LANGUAGES) { LanguagePicker(langs.toSet(), onToggleLang) }
         SectionBlock(AdminSection.HOME) {
             HomeConfirmCard(home.city, home.coords, homeConfirmed, onHomeConfirmedChange)
@@ -236,7 +260,7 @@ private fun LandscapeContent(
     langs: List<String>, onToggleLang: (String) -> Unit,
     home: LocationProbe.Home, homeConfirmed: Boolean, onHomeConfirmedChange: (Boolean) -> Unit,
     apiKey: String, onApiKeyChange: (String) -> Unit,
-    memories: List<MemoryEntry>?, onDeleteMemory: (Int) -> Unit,
+    memories: List<MemoryEntry>?, lastDreamText: String?, onRunDream: () -> Unit, onDeleteMemory: (Int) -> Unit,
 ) {
     var selected by remember { mutableStateOf(AdminSection.HOUSEHOLD) }
     Row(Modifier.fillMaxSize()) {
@@ -258,7 +282,7 @@ private fun LandscapeContent(
             Spacer(Modifier.height(12.dp))
             when (selected) {
                 AdminSection.HOUSEHOLD -> HouseholdSectionBody(members, onMembersChange)
-                AdminSection.MEMORY -> MemorySectionBody(memories, members, onDeleteMemory)
+                AdminSection.MEMORY -> MemorySectionBody(memories, members, lastDreamText, onRunDream, onDeleteMemory)
                 AdminSection.LANGUAGES -> LanguagePicker(langs.toSet(), onToggleLang)
                 AdminSection.HOME -> HomeConfirmCard(home.city, home.coords, homeConfirmed, onHomeConfirmedChange)
                 AdminSection.API -> ApiSectionBody(apiKey, onApiKeyChange)
