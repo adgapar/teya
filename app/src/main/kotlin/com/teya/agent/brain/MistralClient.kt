@@ -42,7 +42,7 @@ class MistralClient(
     private val ttsVoice = "fr_marie_happy"
     // Voxtral Realtime (barge-in) — see detectBargeInSpeech. Delay is the fast end of Mistral's
     // documented 240ms-2400ms range: barge-in latency matters more than transcript accuracy here.
-    private val realtimeModel = "voxtral-mini-transcribe-realtime-2602"
+    private val realtimeModel = "voxtral-mini-transcribe-realtime-latest"
     private val realtimeTargetDelayMs = 240
 
     // Persona (systemPrompt) and capabilities (tools) live outside this provider client —
