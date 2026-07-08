@@ -171,6 +171,21 @@ Open-Meteo), with location from the household profile or native device location.
 ## 🧊 Backlog / ideas
 
 - Settings **voice picker** (live from `/audio/voices`) + persist choice.
+- **Implement memory / learning about people** — build the deferred half of the household model:
+  `Person` rows with `kind=KNOWN` captured by voice ("remember Uncle Bob…"), a `MemoryEntry` table
+  linked per-person (household-general when unlinked), and `remember`/`recall`/`forget` tools. The
+  **Admin** screen reviews & edits all people + memory records. Feeds the persona context so Teya
+  recalls facts across sessions. Schema in
+  [thoughts/shared/plans/2026-07-08-household-onboarding.md](../thoughts/shared/plans/2026-07-08-household-onboarding.md).
+- **Language-learning mode** — Teya as a conversational practice partner/tutor. The dev household is
+  multilingual (English, Spanish, Russian) and a member is learning **Brazilian Portuguese (pt-BR)**;
+  mode = guided conversation, corrections, vocab drills in a target language. **Feasible on Voxtral
+  TTS**: the model speaks **9 languages** (EN, FR, ES, PT, IT, NL, DE, HI, AR) with zero-shot voice
+  cloning + cross-lingual + code-mixing — so Portuguese practice is voiceable. (Russian, Chinese,
+  Japanese, Korean are in STT's 13 but not TTS's 9 → understand-only.) Pairs with per-speaker voice ID.
+- **Custom / cloned voices** — Voxtral TTS does **zero-shot voice cloning** from ~2–3 s of audio
+  (voice-as-instruction for emotion/prosody; cross-lingual). Opportunity: a bespoke "Teya" voice or
+  per-member voices, no prosody tags. Ties to the live voice picker + "Hey Teya" personalization.
 - More capabilities beyond the native surface (smart home hub, media/music providers).
 - Re-open cue (soft chime) when the mic re-opens mid-conversation.
 - UI: StateFlow instead of broadcasts (**M3**). (Orb wave animation + idle-gate done in the particle-face rewrite.)
