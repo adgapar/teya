@@ -15,7 +15,7 @@ import com.teya.agent.household.PersonaDao
 
 @Database(
     entities = [Contact::class, Persona::class, MemoryEntry::class, ContactExtra::class],
-    version = 2,
+    version = 3,
 )
 abstract class TeyaDatabase : RoomDatabase() {
     abstract fun contactDao(): ContactDao
@@ -52,11 +52,33 @@ abstract class TeyaDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v2→v3: `memory_entry` gains the memory decay/persona fields (category, strength,
+         * lastAccessedAt, embedding, tier). The v2 table was seeded but **never populated** (no code
+         * wrote to it), so recreating it is non-destructive — and it avoids `ALTER … ADD COLUMN NOT
+         * NULL DEFAULT`, whose default must exactly match Room's schema check. New columns carry no
+         * DB default (matching the entity, which has none); MemoryManager sets them on every insert.
+         */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `memory_entry`")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `memory_entry` " +
+                        "(`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`subjectType` TEXT NOT NULL, `subjectKey` TEXT, " +
+                        "`text` TEXT NOT NULL, `addedAt` INTEGER NOT NULL, " +
+                        "`category` TEXT NOT NULL, `strength` REAL NOT NULL, " +
+                        "`lastAccessedAt` INTEGER NOT NULL, `embedding` BLOB, " +
+                        "`tier` TEXT NOT NULL)"
+                )
+            }
+        }
+
         /** Single shared instance so every manager opens the same migrated DB (name: "teya-db"). */
         fun get(context: Context): TeyaDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext, TeyaDatabase::class.java, "teya-db"
-            ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
         }
     }
 }

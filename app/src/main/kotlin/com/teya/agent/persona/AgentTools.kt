@@ -238,9 +238,57 @@ object AgentTools {
         },
     )
 
+    val remember = ToolSpec(
+        name = "remember",
+        description = "Save something to long-term memory about the family so you recall it in future " +
+            "conversations. Use it when someone shares a lasting fact, a preference, or a recurring " +
+            "routine worth keeping. What you've saved is shown to you each turn under 'What you remember'.",
+        parameters = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {
+                putJsonObject("fact") {
+                    put("type", "string")
+                    put("description", "The thing to remember, as a short statement, e.g. 'is allergic to peanuts'.")
+                }
+                putJsonObject("about") {
+                    put("type", "string")
+                    put("description", "Whom it concerns — a household member's name or nickname (e.g. 'Sam', " +
+                        "'Dad'). Omit for a family-wide fact.")
+                }
+                putJsonObject("category") {
+                    put("type", "string")
+                    put("description", "One of: fact (a lasting truth), preference (a like/dislike that may " +
+                        "change), routine (a recurring habit), episodic (something that happened). Defaults to fact.")
+                }
+            }
+            putJsonArray("required") { add("fact") }
+        },
+    )
+
+    val forget = ToolSpec(
+        name = "forget",
+        description = "Remove something from long-term memory when the family asks you to forget it. " +
+            "This is the only way to delete a saved memory.",
+        parameters = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {
+                putJsonObject("fact") {
+                    put("type", "string")
+                    put("description", "What to forget, matched against saved memories, e.g. 'coffee'.")
+                }
+                putJsonObject("about") {
+                    put("type", "string")
+                    put("description", "Limit the search to memories about this member. Optional.")
+                }
+            }
+            putJsonArray("required") { add("fact") }
+        },
+    )
+
     /** All tools currently exposed to the brain. */
     val all: List<ToolSpec> = listOf(
         placeCall, setTimer, cancelTimer, setAlarm, cancelAlarm, addEvent, getEvents, cancelEvent,
         addToShoppingList, removeFromShoppingList, readShoppingList, clearShoppingList,
+        remember, forget,
     )
 }

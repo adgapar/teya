@@ -20,14 +20,25 @@ data class Persona(
     val aliases: String = "",   // CSV of "listen-for" words
 )
 
-/** A single remembered fact. Its subject is a household contact, a [Persona], or general. */
+/**
+ * A single remembered fact. [subjectType]/[subjectKey] say who it's *about* (a household contact by
+ * lookupKey, a [Persona], or general); [category] says what *kind* it is and drives its decay +
+ * mutability. [strength] is its place on the forgetting curve, [tier] where it lives (HOT = loaded
+ * into context, COLD = archival/RAG-only) — both maintained by the nightly dreamer (later slice).
+ * See thoughts/shared/plans/2026-07-08-memory-and-dreaming.md.
+ */
 @Entity(tableName = "memory_entry")
 data class MemoryEntry(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
-    val subjectType: String = "GENERAL",   // CONTACT | PERSONA | GENERAL
-    val subjectKey: String? = null,        // contact lookupKey, or persona id, or null
+    val subjectType: String = "GENERAL",   // CONTACT | PERSONA | GENERAL — who it's about
+    val subjectKey: String? = null,        // contact lookupKey, persona id, or null (general)
     val text: String,
     val addedAt: Long,
+    val category: String = "FACT",         // FACT | PREFERENCE | ROUTINE | EPISODIC
+    val strength: Float = 1.0f,            // forgetting-curve strength (1.0 = fresh); access reinforces
+    val lastAccessedAt: Long = 0L,         // reinforcement timestamp ("use it or lose it"); = addedAt on insert
+    val embedding: ByteArray? = null,      // float32 blob for general-pool RAG (cosine in code); null for persona rows
+    val tier: String = "HOT",              // HOT = assembled into context; COLD = archival/RAG-only
 )
 
 /**
