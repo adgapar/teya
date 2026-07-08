@@ -50,12 +50,28 @@ class HouseholdManager(context: Context) {
     fun saveLanguages(langs: List<String>) { config.languages = langs }
 
     /**
+     * Resolve a spoken name/nickname ("Dad", "Sam") to a household member, so a memory can be linked
+     * to them by lookupKey. Exact match on display name / first name / any alias first, then a looser
+     * contains match; null if nobody matches. Caller passes the already-loaded [members] roster.
+     */
+    fun resolveMember(nameOrAlias: String, members: List<Member>): Member? {
+        val q = nameOrAlias.trim().lowercase()
+        if (q.isEmpty()) return null
+        return members.firstOrNull { m ->
+            m.displayName.lowercase() == q || m.first.lowercase() == q ||
+                m.aliases.any { it.trim().lowercase() == q }
+        } ?: members.firstOrNull { m ->
+            m.displayName.lowercase().contains(q) || m.aliases.any { it.trim().lowercase().contains(q) }
+        }
+    }
+
+    /**
      * System-prompt block, rebuilt every turn (edits in Admin apply with no restart). States the
      * roster + the reply-language directive derived from (household ∩ TTS-9). Empty when nothing is
-     * configured yet, so a fresh install adds nothing to the prompt.
+     * configured yet, so a fresh install adds nothing to the prompt. [members] is passed in (loaded
+     * once by the caller) so the live-context build reads Contacts a single time per turn.
      */
-    suspend fun profileContextBlock(): String {
-        val members = members()
+    suspend fun profileContextBlock(members: List<Member>): String {
         val langs = languages()
         if (members.isEmpty() && langs.isEmpty()) return ""
 
@@ -91,12 +107,13 @@ class HouseholdManager(context: Context) {
 
         val understandClause = if (understandOnly.isNotEmpty())
             " You understand ${understandOnly.joinNatural()} but cannot speak it aloud." else ""
-        return "The household speaks ${household.joinNatural()}. " +
-            "Reply in the SAME language as the person's most recent message — detect it from their " +
-            "words alone, ignoring the device location and the household's other languages. " +
-            "You can speak these aloud: ${speakable.joinNatural()}.$understandClause " +
-            "Only ever reply in a language you can speak aloud; if a message is in any other language, " +
-            "reply in English instead."
+        return "The household speaks ${household.joinNatural()}. The only languages you can speak " +
+            "aloud are ${speakable.joinNatural()} — no others, ever, no matter what language the " +
+            "person just used.$understandClause Reply in the SAME language as the person's most " +
+            "recent message, detected from their words alone (ignore device location and the " +
+            "household's other languages) — EXCEPT when that language isn't one you can speak aloud, " +
+            "in which case reply in English instead. This exception applies even if the transcript " +
+            "looks like a real, coherent message in that other language."
     }
 
     /** If two members share an alias (case-insensitive), tell Teya to ask which one is meant. */
