@@ -17,6 +17,7 @@ import androidx.core.app.NotificationCompat
 import com.teya.agent.R
 import com.teya.agent.brain.*
 import com.teya.agent.calendar.CalendarManager
+import com.teya.agent.household.HouseholdManager
 import com.teya.agent.persona.AgentTools
 import com.teya.agent.persona.TeyaPersona
 import com.teya.agent.safety.ContactAllowlistManager
@@ -66,6 +67,7 @@ class HarnessService : Service() {
     private lateinit var timerManager: TimerManager
     private lateinit var calendarManager: CalendarManager
     private lateinit var shoppingList: ShoppingListManager
+    private lateinit var householdManager: HouseholdManager
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -81,7 +83,8 @@ class HarnessService : Service() {
         timerManager = TimerManager(this)
         calendarManager = CalendarManager(this)
         shoppingList = ShoppingListManager(this)
-        
+        householdManager = HouseholdManager(this)
+
         val apiKey = configManager.mistralApiKey
         if (!apiKey.isNullOrBlank()) {
             Log.d(TAG, "Initializing Mistral brain with key")
@@ -172,6 +175,7 @@ class HarnessService : Service() {
                     Log.d(TAG, "No follow-up heard — ending conversation")
                     break
                 }
+                Log.d(TAG, "Heard (STT): \"$text\"")
                 sendDebug(user = text)
                 history.add(ChatMessage("user", text))
                 trimHistory(history)
@@ -227,14 +231,22 @@ class HarnessService : Service() {
 
             val fullText = StringBuilder()
             var queued = 0            // chars already handed to the TTS consumer
-            var spoke = false         // did content start streaming this round?
+            var spoke = false         // did audio start playing this round?
             val sentences = Channel<String>(Channel.UNLIMITED)
             var response = BrainResponse("")
 
             coroutineScope {
                 // Consumer: speak each completed sentence in order, in parallel with generation.
+                // The transcript is revealed HERE — one sentence at a time, as each starts playing —
+                // so the caption tracks the voice. (Driving it off the model's token stream instead
+                // makes the text race far ahead of the audio, since generation is much faster than TTS.)
+                val spokenSoFar = StringBuilder()
                 val speaker = launch {
                     for (sentence in sentences) {
+                        if (!spoke) { spoke = true; updateUiState(AgentState.SPEAKING) }
+                        if (spokenSoFar.isNotEmpty()) spokenSoFar.append(' ')
+                        spokenSoFar.append(sentence)
+                        sendDebug(agent = spokenSoFar.toString())   // reveal as this sentence is voiced
                         try {
                             voicePipeline.textToSpeech(sentence)
                         } catch (e: Exception) {
@@ -244,9 +256,7 @@ class HarnessService : Service() {
                 }
 
                 response = brainClient.streamChat(history, liveContext) { soFar ->
-                    if (!spoke) { spoke = true; updateUiState(AgentState.SPEAKING) }
                     fullText.setLength(0); fullText.append(soFar)
-                    sendDebug(agent = soFar)                 // stream text to the UI live
                     val cut = lastSentenceEnd(soFar, queued) // hand any completed sentence(s) to TTS
                     if (cut > queued) {
                         val chunk = soFar.substring(queued, cut).trim()
@@ -255,7 +265,7 @@ class HarnessService : Service() {
                     }
                 }
 
-                // Speak the trailing partial sentence, then let the consumer drain and finish.
+                // Queue the trailing partial sentence, then let the consumer drain and finish.
                 val rest = fullText.substring(queued).trim()
                 if (rest.isNotEmpty()) sentences.trySend(rest)
                 sentences.close()
@@ -549,9 +559,13 @@ class HarnessService : Service() {
             - Active timers: $timersLine
             - Today's remaining events: $eventsLine
         """.trimIndent()
+        // The household profile (who the family is + reply-language directive) rides in the same
+        // ambient block, rebuilt each turn so Admin edits apply with no restart. Empty until set up.
+        val profile = householdManager.profileContextBlock()
+        val full = if (profile.isBlank()) context else "$context\n\n$profile"
         // TODO(H2): gate behind BuildConfig.DEBUG — this line logs location (PII).
-        Log.d(TAG, "Live context: ${context.replace("\n", " | ")}")
-        context
+        Log.d(TAG, "Live context: ${full.replace("\n", " | ")}")
+        full
     }
 
     /** Most-recent cached fix across providers; instant (no async wait). Null if none / no permission. */

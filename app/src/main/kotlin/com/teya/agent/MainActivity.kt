@@ -11,10 +11,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,6 +34,11 @@ import com.teya.agent.ui.face.AgentState
 import com.teya.agent.ui.face.FaceBackground
 import com.teya.agent.ui.face.stateColor
 import com.teya.agent.ui.theme.TeyaTheme
+import kotlinx.coroutines.delay
+
+/** Typewriter reveal speed for Teya's transcript (ms/char). Kept just under speaking pace so a
+ *  sentence types out during its own audio, then waits for the next — no drift, no lag. */
+private const val CHAR_REVEAL_MS = 32L
 
 class MainActivity : ComponentActivity() {
     private lateinit var configManager: ConfigManager
@@ -109,7 +113,8 @@ class MainActivity : ComponentActivity() {
                             Log.e("MainActivity", "Failed to trigger voice", e)
                         }
                     },
-                    onSettingsClick = {
+                    onOpenAdmin = {
+                        Log.d("MainActivity", "Long-press — opening Admin")
                         startActivity(Intent(this, SettingsActivity::class.java))
                     }
                 )
@@ -142,9 +147,14 @@ class MainActivity : ComponentActivity() {
     private fun checkAndRequestPermissions() {
         val permissionsToRequest = mutableListOf(
             Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.CALL_PHONE
+            Manifest.permission.CALL_PHONE,
+            // Household members live in Contacts; location feeds the ambient "home"/weather context.
+            // Requested here too so the upgrade path (onboarding already done) still grants them.
+            Manifest.permission.READ_CONTACTS,
+            Manifest.permission.WRITE_CONTACTS,
+            Manifest.permission.ACCESS_FINE_LOCATION,
         )
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -174,26 +184,27 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen(
     state: AgentState,
     userText: String,
     agentText: String,
     onOrbClick: () -> Unit,
-    onSettingsClick: () -> Unit
+    onOpenAdmin: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = FaceBackground
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable { onOrbClick() }
-            ) {
-                AgentFace(state = state)
-            }
+        // Whole face is the control: short tap = talk, long-press = open Admin. No visible button —
+        // keeps the wall display clean and self-gates from kids/guests.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .combinedClickable(onClick = onOrbClick, onLongClick = onOpenAdmin)
+        ) {
+            AgentFace(state = state)
 
             // Live transcript, centred over the field (the user's words while listening,
             // Teya's reply while speaking).
@@ -206,21 +217,6 @@ fun MainScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 40.dp)
             )
-
-            IconButton(
-                onClick = onSettingsClick,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .systemBarsPadding()
-                    .padding(16.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "Settings",
-                    tint = Color.White.copy(alpha = 0.5f)
-                )
-            }
-
         }
     }
 }
@@ -249,9 +245,22 @@ private fun CenteredTranscript(
         }
     }
 
-    // Teya's reply streams token-by-token from the model (agentText updates live as chunks arrive),
-    // so render it as it comes, with a caret while she's still speaking.
-    val display = if (state == AgentState.SPEAKING && line.isNotEmpty()) "$line▌" else line
+    // Teya's reply arrives one spoken sentence at a time (synced to the audio). To smooth the jump
+    // from chunk to chunk, reveal her words character by character with a typewriter effect; other
+    // states (the heard transcript, prompts) show instantly. It self-resyncs at each sentence: if a
+    // sentence finishes typing before the next arrives, it simply waits.
+    val animate = state == AgentState.SPEAKING
+    var revealed by remember { mutableStateOf("") }
+    LaunchedEffect(line, animate) {
+        if (!animate) { revealed = line; return@LaunchedEffect }
+        if (!line.startsWith(revealed)) revealed = ""      // new reply → restart the typewriter
+        while (revealed.length < line.length) {
+            revealed = line.substring(0, revealed.length + 1)
+            delay(CHAR_REVEAL_MS)
+        }
+    }
+    val shown = if (animate) revealed else line
+    val display = if (state == AgentState.SPEAKING && shown.isNotEmpty()) "$shown▌" else shown
 
     val shadow = Shadow(color = Color.Black.copy(alpha = 0.85f), offset = Offset(0f, 2f), blurRadius = 30f)
 

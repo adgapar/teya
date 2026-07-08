@@ -23,6 +23,11 @@
     <!-- Family calendar via the CalendarContract provider (read "what's on" + create events). -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <!-- Household members live in ContactsContract (roster + call list); synced to Google Contacts
+         when the device has an account. GET_ACCOUNTS lets us target the Google account for sync. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
+    <uses-permission android:name="android.permission.GET_ACCOUNTS" />
 
     <application
         android:allowBackup="true"
@@ -47,9 +52,14 @@
             android:screenOrientation="landscape"
             android:theme="@style/Theme.Teya" />
 
+        <!-- Admin: opens in-place on the wall (landscape default). A manual in-app toggle rotates
+             to portrait for heavier text entry via setRequestedOrientation; configChanges keeps the
+             editor state alive across that rotate instead of recreating the activity. -->
         <activity
             android:name=".SettingsActivity"
             android:exported="false"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:theme="@style/Theme.Teya" />
 
         <service
