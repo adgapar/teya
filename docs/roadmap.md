@@ -12,6 +12,12 @@ _Last updated: 2026-07-07._
 - **Voice loop**, all Mistral, no disk: Voxtral STT → Mistral LLM (tool calling) → Voxtral TTS.
 - **TTS working**: correct `voice` field + base64-in-JSON decode; default voice **Marie – Happy** (`fr_marie_happy`).
 - **Streaming TTS**: `stream:true` + PCM SSE → `AudioTrack` (int16), ~0.8 s to first word, mp3 fallback.
+- **Streaming LLM**: `MistralClient.streamChat` reads the chat `chat.completion.chunk` SSE (mirrors the
+  TTS SSE reader), accumulating `delta.content` and assembling `delta.tool_calls` by `index`. The
+  harness (`respond()`) streams the reply text to the centred transcript **live** as tokens arrive
+  and queues each completed sentence to a parallel TTS consumer (Channel) so speech starts while the
+  model is still generating — killing the dead "thinking" pause. Tool rounds stay silent (THINKING)
+  and the tool loop is unchanged. *Built + installed; pending a live on-device test.*
 - **Conversation mode**: multi-turn, bounded history (context), silence timeout, re-entrancy guard (fixes audit C6).
 - **Tool-result feedback loop (M7)**: the harness now runs the tool the model asks for, feeds the
   result back, and lets the model phrase the spoken reply (bounded, multi-round). This is the

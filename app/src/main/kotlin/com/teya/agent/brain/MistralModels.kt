@@ -51,6 +51,53 @@ data class MistralFunctionCall(
     val arguments: String // Mistral returns arguments as a JSON string
 )
 
+// Streaming chat: same body as MistralChatRequest plus stream=true. No defaults (encodeDefaults=false
+// would drop them); `stream` must serialize as true.
+@Serializable
+data class MistralChatStreamRequest(
+    val model: String,
+    val messages: List<MistralMessage>,
+    val tools: List<MistralTool>? = null,
+    @SerialName("tool_choice") val toolChoice: String? = null,
+    val stream: Boolean,
+)
+
+// One `chat.completion.chunk` SSE payload. Defaults everywhere so partial/absent fields decode
+// cleanly (this is decode-only, so encodeDefaults doesn't apply).
+@Serializable
+data class MistralChatChunk(
+    val choices: List<MistralChunkChoice> = emptyList(),
+)
+
+@Serializable
+data class MistralChunkChoice(
+    val index: Int = 0,
+    val delta: MistralDelta = MistralDelta(),
+    @SerialName("finish_reason") val finishReason: String? = null,
+)
+
+@Serializable
+data class MistralDelta(
+    val role: String? = null,
+    val content: String? = null,
+    // Tool calls stream as fragments keyed by index: id/type/name arrive once, arguments in pieces.
+    @SerialName("tool_calls") val toolCalls: List<MistralDeltaToolCall>? = null,
+)
+
+@Serializable
+data class MistralDeltaToolCall(
+    val index: Int = 0,
+    val id: String? = null,
+    val type: String? = null,
+    val function: MistralDeltaFunction? = null,
+)
+
+@Serializable
+data class MistralDeltaFunction(
+    val name: String? = null,
+    val arguments: String? = null,
+)
+
 @Serializable
 data class MistralChatResponse(
     val id: String,

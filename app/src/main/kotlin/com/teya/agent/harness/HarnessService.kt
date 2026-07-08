@@ -28,6 +28,8 @@ import com.teya.agent.voice.VoicePipeline
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Instant
@@ -174,14 +176,7 @@ class HarnessService : Service() {
                 history.add(ChatMessage("user", text))
                 trimHistory(history)
 
-                updateUiState(AgentState.THINKING)
-                Log.d(TAG, "Thinking...")
-                val reply = generateReply(history)
-
-                updateUiState(AgentState.SPEAKING)
-                if (reply.isNotBlank()) {
-                    voicePipeline.textToSpeech(reply)
-                }
+                respond(history)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error in conversation", e)
@@ -223,25 +218,72 @@ class HarnessService : Service() {
      * [MAX_TOOL_ROUNDS]. Appends every turn (assistant tool-calls + tool results) to [history] so
      * context is preserved across the round-trip and into later turns.
      */
-    private suspend fun generateReply(history: MutableList<ChatMessage>): String {
+    private suspend fun respond(history: MutableList<ChatMessage>) {
         // Refresh live device state once per user turn; the same snapshot is used across any tool
         // rounds within this turn (time won't drift meaningfully over a few seconds).
         val liveContext = buildLiveContext()
         repeat(MAX_TOOL_ROUNDS) {
-            val response = brainClient.processText(history, liveContext)
-            if (response.toolCalls.isEmpty()) {
-                Log.d(TAG, "Brain response: ${response.speechResponse}")
-                sendDebug(agent = response.speechResponse.ifBlank { "(no reply)" })
-                history.add(ChatMessage(role = "assistant", content = response.speechResponse))
-                return response.speechResponse
+            updateUiState(AgentState.THINKING)
+
+            val fullText = StringBuilder()
+            var queued = 0            // chars already handed to the TTS consumer
+            var spoke = false         // did content start streaming this round?
+            val sentences = Channel<String>(Channel.UNLIMITED)
+            var response = BrainResponse("")
+
+            coroutineScope {
+                // Consumer: speak each completed sentence in order, in parallel with generation.
+                val speaker = launch {
+                    for (sentence in sentences) {
+                        try {
+                            voicePipeline.textToSpeech(sentence)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "TTS failed for sentence", e)
+                        }
+                    }
+                }
+
+                response = brainClient.streamChat(history, liveContext) { soFar ->
+                    if (!spoke) { spoke = true; updateUiState(AgentState.SPEAKING) }
+                    fullText.setLength(0); fullText.append(soFar)
+                    sendDebug(agent = soFar)                 // stream text to the UI live
+                    val cut = lastSentenceEnd(soFar, queued) // hand any completed sentence(s) to TTS
+                    if (cut > queued) {
+                        val chunk = soFar.substring(queued, cut).trim()
+                        if (chunk.isNotEmpty()) sentences.trySend(chunk)
+                        queued = cut
+                    }
+                }
+
+                // Speak the trailing partial sentence, then let the consumer drain and finish.
+                val rest = fullText.substring(queued).trim()
+                if (rest.isNotEmpty()) sentences.trySend(rest)
+                sentences.close()
             }
-            // The model asked for one or more tools. Record the assistant turn with ALL of them,
-            // then run each (sequentially in code — no races on shared stores) and feed every
-            // result back keyed by its tool_call_id before the next round.
-            sendDebug(agent = response.toolCalls.joinToString(", ") { "→ ${it.functionName}(${it.arguments})" })
+            // coroutineScope returned → all queued audio has finished playing.
+
+            if (response.toolCalls.isEmpty()) {
+                val finalText = fullText.toString()
+                when {
+                    finalText.isNotBlank() ->
+                        history.add(ChatMessage(role = "assistant", content = finalText))
+                    // Stream produced no text (e.g. a connection error surfaced as speechResponse):
+                    // speak it directly so the user isn't left in silence.
+                    response.speechResponse.isNotBlank() -> {
+                        updateUiState(AgentState.SPEAKING)
+                        sendDebug(agent = response.speechResponse)
+                        voicePipeline.textToSpeech(response.speechResponse)
+                        history.add(ChatMessage(role = "assistant", content = response.speechResponse))
+                    }
+                }
+                return
+            }
+
+            // Tools requested: record the assistant turn (with any spoken preamble + ALL calls),
+            // run each sequentially (no races on shared stores), feed results back, then loop.
             history.add(ChatMessage(
                 role = "assistant",
-                content = response.speechResponse.ifBlank { null },
+                content = fullText.toString().ifBlank { null },
                 toolCalls = response.toolCalls,
             ))
             for (toolCall in response.toolCalls) {
@@ -256,9 +298,31 @@ class HarnessService : Service() {
                 ))
             }
         }
+        // All tool rounds exhausted without a text answer.
         val fallback = "Sorry, I got a bit tangled up just now."
         history.add(ChatMessage(role = "assistant", content = fallback))
-        return fallback
+        updateUiState(AgentState.SPEAKING)
+        sendDebug(agent = fallback)
+        voicePipeline.textToSpeech(fallback)
+    }
+
+    /**
+     * Index just past the last sentence-ending punctuation (. ! ? or newline) at or after [from],
+     * so we only ever hand whole sentences to TTS. Returns [from] when no sentence has completed.
+     */
+    private fun lastSentenceEnd(text: String, from: Int): Int {
+        var end = from
+        var i = from
+        while (i < text.length) {
+            val c = text[i]
+            if (c == '.' || c == '!' || c == '?' || c == '\n') {
+                var j = i + 1
+                while (j < text.length && text[j] in charArrayOf('.', '!', '?', '"', '\'', ')')) j++
+                end = j
+            }
+            i++
+        }
+        return end
     }
 
     /**

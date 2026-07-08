@@ -67,27 +67,7 @@ class MistralClient(
 
     override suspend fun processText(history: List<ChatMessage>, liveContext: String?): BrainResponse {
         Log.d("MistralClient", "Processing ${history.size} message(s)")
-        val messages = ArrayList<MistralMessage>(history.size + 1)
-        // Fold live device state (time/location) into the system message so it's authoritative
-        // ground truth for the model — no tool round-trip needed to learn "now" or "where".
-        val system = if (liveContext.isNullOrBlank()) systemPrompt else "$systemPrompt\n\n$liveContext"
-        messages.add(MistralMessage(role = "system", content = system))
-        history.forEach { m ->
-            messages.add(MistralMessage(
-                role = m.role,
-                content = m.content,
-                toolCalls = m.toolCalls?.map { tc ->
-                    MistralToolCall(
-                        id = tc.id,
-                        type = "function",
-                        // Mistral wants arguments as a JSON string; re-encode the map we parsed.
-                        function = MistralFunctionCall(tc.functionName, json.encodeToString(tc.arguments)),
-                    )
-                },
-                toolCallId = m.toolCallId,
-                name = m.name,
-            ))
-        }
+        val messages = buildMistralMessages(history, liveContext)
         val httpResponse = httpClient.post("${baseUrl}/chat/completions") {
             header(HttpHeaders.Authorization, "Bearer ${cleanApiKey}")
             contentType(ContentType.Application.Json)
@@ -111,24 +91,141 @@ class MistralClient(
         // Execute EVERY tool the model asked for (parallel tool-calling), not just the first.
         val toolCalls = choice.message.toolCalls.orEmpty().map {
             Log.d("MistralClient", "Tool call detected: ${it.function.name} with ${it.function.arguments}")
-            // Parse into a JsonObject and flatten each value to a string, so numeric/boolean
-            // args (e.g. duration_seconds: 600) survive — decoding straight into Map<String,String>
-            // would reject a non-string value and drop the whole arg map.
-            val args = try {
-                json.decodeFromString<JsonObject>(it.function.arguments).mapValues { (_, v) ->
-                    (v as? JsonPrimitive)?.content ?: v.toString()
-                }
-            } catch (e: Exception) {
-                Log.e("MistralClient", "Failed to parse tool arguments", e)
-                emptyMap()
-            }
-            ToolCall(it.id, it.function.name, args)
+            ToolCall(it.id, it.function.name, parseToolArgs(it.function.arguments))
         }
 
         return BrainResponse(
             speechResponse = choice.message.content ?: "",
             toolCalls = toolCalls
         )
+    }
+
+    /** Build the Mistral message list from our provider-agnostic history + live device context. */
+    private fun buildMistralMessages(history: List<ChatMessage>, liveContext: String?): List<MistralMessage> {
+        val messages = ArrayList<MistralMessage>(history.size + 1)
+        // Fold live device state (time/location) into the system message so it's authoritative
+        // ground truth for the model — no tool round-trip needed to learn "now" or "where".
+        val system = if (liveContext.isNullOrBlank()) systemPrompt else "$systemPrompt\n\n$liveContext"
+        messages.add(MistralMessage(role = "system", content = system))
+        history.forEach { m ->
+            messages.add(MistralMessage(
+                role = m.role,
+                content = m.content,
+                toolCalls = m.toolCalls?.map { tc ->
+                    MistralToolCall(
+                        id = tc.id,
+                        type = "function",
+                        // Mistral wants arguments as a JSON string; re-encode the map we parsed.
+                        function = MistralFunctionCall(tc.functionName, json.encodeToString(tc.arguments)),
+                    )
+                },
+                toolCallId = m.toolCallId,
+                name = m.name,
+            ))
+        }
+        return messages
+    }
+
+    /**
+     * Parse a Mistral function-arguments JSON string into a flat String map. Values are flattened
+     * to strings so numeric/boolean args (e.g. duration_seconds: 600) survive — decoding straight
+     * into Map<String,String> would reject a non-string value and drop the whole map.
+     */
+    private fun parseToolArgs(argsJson: String): Map<String, String> = try {
+        json.decodeFromString<JsonObject>(argsJson.ifBlank { "{}" }).mapValues { (_, v) ->
+            (v as? JsonPrimitive)?.content ?: v.toString()
+        }
+    } catch (e: Exception) {
+        Log.e("MistralClient", "Failed to parse tool arguments: $argsJson", e)
+        emptyMap()
+    }
+
+    /** Accumulates one streamed tool call across chunks (id/name arrive once, arguments in pieces). */
+    private class ToolCallAcc {
+        var id: String? = null
+        var name: String? = null
+        val args = StringBuilder()
+    }
+
+    /**
+     * Streaming chat: reads the SSE `chat.completion.chunk` stream (mirrors [streamSpeechPcm]'s raw
+     * channel read). Appends `delta.content` and invokes [onText] with the text so far on each
+     * token; accumulates `delta.tool_calls` fragments by index. Returns the completed reply text +
+     * any tool calls, so the harness's tool loop is unchanged.
+     */
+    override suspend fun streamChat(
+        history: List<ChatMessage>,
+        liveContext: String?,
+        onText: suspend (String) -> Unit,
+    ): BrainResponse {
+        Log.d("MistralClient", "Streaming ${history.size} message(s)")
+        val messages = buildMistralMessages(history, liveContext)
+        val content = StringBuilder()
+        val toolAccs = sortedMapOf<Int, ToolCallAcc>()  // keyed by tool_call index
+        var gotAnything = false
+        var errored = false
+        try {
+            httpClient.preparePost("${baseUrl}/chat/completions") {
+                header(HttpHeaders.Authorization, "Bearer ${cleanApiKey}")
+                header(HttpHeaders.Accept, "text/event-stream")
+                contentType(ContentType.Application.Json)
+                setBody(MistralChatStreamRequest(
+                    model = "mistral-large-latest",
+                    messages = messages,
+                    tools = mistralTools,
+                    toolChoice = "auto",
+                    stream = true,
+                ))
+            }.execute { response ->
+                if (response.status != HttpStatusCode.OK) {
+                    Log.e("MistralClient", "LLM stream error: ${response.status} - ${response.bodyAsText()}")
+                    errored = true
+                    return@execute
+                }
+                val channel = response.bodyAsChannel()
+                while (!channel.isClosedForRead) {
+                    val line = channel.readUTF8Line() ?: break
+                    if (!line.startsWith("data:")) continue
+                    val data = line.removePrefix("data:").trim()
+                    if (data.isEmpty()) continue
+                    if (data == "[DONE]") break
+                    val chunk = try {
+                        json.decodeFromString<MistralChatChunk>(data)
+                    } catch (e: Exception) {
+                        Log.e("MistralClient", "Bad chat chunk: $data", e)
+                        continue
+                    }
+                    val delta = chunk.choices.firstOrNull()?.delta ?: continue
+                    delta.content?.let { piece ->
+                        if (piece.isNotEmpty()) {
+                            content.append(piece)
+                            gotAnything = true
+                            onText(content.toString())
+                        }
+                    }
+                    delta.toolCalls?.forEach { tc ->
+                        val acc = toolAccs.getOrPut(tc.index) { ToolCallAcc() }
+                        tc.id?.let { acc.id = it }
+                        tc.function?.name?.let { acc.name = it }
+                        tc.function?.arguments?.let { acc.args.append(it) }
+                        gotAnything = true
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("MistralClient", "streamChat failed", e)
+            errored = true
+        }
+
+        val toolCalls = toolAccs.values.mapNotNull { acc ->
+            val name = acc.name ?: return@mapNotNull null
+            Log.d("MistralClient", "Streamed tool call: $name(${acc.args})")
+            ToolCall(acc.id ?: "", name, parseToolArgs(acc.args.toString()))
+        }
+        if (!gotAnything && errored) {
+            return BrainResponse("I'm sorry, I'm having trouble connecting to my brain.")
+        }
+        return BrainResponse(speechResponse = content.toString(), toolCalls = toolCalls)
     }
 
     /**

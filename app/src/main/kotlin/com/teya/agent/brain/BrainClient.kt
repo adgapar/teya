@@ -8,6 +8,23 @@ interface BrainClient {
      * knows these facts and needn't spend a tool round-trip fetching them.
      */
     suspend fun processText(history: List<ChatMessage>, liveContext: String? = null): BrainResponse
+
+    /**
+     * Streaming variant of [processText]: [onText] is invoked with the reply text accumulated *so
+     * far* as tokens arrive, so the UI can render it live and the harness can speak it
+     * sentence-by-sentence in parallel. Returns the same completed [BrainResponse] (final text +
+     * any tool calls). Default implementation is non-streaming — one [processText] call, emitted
+     * once — so providers without streaming still work.
+     */
+    suspend fun streamChat(
+        history: List<ChatMessage>,
+        liveContext: String? = null,
+        onText: suspend (String) -> Unit,
+    ): BrainResponse {
+        val response = processText(history, liveContext)
+        if (response.speechResponse.isNotBlank()) onText(response.speechResponse)
+        return response
+    }
 }
 
 /**
