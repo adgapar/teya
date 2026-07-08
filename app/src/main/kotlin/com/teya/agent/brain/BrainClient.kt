@@ -25,6 +25,12 @@ interface BrainClient {
         if (response.speechResponse.isNotBlank()) onText(response.speechResponse)
         return response
     }
+
+    /**
+     * Embed [text] into a vector for memory RAG (cosine over the general pool). Returns null if the
+     * provider has no embedding model or the call fails — callers fall back to keyword search.
+     */
+    suspend fun embed(text: String): FloatArray? = null
 }
 
 /**

@@ -285,10 +285,28 @@ object AgentTools {
         },
     )
 
+    val searchMemory = ToolSpec(
+        name = "search_memory",
+        description = "Search your saved family memories for something that is NOT about a specific " +
+            "person and isn't already in the 'What you remember' list shown to you — a household fact " +
+            "or note the family once asked you to remember (e.g. 'the wifi password', 'where the spare " +
+            "key is'). Use it when they ask about something you may have been told before but don't see.",
+        parameters = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {
+                putJsonObject("query") {
+                    put("type", "string")
+                    put("description", "What to look for, e.g. 'wifi password' or 'spare key'.")
+                }
+            }
+            putJsonArray("required") { add("query") }
+        },
+    )
+
     /** All tools currently exposed to the brain. */
     val all: List<ToolSpec> = listOf(
         placeCall, setTimer, cancelTimer, setAlarm, cancelAlarm, addEvent, getEvents, cancelEvent,
         addToShoppingList, removeFromShoppingList, readShoppingList, clearShoppingList,
-        remember, forget,
+        remember, forget, searchMemory,
     )
 }

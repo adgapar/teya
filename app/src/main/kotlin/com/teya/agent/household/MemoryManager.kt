@@ -2,6 +2,9 @@ package com.teya.agent.household
 
 import android.content.Context
 import com.teya.agent.safety.TeyaDatabase
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import kotlin.math.sqrt
 
 /**
  * Teya's durable memory: append-only [MemoryEntry] rows retrieved two ways —
@@ -27,6 +30,7 @@ class MemoryManager(context: Context) {
         subjectType: String = SUBJECT_GENERAL,
         subjectKey: String? = null,
         category: String? = null,
+        embedding: FloatArray? = null,
     ): Long {
         val clean = text.trim()
         if (clean.isEmpty()) return -1L
@@ -40,7 +44,7 @@ class MemoryManager(context: Context) {
                 category = normalizeCategory(category),
                 strength = 1.0f,
                 lastAccessedAt = now,
-                embedding = null,
+                embedding = embedding?.toBytes(),
                 tier = TIER_HOT,
             )
         )
@@ -63,6 +67,37 @@ class MemoryManager(context: Context) {
         return hits.size
     }
 
+    /**
+     * Semantic search over the general pool (RAG) for [query]. With a [queryEmbedding], ranks embedded
+     * rows by cosine (keeping only those above [MIN_SIM]); with none, or if no row is embedded, falls
+     * back to a keyword contains-match. Reinforces the hits ("use it or lose it") and returns up to
+     * [topK] rows, strongest first. Persona memory isn't searched here — it's always in context.
+     */
+    suspend fun search(query: String, queryEmbedding: FloatArray?, topK: Int = 5): List<MemoryEntry> {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) return emptyList()
+        val pool = dao.general()
+        if (pool.isEmpty()) return emptyList()
+
+        val ranked = if (queryEmbedding != null) {
+            val scored = pool.mapNotNull { e ->
+                val emb = e.embedding?.toFloatArray() ?: return@mapNotNull null
+                e to cosine(queryEmbedding, emb)
+            }
+            if (scored.isEmpty()) keywordMatch(pool, q, topK)
+            else scored.filter { it.second >= MIN_SIM }.sortedByDescending { it.second }.take(topK).map { it.first }
+        } else {
+            keywordMatch(pool, q, topK)
+        }
+
+        val now = System.currentTimeMillis()
+        ranked.forEach { dao.reinforce(it.id, (it.strength + REINFORCE_BOOST).coerceAtMost(1f), now) }
+        return ranked
+    }
+
+    private fun keywordMatch(pool: List<MemoryEntry>, q: String, topK: Int): List<MemoryEntry> =
+        pool.filter { it.text.lowercase().contains(q) }.take(topK)
+
     /** Everything Teya has stored, newest first — for the Admin review screen. */
     suspend fun all(): List<MemoryEntry> = dao.getAll()
 
@@ -76,21 +111,22 @@ class MemoryManager(context: Context) {
      * re-read Contacts.
      */
     suspend fun memoryContextBlock(members: List<Member>): String {
-        val hot = dao.hot()
-        if (hot.isEmpty()) return ""
+        // Only PERSONA memory (about a member) is always-loaded. General-pool memories are
+        // retrieved on demand via search() — keeping this block bounded no matter how much the
+        // family accumulates over a year.
+        val persona = dao.hot().filter { it.subjectType == SUBJECT_CONTACT }
+        if (persona.isEmpty()) return ""
 
         val nameByKey = members.mapNotNull { m -> m.lookupKey?.let { it to m.displayName } }.toMap()
         val byMember = LinkedHashMap<String, MutableList<String>>()   // displayName -> facts
-        val general = mutableListOf<String>()
-        hot.forEach { e ->
-            val name = if (e.subjectType == SUBJECT_CONTACT) nameByKey[e.subjectKey] else null
-            if (name != null) byMember.getOrPut(name) { mutableListOf() }.add(e.text)
-            else general.add(e.text)
+        persona.forEach { e ->
+            val name = nameByKey[e.subjectKey] ?: return@forEach   // member deleted → skip
+            byMember.getOrPut(name) { mutableListOf() }.add(e.text)
         }
+        if (byMember.isEmpty()) return ""
 
         val sb = StringBuilder("What you remember (authoritative — durable memory about this family):\n")
         byMember.forEach { (name, facts) -> sb.append("- $name: ").append(facts.joinToString("; ")).append("\n") }
-        if (general.isNotEmpty()) sb.append("- General: ").append(general.joinToString("; ")).append("\n")
         return sb.toString().trimEnd()
     }
 
@@ -112,5 +148,31 @@ class MemoryManager(context: Context) {
 
         const val TIER_HOT = "HOT"
         const val TIER_COLD = "COLD"
+
+        /** How much a search hit bumps strength (reinforcement); capped at 1.0. */
+        private const val REINFORCE_BOOST = 0.25f
+        /** Minimum cosine similarity for a semantic search hit to count (filters out junk matches). */
+        private const val MIN_SIM = 0.35f
     }
+}
+
+/** float32-LE round-trip for storing an embedding vector in a Room BLOB column. */
+private fun FloatArray.toBytes(): ByteArray {
+    val buf = ByteBuffer.allocate(size * 4).order(ByteOrder.LITTLE_ENDIAN)
+    forEach { buf.putFloat(it) }
+    return buf.array()
+}
+
+private fun ByteArray.toFloatArray(): FloatArray {
+    val buf = ByteBuffer.wrap(this).order(ByteOrder.LITTLE_ENDIAN)
+    return FloatArray(size / 4) { buf.float }
+}
+
+/** Cosine similarity in [-1, 1]; 0 for a size mismatch or a zero vector. */
+private fun cosine(a: FloatArray, b: FloatArray): Float {
+    if (a.size != b.size) return 0f
+    var dot = 0f; var na = 0f; var nb = 0f
+    for (i in a.indices) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i] }
+    val denom = sqrt(na) * sqrt(nb)
+    return if (denom == 0f) 0f else dot / denom
 }

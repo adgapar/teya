@@ -127,6 +127,24 @@ data class MistralTranscriptionResponse(
     val text: String
 )
 
+// Embeddings (mistral-embed) for memory RAG. No defaults — encodeDefaults=false would drop them.
+@Serializable
+data class MistralEmbedRequest(
+    val model: String,
+    val input: List<String>,
+)
+
+@Serializable
+data class MistralEmbedResponse(
+    val data: List<MistralEmbedData> = emptyList(),
+)
+
+@Serializable
+data class MistralEmbedData(
+    val embedding: List<Float> = emptyList(),
+    val index: Int = 0,
+)
+
 @Serializable
 data class MistralTTSResponse(
     // /audio/speech returns the audio base64-encoded inside JSON, not raw bytes.

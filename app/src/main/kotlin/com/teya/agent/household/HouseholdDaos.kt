@@ -31,9 +31,9 @@ interface MemoryDao {
     @Query("SELECT * FROM memory_entry WHERE tier = 'HOT' ORDER BY strength DESC, addedAt DESC")
     suspend fun hot(): List<MemoryEntry>
 
-    /** General-pool rows with an embedding — the candidate set brute-force cosine runs over (RAG). */
-    @Query("SELECT * FROM memory_entry WHERE subjectType = 'GENERAL' AND embedding IS NOT NULL")
-    suspend fun generalWithEmbeddings(): List<MemoryEntry>
+    /** All general-pool rows (not about a specific person) — the RAG search set (brute-force cosine). */
+    @Query("SELECT * FROM memory_entry WHERE subjectType = 'GENERAL'")
+    suspend fun general(): List<MemoryEntry>
 
     @Insert
     suspend fun insert(entry: MemoryEntry): Long

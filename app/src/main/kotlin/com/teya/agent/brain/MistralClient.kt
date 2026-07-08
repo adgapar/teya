@@ -92,6 +92,26 @@ class MistralClient(
         return response.text
     }
 
+    /** Embed [text] for memory RAG via mistral-embed; null on failure (caller falls back to keyword). */
+    override suspend fun embed(text: String): FloatArray? {
+        if (text.isBlank()) return null
+        return try {
+            val resp = httpClient.post("${baseUrl}/embeddings") {
+                header(HttpHeaders.Authorization, "Bearer ${cleanApiKey}")
+                contentType(ContentType.Application.Json)
+                setBody(MistralEmbedRequest(model = "mistral-embed", input = listOf(text)))
+            }
+            if (resp.status != HttpStatusCode.OK) {
+                Log.e("MistralClient", "Embed error: ${resp.status} - ${resp.bodyAsText()}")
+                return null
+            }
+            resp.body<MistralEmbedResponse>().data.firstOrNull()?.embedding?.toFloatArray()
+        } catch (e: Exception) {
+            Log.e("MistralClient", "Embed failed", e)
+            null
+        }
+    }
+
     override suspend fun processText(history: List<ChatMessage>, liveContext: String?): BrainResponse {
         Log.d("MistralClient", "Processing ${history.size} message(s)")
         val messages = buildMistralMessages(history, liveContext)
