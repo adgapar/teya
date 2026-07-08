@@ -5,6 +5,7 @@ import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
 import android.util.Log
@@ -15,7 +16,8 @@ import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 
 /**
- * openWakeWord "hey_jarvis" detector.
+ * openWakeWord "hey_jarvis" detector — and, piggybacking on the same always-open mic stream, the
+ * raw audio feed for real barge-in speech detection.
  *
  * openWakeWord is a 3-model chain, run in series on a rolling buffer of 16 kHz mono audio:
  *
@@ -33,10 +35,23 @@ import java.nio.channels.FileChannel
  * pre-trained hey_jarvis classifier is CC BY-NC-SA 4.0 (NON-commercial). For a shipping product
  * this classifier must be replaced with a self-trained one — same [1,1536]→[1,1] tensor slot,
  * no code change. See THIRD_PARTY_MODELS.md.
+ *
+ * Barge-in: interrupting Teya mid-reply needs to react to the user just *talking* (any words,
+ * "stop", whatever), the way real voice agents do it — not require repeating a wake phrase, and
+ * not a crude loudness guess either (that was tried, tuned blind, and never fired in testing).
+ * Detection runs a local Silero VAD (see VoicePipeline.forwardArmedChunk, voice/vad/SileroVad.kt)
+ * on these same raw chunks — an earlier attempt streamed them to Mistral's Voxtral Realtime STT
+ * instead, but that never produced a single transcription event live (see
+ * thoughts/shared/research/2026-07-08-barge-in-vad-options.md). Android can't reliably open a
+ * second concurrent `AudioRecord` on top of this one, so instead of a separate capture we tap the
+ * same raw chunk stream here via [onArmedAudioChunk], gated by [bargeInArmed] so chunks only flow
+ * out while the harness has actually armed it (mid-conversation, while Teya is thinking/speaking —
+ * never while idle, and never during her own command capture).
  */
 class WakeWordEngine(
     private val context: Context,
-    private val onDetected: () -> Unit
+    private val onDetected: () -> Unit,
+    private val onArmedAudioChunk: (ShortArray) -> Unit
 ) {
     companion object {
         private const val TAG = "WakeWordEngine"
@@ -89,9 +104,15 @@ class WakeWordEngine(
     private var peakScore = 0f       // diagnostic
     private var scoreLogCounter = 0  // diagnostic
 
+    // Barge-in audio forwarding. [bargeInArmed] is toggled by the harness (via VoicePipeline) —
+    // true only while a conversation turn is thinking/speaking, so idle ambient talk near the
+    // device is never even sent anywhere.
+    @Volatile var bargeInArmed = false
+
     private var audioRecord: AudioRecord? = null
     private var agc: AutomaticGainControl? = null
     private var noiseSuppressor: NoiseSuppressor? = null
+    private var echoCanceler: AcousticEchoCanceler? = null
     @Volatile private var isRunning = false
 
     init {
@@ -142,7 +163,12 @@ class WakeWordEngine(
     private fun directFloatBuffer(floats: Int): ByteBuffer =
         ByteBuffer.allocateDirect(floats * 4).order(ByteOrder.nativeOrder())
 
-    /** Attach AGC + noise suppression to the capture session to help far-field detection. */
+    /**
+     * Attach AGC + noise suppression to the capture session (AEC is created but deliberately kept
+     * disabled — see the AcousticEchoCanceler branch below for why). This matters because this
+     * engine now keeps listening while Teya is talking (barge-in — see HarnessService), so the mic
+     * is picking up her own TTS bleeding out of the speaker.
+     */
     private fun enableAudioEffects(sessionId: Int) {
         try {
             if (AutomaticGainControl.isAvailable()) {
@@ -156,6 +182,16 @@ class WakeWordEngine(
                 Log.d(TAG, "NoiseSuppressor available, enabled=${noiseSuppressor?.enabled}")
             } else {
                 Log.d(TAG, "NoiseSuppressor NOT available on this device")
+            }
+            if (AcousticEchoCanceler.isAvailable()) {
+                // Left ON as a normal echo/noise cleanup effect. It's not barge-in's self-echo
+                // defense (see VoicePipeline.forwardArmedChunk, which never runs the VAD while our
+                // own audio is playing) — this device's AEC implementation isn't reliable enough
+                // for that; see thoughts/shared/research/2026-07-08-barge-in-vad-options.md.
+                echoCanceler = AcousticEchoCanceler.create(sessionId)?.also { it.setEnabled(true) }
+                Log.d(TAG, "AEC available, enabled=${echoCanceler?.enabled}")
+            } else {
+                Log.d(TAG, "AEC NOT available on this device — barge-in relies on the playback-state gate in VoicePipeline instead")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to enable audio effects", e)
@@ -212,7 +248,12 @@ class WakeWordEngine(
                         if (n > 0) filled += n
                         else if (n < 0) { Log.e(TAG, "AudioRecord read error: $n"); break }
                     }
-                    if (filled == CHUNK) processChunk(chunk)
+                    if (filled == CHUNK) {
+                        // Copy: forwarding hands off to an async consumer (a channel → coroutine →
+                        // WebSocket send), while `chunk` itself gets overwritten next iteration.
+                        if (bargeInArmed) onArmedAudioChunk(chunk.copyOf())
+                        processChunk(chunk)
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Recording loop error", e)
@@ -312,8 +353,10 @@ class WakeWordEngine(
         isRunning = false
         try { agc?.release() } catch (_: Exception) {}
         try { noiseSuppressor?.release() } catch (_: Exception) {}
+        try { echoCanceler?.release() } catch (_: Exception) {}
         agc = null
         noiseSuppressor = null
+        echoCanceler = null
         try {
             audioRecord?.stop()
             audioRecord?.release()

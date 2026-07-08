@@ -18,6 +18,7 @@ import com.teya.agent.R
 import com.teya.agent.brain.*
 import com.teya.agent.calendar.CalendarManager
 import com.teya.agent.household.HouseholdManager
+import com.teya.agent.household.MemoryManager
 import com.teya.agent.persona.AgentTools
 import com.teya.agent.persona.TeyaPersona
 import com.teya.agent.safety.ContactAllowlistManager
@@ -28,9 +29,11 @@ import com.teya.agent.ui.face.AgentState
 import com.teya.agent.voice.VoicePipeline
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Instant
@@ -52,6 +55,7 @@ class HarnessService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val TAG = "HarnessService"
         private const val FOLLOWUP_LISTEN_MS = 8000  // wait this long for a follow-up before ending
+        private const val BARGE_IN_GAP_MS = 900L      // deliberate pause after each sentence — see runConversation's speaker loop
         private const val MAX_HISTORY = 10           // bounded conversation history sent to the model
         private const val MAX_TOOL_ROUNDS = 4        // cap tool→result→model loops per user turn
     }
@@ -59,6 +63,8 @@ class HarnessService : Service() {
     private val job = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.Main + job)
     private val conversationActive = AtomicBoolean(false)
+    // The in-flight "think + speak" round, if any — cancelled on barge-in (see onTrigger).
+    @Volatile private var activeTurnJob: Job? = null
 
     private lateinit var voicePipeline: VoicePipeline
     private lateinit var brainClient: BrainClient
@@ -68,6 +74,7 @@ class HarnessService : Service() {
     private lateinit var calendarManager: CalendarManager
     private lateinit var shoppingList: ShoppingListManager
     private lateinit var householdManager: HouseholdManager
+    private lateinit var memoryManager: MemoryManager
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -84,6 +91,7 @@ class HarnessService : Service() {
         calendarManager = CalendarManager(this)
         shoppingList = ShoppingListManager(this)
         householdManager = HouseholdManager(this)
+        memoryManager = MemoryManager(this)
 
         val apiKey = configManager.mistralApiKey
         if (!apiKey.isNullOrBlank()) {
@@ -132,10 +140,13 @@ class HarnessService : Service() {
     }
 
     private fun startAgentLoop() {
-        voicePipeline.startListening {
-            Log.d(TAG, "Wake word detected!")
-            onTrigger()
-        }
+        voicePipeline.startListening(
+            onWakeWord = {
+                Log.d(TAG, "Wake word detected!")
+                onTrigger()
+            },
+            onBargeIn = { onBargeIn() }
+        )
     }
 
     /** Entry point for a tap or wake-word trigger. Guards against overlapping conversations. */
@@ -154,23 +165,42 @@ class HarnessService : Service() {
     }
 
     /**
+     * Real barge-in: the user started talking (any words — "stop" or otherwise) while Teya is
+     * thinking/speaking, detected by a local Silero VAD running on the mic stream (see
+     * [com.teya.agent.voice.vad.SileroVad]) rather than a wake phrase or a loudness guess — armed
+     * only during that window (never while idle). Stop audio immediately and cancel the in-flight
+     * turn; [runConversation]'s loop then goes straight back to listening for what they're saying.
+     */
+    private fun onBargeIn() {
+        if (!conversationActive.get()) return // nothing to interrupt
+        Log.d(TAG, "Barge-in — interrupting Teya")
+        voicePipeline.interrupt()
+        activeTurnJob?.cancel()
+    }
+
+    /**
      * A multi-turn conversation: prompt once, then keep listening for follow-ups (no wake word
      * needed) until the user is silent for FOLLOWUP_LISTEN_MS. History is kept so the model has
-     * context across turns. The wake-word recorder is paused for the whole session.
+     * context across turns. Barge-in detection is armed only while Teya is thinking/speaking —
+     * never during command capture (the wake-word engine is paused there anyway, mic needed
+     * exclusively) or once the conversation ends.
      */
     private suspend fun runConversation() {
         val history = mutableListOf<ChatMessage>()
-        voicePipeline.pauseWakeWord()
         try {
             updateUiState(AgentState.SPEAKING)
             Log.d(TAG, "Prompting...")
+            voicePipeline.setBargeInArmed(true)
             voicePipeline.textToSpeech("Yes?")
 
             while (true) {
+                voicePipeline.setBargeInArmed(false)
+                voicePipeline.pauseWakeWord()
                 updateUiState(AgentState.LISTENING)
                 sendDebug(user = "…", agent = "")
                 Log.d(TAG, "Listening for command...")
-                val text = voicePipeline.listenForCommand(FOLLOWUP_LISTEN_MS)
+                val text = voicePipeline.listenForCommand(FOLLOWUP_LISTEN_MS, sttContextBias())
+                voicePipeline.resumeWakeWord()
                 if (text.isBlank()) {
                     Log.d(TAG, "No follow-up heard — ending conversation")
                     break
@@ -180,14 +210,23 @@ class HarnessService : Service() {
                 history.add(ChatMessage("user", text))
                 trimHistory(history)
 
+                voicePipeline.setBargeInArmed(true) // Teya's about to think/speak — arm for interruption
                 respond(history)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error in conversation", e)
         } finally {
-            voicePipeline.resumeWakeWord()
+            voicePipeline.setBargeInArmed(false)
+            voicePipeline.resumeWakeWord() // back to idle wake-word listening for the next trigger
             updateUiState(AgentState.IDLE)
         }
+    }
+
+    /** Vocabulary hints for STT — see [MistralClient.transcribe]'s `contextBias`. */
+    private suspend fun sttContextBias(): List<String> {
+        val members = householdManager.members()
+        val names = members.flatMap { listOf(it.first, it.last) + it.aliases }.filter { it.isNotBlank() }
+        return (names + householdManager.languages()).distinct()
     }
 
     /**
@@ -226,7 +265,8 @@ class HarnessService : Service() {
         // Refresh live device state once per user turn; the same snapshot is used across any tool
         // rounds within this turn (time won't drift meaningfully over a few seconds).
         val liveContext = buildLiveContext()
-        repeat(MAX_TOOL_ROUNDS) {
+        var interrupted = false
+        for (round in 0 until MAX_TOOL_ROUNDS) {
             updateUiState(AgentState.THINKING)
 
             val fullText = StringBuilder()
@@ -235,42 +275,69 @@ class HarnessService : Service() {
             val sentences = Channel<String>(Channel.UNLIMITED)
             var response = BrainResponse("")
 
-            coroutineScope {
-                // Consumer: speak each completed sentence in order, in parallel with generation.
-                // The transcript is revealed HERE — one sentence at a time, as each starts playing —
-                // so the caption tracks the voice. (Driving it off the model's token stream instead
-                // makes the text race far ahead of the audio, since generation is much faster than TTS.)
-                val spokenSoFar = StringBuilder()
-                val speaker = launch {
-                    for (sentence in sentences) {
-                        if (!spoke) { spoke = true; updateUiState(AgentState.SPEAKING) }
-                        if (spokenSoFar.isNotEmpty()) spokenSoFar.append(' ')
-                        spokenSoFar.append(sentence)
-                        sendDebug(agent = spokenSoFar.toString())   // reveal as this sentence is voiced
-                        try {
-                            voicePipeline.textToSpeech(sentence)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "TTS failed for sentence", e)
+            // Run this round as its own cancellable job: a barge-in (repeated wake word while
+            // Teya is thinking/speaking — see onTrigger) cancels it directly, which unwinds the
+            // streaming LLM read and the sentence loop below without tearing down the whole
+            // conversation. join() never throws even if cancelled, so this is safe to await plainly.
+            val roundJob = scope.launch {
+                coroutineScope {
+                    // Consumer: speak each completed sentence in order, in parallel with generation.
+                    // The transcript is revealed HERE — one sentence at a time, as each starts playing —
+                    // so the caption tracks the voice. (Driving it off the model's token stream instead
+                    // makes the text race far ahead of the audio, since generation is much faster than TTS.)
+                    val spokenSoFar = StringBuilder()
+                    val speaker = launch {
+                        for (sentence in sentences) {
+                            if (!spoke) { spoke = true; updateUiState(AgentState.SPEAKING) }
+                            if (spokenSoFar.isNotEmpty()) spokenSoFar.append(' ')
+                            spokenSoFar.append(sentence)
+                            sendDebug(agent = spokenSoFar.toString())   // reveal as this sentence is voiced
+                            try {
+                                voicePipeline.textToSpeech(sentence)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "TTS failed for sentence", e)
+                            }
+                            if (voicePipeline.isInterrupted()) break // barge-in — stop queuing more speech
+                            // Barge-in only listens between sentences, not during them (see
+                            // VoicePipeline.forwardArmedChunk) — back-to-back playback otherwise
+                            // leaves no real gap to react to. Cancelled instantly via activeTurnJob
+                            // the moment barge-in fires.
+                            Log.d(TAG, "Barge-in: listening gap open (${BARGE_IN_GAP_MS}ms)")
+                            delay(BARGE_IN_GAP_MS)
+                            Log.d(TAG, "Barge-in: listening gap closed")
+                            if (voicePipeline.isInterrupted()) break
                         }
                     }
-                }
 
-                response = brainClient.streamChat(history, liveContext) { soFar ->
-                    fullText.setLength(0); fullText.append(soFar)
-                    val cut = lastSentenceEnd(soFar, queued) // hand any completed sentence(s) to TTS
-                    if (cut > queued) {
-                        val chunk = soFar.substring(queued, cut).trim()
-                        if (chunk.isNotEmpty()) sentences.trySend(chunk)
-                        queued = cut
+                    response = brainClient.streamChat(history, liveContext) { soFar ->
+                        fullText.setLength(0); fullText.append(soFar)
+                        val cut = lastSentenceEnd(soFar, queued) // hand any completed sentence(s) to TTS
+                        if (cut > queued) {
+                            val chunk = soFar.substring(queued, cut).trim()
+                            if (chunk.isNotEmpty()) sentences.trySend(chunk)
+                            queued = cut
+                        }
                     }
-                }
 
-                // Queue the trailing partial sentence, then let the consumer drain and finish.
-                val rest = fullText.substring(queued).trim()
-                if (rest.isNotEmpty()) sentences.trySend(rest)
-                sentences.close()
+                    // Queue the trailing partial sentence, then let the consumer drain and finish.
+                    val rest = fullText.substring(queued).trim()
+                    if (rest.isNotEmpty()) sentences.trySend(rest)
+                    sentences.close()
+                }
             }
-            // coroutineScope returned → all queued audio has finished playing.
+            activeTurnJob = roundJob
+            roundJob.join()
+            activeTurnJob = null
+            // coroutineScope returned → all queued audio has finished playing (or was cut short).
+
+            if (voicePipeline.consumeInterrupted()) {
+                Log.d(TAG, "Turn interrupted by barge-in — abandoning this round, no tool calls run")
+                if (fullText.isNotBlank()) {
+                    history.add(ChatMessage(role = "assistant", content = fullText.toString()))
+                }
+                interrupted = true
+                break
+            }
 
             if (response.toolCalls.isEmpty()) {
                 val finalText = fullText.toString()
@@ -308,6 +375,7 @@ class HarnessService : Service() {
                 ))
             }
         }
+        if (interrupted) return
         // All tool rounds exhausted without a text answer.
         val fallback = "Sorry, I got a bit tangled up just now."
         history.add(ChatMessage(role = "assistant", content = fallback))
@@ -497,6 +565,36 @@ class HarnessService : Service() {
             val n = shoppingList.clear()
             if (n == 0) "The shopping list was already empty." else "Cleared the shopping list ($n items)."
         }
+        "remember" -> {
+            val fact = tool.arguments["fact"]?.trim().orEmpty()
+            if (fact.isEmpty()) {
+                "I need to know what to remember."
+            } else {
+                // Link to a member when `about` names one; otherwise store it as a family-wide fact.
+                val about = tool.arguments["about"]?.trim().orEmpty()
+                val member = about.takeIf { it.isNotEmpty() }
+                    ?.let { householdManager.resolveMember(it, householdManager.members()) }
+                val id = if (member?.lookupKey != null) {
+                    memoryManager.remember(fact, MemoryManager.SUBJECT_CONTACT, member.lookupKey, tool.arguments["category"])
+                } else {
+                    memoryManager.remember(fact, MemoryManager.SUBJECT_GENERAL, null, tool.arguments["category"])
+                }
+                if (id < 0) "I couldn't save that."
+                else "Saved to memory" + (member?.displayName?.let { " (about $it)" } ?: "") + "."
+            }
+        }
+        "forget" -> {
+            val fact = tool.arguments["fact"]?.trim().orEmpty()
+            if (fact.isEmpty()) {
+                "Tell me what to forget."
+            } else {
+                val about = tool.arguments["about"]?.trim().orEmpty()
+                val member = about.takeIf { it.isNotEmpty() }
+                    ?.let { householdManager.resolveMember(it, householdManager.members()) }
+                val n = memoryManager.forget(fact, member?.lookupKey)
+                if (n == 0) "I didn't have anything like that saved." else "Forgotten."
+            }
+        }
         else -> "Unknown tool: ${tool.functionName}"
     }
 
@@ -559,10 +657,17 @@ class HarnessService : Service() {
             - Active timers: $timersLine
             - Today's remaining events: $eventsLine
         """.trimIndent()
-        // The household profile (who the family is + reply-language directive) rides in the same
-        // ambient block, rebuilt each turn so Admin edits apply with no restart. Empty until set up.
-        val profile = householdManager.profileContextBlock()
-        val full = if (profile.isBlank()) context else "$context\n\n$profile"
+        // The household profile (who the family is + reply-language directive) and Teya's durable
+        // memory ("what you remember") ride in the same ambient block, rebuilt each turn so Admin
+        // edits apply with no restart. Members are loaded once and shared by both. Empty until set up.
+        val members = householdManager.members()
+        val profile = householdManager.profileContextBlock(members)
+        val memory = memoryManager.memoryContextBlock(members)
+        val full = buildString {
+            append(context)
+            if (profile.isNotBlank()) append("\n\n").append(profile)
+            if (memory.isNotBlank()) append("\n\n").append(memory)
+        }
         // TODO(H2): gate behind BuildConfig.DEBUG — this line logs location (PII).
         Log.d(TAG, "Live context: ${full.replace("\n", " | ")}")
         full

@@ -4,7 +4,7 @@ Living status doc. Design lives in [ARCHITECTURE.md](../ARCHITECTURE.md); the fu
 is [thoughts/shared/research/2026-07-06-project-audit.md](../thoughts/shared/research/2026-07-06-project-audit.md).
 Audit IDs (C1, H2, …) below refer to that file.
 
-_Last updated: 2026-07-08._
+_Last updated: 2026-07-08 (barge-in interruption)._
 
 ## ✅ Done
 
@@ -68,6 +68,47 @@ _Last updated: 2026-07-08._
   Teya's reply while speaking. Dead `OrbStyle` scaffolding removed; Settings back to API-key only.
   *Built + compiles; pending a live on-device test.* Direction locked via an interactive preview.
 - Repo hygiene: `.gitignore` build output + `.env`; `.env.example`; voice catalog (`docs/mistral-voices.md`).
+- **Barge-in interruption + mishearing awareness**: fixes the "Teya rambled on about the wrong
+  thing and couldn't be stopped" failure (STT misheard a son's name as "Ireland" and she kept
+  talking). Two independent changes:
+  - **Barge-in reacts to real speech, not a wake phrase** — deliberately: interrupting has to
+    react to the user just *talking* ("stop!" or anything else), the way real voice agents do it.
+    Went through three detectors before landing on one that actually fires (full trail:
+    `thoughts/shared/research/2026-07-08-barge-in-vad-options.md`): a plain RMS-energy check never
+    fired even on loud deliberate speech (loudness ≠ speech); streaming raw audio to Mistral's
+    Voxtral Realtime STT over a WebSocket also never produced a single transcription event across
+    several live tests, including gain and NoiseSuppressor-off fixes — root cause unresolved, but
+    the network dependency and cost weren't worth chasing further. Landed on **Silero VAD, run
+    fully on-device** (`voice/vad/SileroVad.kt`, an original implementation of Silero's own
+    streaming algorithm against its ONNX model, `silero_vad.onnx` from
+    [snakers4/silero-vad](https://github.com/snakers4/silero-vad), MIT — see
+    `THIRD_PARTY_MODELS.md`), a small stateful RNN purpose-built for speech/non-speech
+    discrimination, with debounce hysteresis on top to avoid firing on one-frame spikes.
+  - `WakeWordEngine` forwards its raw always-open-mic chunks via `onArmedAudioChunk`, gated by
+    `bargeInArmed` — Android can't reliably open a second concurrent `AudioRecord`, so this taps
+    the same stream rather than using a separate recorder. `VoicePipeline.forwardArmedChunk`
+    reassembles the 1280-sample chunks into Silero's 512-sample frames (they don't divide evenly),
+    applies the same software gain `WakeWordEngine` applies before its own classifier (this device
+    has no hardware AGC), and checks each frame synchronously — cheap enough to run inline on the
+    capture thread, no coroutine/channel hand-off needed. Armed only while Teya is
+    thinking/speaking (`VoicePipeline.setBargeInArmed`, driven by `HarnessService.runConversation`)
+    — never idle, never during actual command capture (wake word is paused there anyway).
+    Firing calls `HarnessService.onBargeIn()`: `VoicePipeline.interrupt()` cuts the
+    `AudioTrack`/`MediaPlayer` immediately, and the in-flight think+speak round (its own
+    cancellable `Job`, `activeTurnJob`) is cancelled — no tool calls fire off an interrupted turn.
+    **No VAD choice solves self-echo**: `AcousticEchoCanceler` (added alongside existing AGC +
+    NoiseSuppressor) is still the only defense against the mic picking up Teya's own voice off the
+    speaker; this device's AEC effectiveness is unverified. Threshold/debounce
+    (`SileroVad(threshold=0.8, speechDurationMs=100, silenceDurationMs=300)`, set in
+    `VoicePipeline.setBargeInArmed`) are untuned starting points; needs live calibration.
+  - **Mishearing awareness** (`TeyaPersona`): explicit instruction to sanity-check the transcript
+    (does a name match the household profile? does the request cohere?) and briefly confirm/repeat
+    back instead of confidently answering on a probable mis-transcription. Prompt-only — no STT
+    changes.
+  - *Not done*: biasing the STT itself toward household member names (a Voxtral vocabulary/prompt
+    hint, if the API supports one) — would fix this class of error at the source instead of after
+    the fact. Worth revisiting; unverified whether Voxtral's `/audio/transcriptions` accepts it.
+  - **Built + compiles; pending a live on-device test.**
 
 ## 🔜 Next (recommended order)
 

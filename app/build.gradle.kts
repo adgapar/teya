@@ -65,11 +65,14 @@ dependencies {
     implementation(libs.ktor.client.okhttp)
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.client.logging)
+    implementation(libs.ktor.client.websockets)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.kotlinx.serialization.json)
 
     // AI / Wake Word
     implementation("com.google.ai.edge.litert:litert:1.4.1")
+    // Barge-in VAD (Silero, vendored wrapper — see voice/vad/SileroVad.kt)
+    implementation(libs.onnxruntime.android)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
