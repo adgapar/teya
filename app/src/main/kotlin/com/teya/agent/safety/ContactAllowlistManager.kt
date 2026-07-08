@@ -1,15 +1,10 @@
 package com.teya.agent.safety
 
 import android.content.Context
-import androidx.room.Room
 
 class ContactAllowlistManager(context: Context) {
-    private val db = Room.databaseBuilder(
-        context.applicationContext,
-        TeyaDatabase::class.java, "teya-db"
-    ).build()
-
-    private val contactDao = db.contactDao()
+    // Shares the one migrated DB instance (v2) — do not build a second, unmigrated one.
+    private val contactDao = TeyaDatabase.get(context).contactDao()
 
     suspend fun isAllowed(name: String): Boolean {
         return contactDao.findByName(name) != null
