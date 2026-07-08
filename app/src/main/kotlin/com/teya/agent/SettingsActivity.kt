@@ -51,6 +51,9 @@ import com.teya.agent.household.LanguagePicker
 import com.teya.agent.household.LocationProbe
 import com.teya.agent.household.Member
 import com.teya.agent.household.MemberEditor
+import com.teya.agent.household.MemoryEntry
+import com.teya.agent.household.MemoryManager
+import com.teya.agent.household.MemorySectionBody
 import com.teya.agent.household.Note
 import com.teya.agent.household.PrimaryButton
 import com.teya.agent.household.SectionHead
@@ -68,8 +71,10 @@ import kotlinx.coroutines.launch
 class SettingsActivity : ComponentActivity() {
     private lateinit var config: ConfigManager
     private lateinit var household: HouseholdManager
+    private lateinit var memory: MemoryManager
 
     private val loadedMembers = mutableStateOf<List<Member>?>(null)
+    private val loadedMemories = mutableStateOf<List<MemoryEntry>?>(null)
     private val home = mutableStateOf(LocationProbe.Home("Detecting location…", ""))
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -77,19 +82,25 @@ class SettingsActivity : ComponentActivity() {
         enableEdgeToEdge()
         config = ConfigManager(this)
         household = HouseholdManager(this)
+        memory = MemoryManager(this)
 
         lifecycleScope.launch { loadedMembers.value = household.members() }
+        lifecycleScope.launch { loadedMemories.value = memory.all() }
         lifecycleScope.launch { home.value = LocationProbe.detect(this@SettingsActivity) }
 
         setContent {
             AdminScreen(
                 membersLoaded = loadedMembers.value,
+                memoriesLoaded = loadedMemories.value,
                 initialLanguages = config.languages,
                 initialHomeConfirmed = config.homeConfirmed,
                 initialApiKey = config.mistralApiKey ?: "",
                 home = home.value,
                 onToggleRotation = ::toggleOrientation,
                 onClose = ::finish,
+                onDeleteMemory = { id ->
+                    lifecycleScope.launch { memory.delete(id); loadedMemories.value = memory.all() }
+                },
                 onSave = { members, langs, homeConfirmed, apiKey ->
                     config.mistralApiKey = apiKey.trim()
                     config.languages = langs
@@ -112,18 +123,20 @@ class SettingsActivity : ComponentActivity() {
 }
 
 private enum class AdminSection(val title: String) {
-    HOUSEHOLD("Household"), LANGUAGES("Languages"), HOME("Home location"), API("API")
+    HOUSEHOLD("Household"), MEMORY("Memory"), LANGUAGES("Languages"), HOME("Home location"), API("API")
 }
 
 @Composable
 private fun AdminScreen(
     membersLoaded: List<Member>?,
+    memoriesLoaded: List<MemoryEntry>?,
     initialLanguages: List<String>,
     initialHomeConfirmed: Boolean,
     initialApiKey: String,
     home: LocationProbe.Home,
     onToggleRotation: () -> Unit,
     onClose: () -> Unit,
+    onDeleteMemory: (Int) -> Unit,
     onSave: (List<Member>, List<String>, Boolean, String) -> Unit,
 ) {
     Box(Modifier.fillMaxSize().background(TeyaColors.Page)) {
@@ -151,10 +164,10 @@ private fun AdminScreen(
             Box(Modifier.weight(1f)) {
                 if (portrait) {
                     PortraitContent(members, onMembersChange, langs, onToggleLang, home, homeConfirmed,
-                        { homeConfirmed = it }, apiKey, { apiKey = it })
+                        { homeConfirmed = it }, apiKey, { apiKey = it }, memoriesLoaded, onDeleteMemory)
                 } else {
                     LandscapeContent(members, onMembersChange, langs, onToggleLang, home, homeConfirmed,
-                        { homeConfirmed = it }, apiKey, { apiKey = it })
+                        { homeConfirmed = it }, apiKey, { apiKey = it }, memoriesLoaded, onDeleteMemory)
                 }
             }
 
@@ -202,11 +215,13 @@ private fun PortraitContent(
     langs: List<String>, onToggleLang: (String) -> Unit,
     home: LocationProbe.Home, homeConfirmed: Boolean, onHomeConfirmedChange: (Boolean) -> Unit,
     apiKey: String, onApiKeyChange: (String) -> Unit,
+    memories: List<MemoryEntry>?, onDeleteMemory: (Int) -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp).padding(top = 8.dp)
     ) {
         SectionBlock(AdminSection.HOUSEHOLD) { HouseholdSectionBody(members, onMembersChange) }
+        SectionBlock(AdminSection.MEMORY) { MemorySectionBody(memories, members, onDeleteMemory) }
         SectionBlock(AdminSection.LANGUAGES) { LanguagePicker(langs.toSet(), onToggleLang) }
         SectionBlock(AdminSection.HOME) {
             HomeConfirmCard(home.city, home.coords, homeConfirmed, onHomeConfirmedChange)
@@ -221,6 +236,7 @@ private fun LandscapeContent(
     langs: List<String>, onToggleLang: (String) -> Unit,
     home: LocationProbe.Home, homeConfirmed: Boolean, onHomeConfirmedChange: (Boolean) -> Unit,
     apiKey: String, onApiKeyChange: (String) -> Unit,
+    memories: List<MemoryEntry>?, onDeleteMemory: (Int) -> Unit,
 ) {
     var selected by remember { mutableStateOf(AdminSection.HOUSEHOLD) }
     Row(Modifier.fillMaxSize()) {
@@ -242,6 +258,7 @@ private fun LandscapeContent(
             Spacer(Modifier.height(12.dp))
             when (selected) {
                 AdminSection.HOUSEHOLD -> HouseholdSectionBody(members, onMembersChange)
+                AdminSection.MEMORY -> MemorySectionBody(memories, members, onDeleteMemory)
                 AdminSection.LANGUAGES -> LanguagePicker(langs.toSet(), onToggleLang)
                 AdminSection.HOME -> HomeConfirmCard(home.city, home.coords, homeConfirmed, onHomeConfirmedChange)
                 AdminSection.API -> ApiSectionBody(apiKey, onApiKeyChange)

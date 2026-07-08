@@ -66,6 +66,9 @@ class MemoryManager(context: Context) {
     /** Everything Teya has stored, newest first — for the Admin review screen. */
     suspend fun all(): List<MemoryEntry> = dao.getAll()
 
+    /** Delete one memory by id — the Admin review screen's manual "forget". */
+    suspend fun delete(id: Int) = dao.delete(id)
+
     /**
      * The "What you remember" block folded into the live context every turn: the HOT memories,
      * grouped per household member (persona memory) with anything else under "General". Empty when
