@@ -11,13 +11,12 @@ import kotlin.math.sqrt
  * Teya's durable memory: append-only [MemoryEntry] rows retrieved two ways —
  * - **persona memory** by *association* (`WHERE subjectKey = member`), assembled into context every
  *   turn ("what you remember about Dad"), and
- * - the **general pool** by *similarity* (RAG, fetched on demand — later slice).
+ * - the **general pool** by *similarity* (RAG via [search], fetched on demand).
  *
  * A "block" is a **render-time assembly**, not a stored self-editing object — mirrors
- * [HouseholdManager.profileContextBlock]. [category] says what a memory *is* (and later drives its
- * decay half-life + mutability); [subjectType]/[subjectKey] say who it's *about*. The nightly
- * "dreamer" (later slice) recomputes [MemoryEntry.strength] and re-tiers HOT↔COLD; for now every
- * memory is HOT (always loaded). See thoughts/shared/plans/2026-07-08-memory-and-dreaming.md.
+ * [HouseholdManager.profileContextBlock]. [category] says what a memory *is* and drives its decay
+ * half-life + mutability; [subjectType]/[subjectKey] say who it's *about*. [runDecay] recomputes
+ * [MemoryEntry.strength] on the forgetting curve and re-tiers HOT↔COLD.
  */
 class MemoryManager(context: Context) {
     private val dao = TeyaDatabase.get(context).memoryDao()
@@ -148,11 +147,10 @@ class MemoryManager(context: Context) {
     suspend fun delete(id: Int) = dao.delete(id)
 
     /**
-     * The "dreamer"'s deterministic half: recompute every memory's strength on the forgetting curve
+     * The dreamer's deterministic half: recompute every memory's strength on the forgetting curve
      * (per-category half-life since [MemoryEntry.lastAccessedAt]), re-tier HOT↔COLD, and prune dead
-     * EPISODIC rows. Pure math, no LLM — safe to run nightly (HarnessService's dream alarm) or on
-     * demand from Admin. Returns a summary for the monitor/log. (LLM consolidation of episodic detail
-     * into durable facts is a later slice.)
+     * EPISODIC rows. Pure math, no LLM. Returns a summary for the monitor/log. (The LLM consolidation
+     * of episodic detail into durable facts runs separately in the harness's dream.)
      */
     suspend fun runDecay(now: Long = System.currentTimeMillis()): DreamSummary {
         val all = dao.getAll()
@@ -178,7 +176,7 @@ class MemoryManager(context: Context) {
         return 0.5.pow(elapsedDays / halfLifeDays(e.category)).toFloat().coerceIn(0f, 1f)
     }
 
-    /** Per-category half-life in days — FACT ~ permanent, EPISODIC fades fast (see the plan's table). */
+    /** Per-category half-life in days — FACT ~ permanent, EPISODIC fades fast. */
     private fun halfLifeDays(category: String): Double = when (category.uppercase()) {
         CAT_EPISODIC -> 3.0
         CAT_PREFERENCE -> 45.0

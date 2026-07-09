@@ -42,7 +42,7 @@ interface BrainClient {
 
 /**
  * One turn in the conversation. [role] is "system", "user", "assistant", or "tool".
- * Most turns are just role + content. The extra fields carry a tool round-trip (M7):
+ * Most turns are just role + content. The extra fields carry a tool round-trip:
  * an "assistant" turn where the model decided to act sets [toolCalls]; the matching
  * "tool" turn feeding the result back sets [toolCallId] + [name].
  */

@@ -369,7 +369,7 @@ class HarnessService : Service() {
 
     /**
      * Ask the brain for a reply, running any tool the model requests and feeding the result back
-     * so it can produce a final spoken answer (M7). Query tools (get_time, weather, …) depend on
+     * so it can produce a final spoken answer. Query tools (weather, …) depend on
      * this round-trip — the tool returns data, the model turns it into a sentence. Bounded by
      * [MAX_TOOL_ROUNDS]. Appends every turn (assistant tool-calls + tool results) to [history] so
      * context is preserved across the round-trip and into later turns.
@@ -794,7 +794,7 @@ class HarnessService : Service() {
             if (profile.isNotBlank()) append("\n\n").append(profile)
             if (memory.isNotBlank()) append("\n\n").append(memory)
         }
-        // TODO(H2): gate behind BuildConfig.DEBUG — this line logs location (PII).
+        // TODO: gate behind BuildConfig.DEBUG — this line logs location + memory (PII).
         Log.d(TAG, "Live context: ${full.replace("\n", " | ")}")
         full
     }

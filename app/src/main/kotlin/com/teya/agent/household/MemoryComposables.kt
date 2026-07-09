@@ -30,8 +30,7 @@ import androidx.compose.ui.unit.sp
  * Admin "Memory" section — **review / correct / monitor** Teya's durable memory ([MemoryEntry]).
  * - Review: memories grouped per household member (persona memory) + a "General" bucket.
  * - Correct: delete a wrong row (the manual "forget" — immediate, not batched with Save changes).
- * - Monitor: totals per tier + category, so we can watch decay + the dreamer behave (later slices).
- * See thoughts/shared/plans/2026-07-08-memory-and-dreaming.md (slice 2).
+ * - Monitor: totals per tier + category, plus the dreamer's last-run + recent-run log.
  */
 @Composable
 fun MemorySectionBody(

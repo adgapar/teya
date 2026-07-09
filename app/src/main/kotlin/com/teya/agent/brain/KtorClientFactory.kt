@@ -22,7 +22,7 @@ object KtorClientFactory {
             install(Logging) {
                 level = LogLevel.INFO
             }
-            // A stalled request must not wedge the always-on agent (audit C5). Generous enough
+            // A stalled request must not wedge the always-on agent. Generous enough
             // for streaming TTS (SSE) and LLM calls, but bounded.
             install(HttpTimeout) {
                 requestTimeoutMillis = 60000

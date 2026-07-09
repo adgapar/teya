@@ -24,8 +24,7 @@ data class Persona(
  * A single remembered fact. [subjectType]/[subjectKey] say who it's *about* (a household contact by
  * lookupKey, a [Persona], or general); [category] says what *kind* it is and drives its decay +
  * mutability. [strength] is its place on the forgetting curve, [tier] where it lives (HOT = loaded
- * into context, COLD = archival/RAG-only) — both maintained by the nightly dreamer (later slice).
- * See thoughts/shared/plans/2026-07-08-memory-and-dreaming.md.
+ * into context, COLD = archival/RAG-only) — both maintained by the nightly dreamer.
  */
 @Entity(tableName = "memory_entry")
 data class MemoryEntry(
