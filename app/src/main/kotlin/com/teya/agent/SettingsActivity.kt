@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -108,13 +109,21 @@ class SettingsActivity : ComponentActivity() {
                     lifecycleScope.launch { memory.delete(id); loadedMemories.value = memory.all() }
                 },
                 onRunDream = {
-                    // Fire the real (full) dreamer in the service — LLM consolidation + decay — then
-                    // refresh after a moment (the consolidation call takes ~1-2s).
+                    // Fire the real (full) dreamer in the service — LLM consolidation + decay.
+                    Toast.makeText(this, "Dreaming…", Toast.LENGTH_SHORT).show()
+                    val before = config.lastDreamAt
                     startService(Intent(this, HarnessService::class.java).setAction(HarnessService.ACTION_RUN_DREAM))
                     lifecycleScope.launch {
-                        delay(3000)
+                        // Poll until the service records the run (it writes lastDreamAt when done), ~8s cap.
+                        var waited = 0
+                        while (config.lastDreamAt == before && waited < 8000) { delay(400); waited += 400 }
                         loadedMemories.value = memory.all()
                         lastDream.value = dreamText()
+                        Toast.makeText(
+                            this@SettingsActivity,
+                            "Memory dream: ${config.lastDreamNote.ifBlank { "done" }}",
+                            Toast.LENGTH_LONG,
+                        ).show()
                     }
                 },
                 onSave = { members, langs, homeConfirmed, apiKey ->

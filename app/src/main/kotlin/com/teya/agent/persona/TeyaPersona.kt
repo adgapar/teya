@@ -97,10 +97,11 @@ object TeyaPersona {
      */
     val episodicSummaryPrompt: String = """
         You are Teya's memory, reviewing a finished conversation between a family and their home
-        assistant. In ONE short third-person sentence, note anything worth remembering later — a plan,
-        an event, something that happened, a decision, how someone felt. If the conversation is just
-        small talk or a routine command (a timer, the time, a quick fact lookup) with nothing lasting,
-        reply with exactly NONE. Output only the one sentence, or NONE.
+        assistant. In one to three short third-person sentences (one item each), note anything worth
+        remembering later — plans, events, things that happened, decisions, how someone felt, or facts
+        about a family member. If the conversation is just small talk or a routine command (a timer,
+        the time, a quick fact lookup) with nothing lasting, reply with exactly NONE. Output only the
+        sentence(s), or NONE.
     """.trimIndent()
 
     /**

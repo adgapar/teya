@@ -183,11 +183,14 @@ class HarnessService : Service() {
      */
     private suspend fun consolidateMemories(since: Long): Int {
         val notes = memoryManager.recentEpisodic(since)
-        if (notes.isEmpty()) return 0
+        if (notes.isEmpty()) { Log.d(TAG, "Consolidation: no new episodic notes since last dream"); return 0 }
         val out = brainClient.complete(
             TeyaPersona.consolidationPrompt, notes.joinToString("\n") { "- ${it.text}" },
         )?.trim()
-        if (out.isNullOrBlank() || out.uppercase() == "NONE") return 0
+        if (out.isNullOrBlank() || out.uppercase() == "NONE") {
+            Log.d(TAG, "Consolidation: reviewed ${notes.size} note(s), nothing durable to promote")
+            return 0
+        }
         val members = householdManager.members()
         var promoted = 0
         out.lineSequence().forEach { line ->
