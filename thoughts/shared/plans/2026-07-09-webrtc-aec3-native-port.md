@@ -4,7 +4,7 @@ topic: "WebRTC AEC3 native port implementation plan (Plan A: vendor + build + va
 tags: [voice, barge-in, aec3, webrtc, ndk, android-native]
 status: in-progress
 last_updated: 2026-07-09T00:00:00Z
-last_updated_by: phase-running (Phase 3a)
+last_updated_by: phase-running (Phase 3b)
 ---
 
 # WebRTC AEC3 Native Module — Vendor, Build, Validate (Plan A)
@@ -429,18 +429,17 @@ concern the `SileroVad`/`vadLock` comment already documents for a different nati
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Compile-check: `./gradlew assembleDebug --offline`
-- [ ] Install: `./gradlew installDebug --offline`
-- [ ] Smoke instrumented test passes: `./gradlew connectedAndroidTest --offline` (device connected
-      via wireless adb — see the adb-flakiness note in Quick Verification Reference if this can't
-      run)
+- [x] Compile-check: `./gradlew assembleDebug --offline`
+- [x] Install: `./gradlew installDebug --offline` (device: SM-A346E via wireless adb)
+- [x] Smoke instrumented test passes: `./gradlew connectedAndroidTest --offline`
 
 #### Automated QA:
-- [ ] Smoke instrumented test constructs `NativeAec3`, feeds one silent render frame and one silent
+- [x] Smoke instrumented test constructs `NativeAec3`, feeds one silent render frame and one silent
       capture frame, and asserts **no crash, a 160-sample output, AND that the output is
       bounded/near-silent** (e.g. below a fixed dBFS threshold) rather than NaN or garbage — a
       silent input producing garbage output would otherwise pass a length-only check — then
-      `close()`s cleanly
+      `close()`s cleanly (`NativeAec3SmokeTest.silentFramesInProduceSaneSilentOutput`, asserts every
+      output sample's absolute value < 100 out of int16 range; passed on SM-A346E)
 
 #### Manual Verification:
 - [ ] None expected at this phase — correctness of the actual echo cancellation is Phase 4's job;
@@ -448,6 +447,27 @@ concern the `SileroVad`/`vadLock` comment already documents for a different nati
 
 **Implementation Note**: After this phase, pause for manual confirmation. If commit-per-phase was
 requested, create commit after verification passes.
+
+**Implementation record**: Passed, after one real fix found by actually exercising the runtime
+call path (Phase 3a's smoke check only constructed `EchoCanceller3`, never called
+`AnalyzeRender`/`ProcessCapture`, so this bug was invisible until now). First `connectedAndroidTest`
+run crashed with `SIGABRT`: `downsampled_render_buffer.h:38: CHECK failed: buffer.size() >=
+offset`, from `RenderDelayBufferImpl::IncrementWriteIndices()`'s
+`low_rate_.UpdateWriteIndex(-sub_block_size_)` — a perfectly normal, real AEC3 call with a
+negative `offset`. Root cause: `webrtc_shim/rtc_base/checks.h`'s `RTC_CHECK_OP` compared operands
+with plain `<`/`>=`/etc., which silently promotes a negative `int` to a huge `size_t` when compared
+against one — upstream's real `checks.h` avoids exactly this via
+`rtc_base/numerics/safe_compare.h`'s `SafeEq`/`SafeGe`/etc., which the shim had omitted. Fix: the
+shim now `#include`s the real, unmodified, already-vendored `safe_compare.h` (present since Phase
+3a's dependency-slice vendoring) and routes `RTC_CHECK_EQ`/`NE`/`LE`/`LT`/`GE`/`GT` through
+`SafeEq`/`SafeNe`/`SafeLe`/`SafeLt`/`SafeGe`/`SafeGt` instead of raw operators — a correctness fix
+to the shim, not a change to any AEC3 signal-processing logic. No other DCHECK/CHECK failures
+surfaced after the fix; the smoke test's on-device run (constructing `NativeAec3`, one
+`analyzeRender` + one `processCapture` call with silent frames, asserting near-silent output,
+`close()`) passed cleanly on SM-A346E (`tests="1" failures="0"`). Kotlin-side single-writer lock
+(`NativeAec3`'s own `lock`/`handle` sentinel, guarding create/use/close) is baked into the class
+itself rather than left to callers, mirroring `VoicePipeline`'s `vadLock` discipline around
+`SileroVad` but scoped narrower since `NativeAec3` owns a raw native pointer directly.
 
 ---
 

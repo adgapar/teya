@@ -1,15 +1,19 @@
 # Teya native module — AEC3 (Acoustic Echo Canceller v3), vendored from WebRTC.
 #
 # Phase 2 of thoughts/shared/plans/2026-07-09-webrtc-aec3-native-port.md stood up a trivial
-# passthrough skeleton proving NDK -> CMake -> .so -> JNI -> Kotlin works end-to-end (teya_aec3
-# below, unchanged, still just jni_ping.cpp — no AEC3 code).
+# passthrough skeleton proving NDK -> CMake -> .so -> JNI -> Kotlin works end-to-end (teya_aec3,
+# then just jni_ping.cpp — no AEC3 code).
 #
-# Phase 3a adds teya_aec3_core: a STATIC library built from the vendored AEC3 sources +
+# Phase 3a added teya_aec3_core: a STATIC library built from the vendored AEC3 sources +
 # dependency slice (third_party/webrtc/, see VENDORING.md) plus a small set of Teya-authored build
 # shims (webrtc_shim/, see the README there) that replace a handful of WebRTC-internal files whose
 # real implementations assume the full gn/Chromium build (RTC_LOG sink routing, UMA metrics, the
-# full Audio Processing Module's AudioBuffer/Environment). No JNI glue here on purpose — see the
-# plan's Phase 3a for why this is split out as its own checkpoint.
+# full Audio Processing Module's AudioBuffer/Environment). No JNI glue there on purpose — see the
+# plan's Phase 3a for why that was split out as its own checkpoint.
+#
+# Phase 3b replaces jni_ping.cpp's trivial passthrough with jni_aec3.cpp — real JNI glue around a
+# real EchoCanceller3 instance, linked against teya_aec3_core below (defined first so teya_aec3
+# can link against it).
 
 cmake_minimum_required(VERSION 3.22.1)
 
@@ -17,16 +21,6 @@ project(teya_aec3)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-add_library(teya_aec3 SHARED
-    jni_ping.cpp
-)
-
-find_library(log-lib log)
-
-target_link_libraries(teya_aec3
-    ${log-lib}
-)
 
 # ---------------------------------------------------------------------------
 # teya_aec3_core — AEC3 + dependencies, static lib, no JNI symbols.
@@ -181,12 +175,39 @@ target_link_libraries(teya_aec3_core PUBLIC
 )
 
 # ---------------------------------------------------------------------------
+# teya_aec3 — real JNI glue (Phase 3b), loaded by Kotlin via
+# System.loadLibrary("teya_aec3"). Links against teya_aec3_core rather than adding yet another
+# separate .so; teya_aec3_core's PUBLIC target_compile_definitions (WEBRTC_HAS_NEON,
+# WEBRTC_APM_DEBUG_DUMP, WEBRTC_POSIX, WEBRTC_ARCH_ARM64) propagate automatically via that link,
+# same as teya_aec3_core_smoke_check below relies on.
+# ---------------------------------------------------------------------------
+
+add_library(teya_aec3 SHARED
+    jni_aec3.cpp
+)
+
+target_include_directories(teya_aec3 PRIVATE
+    webrtc_shim
+    third_party/webrtc
+)
+
+target_compile_features(teya_aec3 PUBLIC cxx_std_20)
+
+find_library(log-lib log)
+
+target_link_libraries(teya_aec3
+    teya_aec3_core
+    ${log-lib}
+)
+
+# ---------------------------------------------------------------------------
 # teya_aec3_core_smoke_check — trivial non-JNI consumer.
 #
 # Exists only so the linker actually exercises teya_aec3_core (constructs a real
 # EchoCanceller3Config and a real EchoCanceller3 against a minimal FieldTrialsView) instead of the
-# static lib silently going unused. No JNI symbols; not shipped/used by the app. Real JNI glue is
-# Phase 3b's job.
+# static lib silently going unused. No JNI symbols; not shipped/used by the app. Kept as a
+# standing Phase 3a checkpoint even now that teya_aec3's real JNI glue (above) also links against
+# teya_aec3_core.
 # ---------------------------------------------------------------------------
 
 add_library(teya_aec3_core_smoke_check SHARED

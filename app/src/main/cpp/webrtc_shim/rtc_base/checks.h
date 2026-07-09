@@ -2,14 +2,21 @@
 //
 // Upstream checks.h builds pretty "a == b (1 vs. 2)" failure messages using
 // absl::StrCat / absl::HasAbslStringify (absl/strings/has_absl_stringify.h,
-// absl/strings/str_cat.h) plus rtc_base/numerics/safe_compare.h,
-// api/scoped_refptr.h and rtc_base/system/inline.h. None of that is AEC3
-// signal-processing logic — it's diagnostic message formatting. This shim
-// keeps the exact macro names and the exact abort-on-failure contract
-// (RTC_CHECK always evaluates its condition and aborts the process on
-// failure; RTC_DCHECK does the same only when RTC_DCHECK_IS_ON) while
-// building the (optional, best-effort) failure message with plain
-// ostringstream `<<` streaming instead of absl.
+// absl/strings/str_cat.h) plus api/scoped_refptr.h and
+// rtc_base/system/inline.h. None of that is AEC3 signal-processing logic —
+// it's diagnostic message formatting. This shim keeps the exact macro names
+// and the exact abort-on-failure contract (RTC_CHECK always evaluates its
+// condition and aborts the process on failure; RTC_DCHECK does the same only
+// when RTC_DCHECK_IS_ON) while building the (optional, best-effort) failure
+// message with plain ostringstream `<<` streaming instead of absl.
+//
+// Unlike the message-formatting bits, rtc_base/numerics/safe_compare.h is
+// NOT dropped — it's real, vendored, unmodified (see VENDORING.md), and used
+// as-is for RTC_CHECK_OP's comparisons (Phase 3b finding: plain `<`/`>=`
+// on a mixed size_t/int pair silently promotes a negative int to a huge
+// size_t and false-fires, e.g. `DownsampledRenderBuffer::OffsetIndex`'s
+// `RTC_DCHECK_GE(buffer.size(), offset)` with a negative offset — exactly
+// the case safe_compare.h exists to handle correctly).
 //
 // If a real vendored file needs a macro this shim doesn't define, add it
 // here (grep the vendored tree for the macro name) rather than silently
@@ -24,6 +31,13 @@
 #if defined(__ANDROID__)
 #include <android/log.h>
 #endif
+
+// Real, vendored (not shimmed) — needed so RTC_CHECK_OP/RTC_DCHECK_OP compare mixed
+// signed/unsigned integer operands the same way upstream's checks.h does. Plain `<`/`>=`/etc.
+// promote a negative int to a huge size_t when compared against one (e.g. `buffer.size() >=
+// -offset`), which false-fires on perfectly valid calls — this is exactly why upstream's real
+// checks.h depends on safe_compare.h instead of using the built-in operators directly.
+#include "rtc_base/numerics/safe_compare.h"
 
 #if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
 #define RTC_DCHECK_IS_ON 1
@@ -86,16 +100,19 @@ class CheckFailure {
   ::webrtc::webrtc_checks_impl::CheckFailure(__FILE__, __LINE__, #condition, \
                                              !(condition))
 
-#define RTC_CHECK_OP(op, val1, val2)                                       \
-  ::webrtc::webrtc_checks_impl::CheckFailure(                              \
-      __FILE__, __LINE__, #val1 " " #op " " #val2, !((val1)op(val2)))
+// safe_fn (e.g. ::webrtc::SafeGe) does the actual mixed-signedness-correct comparison; op (e.g.
+// >=) is kept in the failure message for a human-readable "a >= b" rendering.
+#define RTC_CHECK_SAFE_OP(safe_fn, op, val1, val2)     \
+  ::webrtc::webrtc_checks_impl::CheckFailure(          \
+      __FILE__, __LINE__, #val1 " " #op " " #val2,     \
+      !(safe_fn((val1), (val2))))
 
-#define RTC_CHECK_EQ(v1, v2) RTC_CHECK_OP(==, v1, v2)
-#define RTC_CHECK_NE(v1, v2) RTC_CHECK_OP(!=, v1, v2)
-#define RTC_CHECK_LE(v1, v2) RTC_CHECK_OP(<=, v1, v2)
-#define RTC_CHECK_LT(v1, v2) RTC_CHECK_OP(<, v1, v2)
-#define RTC_CHECK_GE(v1, v2) RTC_CHECK_OP(>=, v1, v2)
-#define RTC_CHECK_GT(v1, v2) RTC_CHECK_OP(>, v1, v2)
+#define RTC_CHECK_EQ(v1, v2) RTC_CHECK_SAFE_OP(::webrtc::SafeEq, ==, v1, v2)
+#define RTC_CHECK_NE(v1, v2) RTC_CHECK_SAFE_OP(::webrtc::SafeNe, !=, v1, v2)
+#define RTC_CHECK_LE(v1, v2) RTC_CHECK_SAFE_OP(::webrtc::SafeLe, <=, v1, v2)
+#define RTC_CHECK_LT(v1, v2) RTC_CHECK_SAFE_OP(::webrtc::SafeLt, <, v1, v2)
+#define RTC_CHECK_GE(v1, v2) RTC_CHECK_SAFE_OP(::webrtc::SafeGe, >=, v1, v2)
+#define RTC_CHECK_GT(v1, v2) RTC_CHECK_SAFE_OP(::webrtc::SafeGt, >, v1, v2)
 
 #define RTC_CHECK_NOTREACHED() \
   ::webrtc::webrtc_checks_impl::CheckFailure(__FILE__, __LINE__, "NOTREACHED", true)
