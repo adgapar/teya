@@ -4,7 +4,7 @@ topic: "WebRTC AEC3 VoicePipeline/HarnessService integration (Plan B: wire the v
 tags: [voice, barge-in, aec3, webrtc, voicepipeline, harnessservice]
 status: in-progress
 last_updated: 2026-07-10T00:00:00Z
-last_updated_by: phase-running (Phase 3)
+last_updated_by: phase-running (Phase 4)
 ---
 
 # WebRTC AEC3 VoicePipeline/HarnessService Integration (Plan B)
@@ -482,12 +482,12 @@ exactly, regardless of whether `aec3` is constructed and being fed. See Failure 
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `./gradlew assembleDebug --offline`
-- [ ] `./gradlew installDebug --offline`
-- [ ] `./gradlew connectedAndroidTest --offline` — no regressions
+- [x] `./gradlew assembleDebug --offline`
+- [x] `./gradlew installDebug --offline`
+- [x] `./gradlew connectedAndroidTest --offline` — no regressions
 
 #### Automated QA:
-- [ ] None new — this phase's correctness is inherently a real-device, real-audio, real-human-voice
+- [x] None new — this phase's correctness is inherently a real-device, real-audio, real-human-voice
       question; forcing a synthetic automated "proof" here would be exactly the kind of degenerate
       check the plan should avoid claiming
 

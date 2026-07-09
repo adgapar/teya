@@ -40,6 +40,25 @@ class VoicePipeline(private val context: Context) {
         private const val MAX_RECORDING_MS = 10000                        // hard cap on a single command
         private const val TTS_SAMPLE_RATE = 24000                         // Voxtral PCM output rate
         private const val BARGE_IN_GAIN = 6.0f  // matches WakeWordEngine.INPUT_GAIN — no hardware AGC
+
+        // Phase 4 kill-switch (Plan B): true = the new continuous mid-sentence barge-in behavior —
+        // forwardArmedChunk's self-echo gate is exempted for the streamToSpeaker path (once past
+        // the convergence lead-in below) and HarnessService.respond() skips its inter-sentence gap
+        // for sentences that streamed. false = both revert to their exact pre-Plan-B behavior (gate
+        // + gap intact), regardless of whether aec3 is constructed/fed. Flip this one line for an
+        // instant rollback if Phase 5's real-device testing goes worse than the old gap-gated
+        // workaround it replaces (see the plan's Failure Mode / Rollback section).
+        const val AEC3_BARGE_IN_ENABLED = true
+
+        // Convergence lead-in (Phase 4): how long after the session's first render frame
+        // (firstRenderFrameAtMs) before barge-in detection is trusted, per Plan A's
+        // double-talk-from-frame-zero finding (~0dB suppression from frame zero vs. ~72dB once
+        // converged). Derived from Plan A's measured ~1s synthetic-tone convergence time, doubled
+        // as a safety margin since that number was measured against a clean synthetic signal, not
+        // this device's real speaker->mic acoustic path and real voice — Phase 5 re-checks and
+        // tunes this against actual on-device behavior rather than assuming the synthetic number
+        // transfers exactly.
+        private const val AEC3_LEAD_IN_MS = 2000L
     }
 
     private val wakeWordEngine = WakeWordEngine(
@@ -296,25 +315,49 @@ class VoicePipeline(private val context: Context) {
     }
 
     /**
+     * Phase 4 convergence lead-in gate: has enough render-only time elapsed since the session's
+     * first render frame ([firstRenderFrameAtMs], set once by [feedRenderToAec3] and never reset
+     * per turn) to trust barge-in detection? Returns `false` (don't trust yet) if AEC3 hasn't
+     * rendered a single frame this session at all. Read here from [WakeWordEngine]'s capture
+     * thread; [firstRenderFrameAtMs] is written from the render/TTS thread, hence `@Volatile`
+     * there for cross-thread visibility.
+     */
+    private fun leadInElapsed(): Boolean {
+        val startedAt = firstRenderFrameAtMs
+        if (startedAt == 0L) return false
+        return System.currentTimeMillis() - startedAt >= AEC3_LEAD_IN_MS
+    }
+
+    /**
      * Runs on [WakeWordEngine]'s capture thread. Reassembles the 1280-sample mic chunks into
      * [SileroVad.FRAME_SIZE]-sample frames (they don't divide evenly) and checks each
      * synchronously — cheap enough to do inline, no async hand-off needed. Applies the same
      * software gain [WakeWordEngine] applies before its own classifier: this device has no
      * hardware AGC, so the raw signal is otherwise too quiet for reliable detection.
      *
-     * Skips processing entirely while [currentTrack]/[currentMediaPlayer] is non-null, i.e. while
-     * our own TTS audio is actively coming out of the speaker. This is the self-echo fix: this
-     * device's `AcousticEchoCanceler` over-suppresses real speech during playback (see
-     * WakeWordEngine), and with it off, Teya's own voice scored just as high as genuine speech to
-     * the VAD — no confidence threshold could tell them apart. Never listening while she's
-     * actually speaking sidesteps that structurally: there's no echo to confuse with real speech
-     * when nothing is playing. Tradeoff: can only interrupt in the gaps between sentences (where
-     * `HarnessService.respond()`'s sentence-by-sentence TTS queue already pauses waiting for the
-     * next sentence), not mid-sentence.
+     * Historically skipped processing entirely while [currentTrack]/[currentMediaPlayer] was
+     * non-null (our own TTS actively coming out of the speaker) — the self-echo fix for this
+     * device's over-suppressing `AcousticEchoCanceler` (see WakeWordEngine). Phase 4 (Plan B)
+     * narrows that: [currentMediaPlayer] (the `playMp3` fallback, no AEC3 coverage — see "What
+     * We're NOT Doing") still always gates, but [currentTrack] (the `streamToSpeaker` path) is
+     * exempted whenever [aec3] is actively cleaning the signal and [AEC3_BARGE_IN_ENABLED] is on,
+     * which is what actually enables mid-sentence interruption. That exemption is itself gated by
+     * [leadInElapsed] — AEC3 keeps converging via [cleanCaptureChunk] regardless, but the result
+     * isn't trusted (passed to Silero / allowed to fire [bargeInFired]) until the session-wide
+     * lead-in has elapsed, per Plan A's double-talk-from-frame-zero finding. Kill-switch: when
+     * [AEC3_BARGE_IN_ENABLED] is `false`, this function behaves exactly as it did before Phase 4.
      */
     private fun forwardArmedChunk(chunk: ShortArray) {
         if (bargeInFired) return // already interrupted this window; wait for disarm
-        if (currentTrack != null || currentMediaPlayer != null) return // our own audio is playing right now
+
+        // Both the self-echo-gate exemption and the lead-in gate below only apply when the
+        // feature is on AND a session-scoped AEC3 instance is actually active — otherwise this
+        // falls straight through to the exact pre-Plan-B gap-gated behavior (see
+        // AEC3_BARGE_IN_ENABLED's kill-switch doc comment).
+        val aecActive = AEC3_BARGE_IN_ENABLED && aec3 != null
+
+        if (currentMediaPlayer != null) return // mp3 fallback: no AEC3 coverage, always gap-gated
+        if (currentTrack != null && !aecActive) return // streaming path: gated unless AEC3 is actively cleaning it
 
         // Diagnostic peak is measured on the true raw mic chunk (pre-AEC3, pre-gain) — its purpose
         // is "does the mic itself have signal at all," which is orthogonal to echo cancellation.
@@ -327,8 +370,16 @@ class VoicePipeline(private val context: Context) {
 
         // Phase 3: run the raw chunk through AEC3's capture side first, so Silero below sees
         // echo-cancelled audio instead of the raw gained signal. cleanCaptureChunk() falls back to
-        // the unmodified chunk when aec3 is null (no active session).
+        // the unmodified chunk when aec3 is null (no active session). Always runs — independent of
+        // the kill-switch — so AEC3 keeps converging even while its result isn't yet trusted below.
         val cleanedChunk = cleanCaptureChunk(chunk)
+
+        // Phase 4 convergence lead-in gate: don't pass the cleaned signal to Silero / allow
+        // bargeInFired to be set until the session-wide lead-in has elapsed since the very first
+        // render frame (not reset per turn — see leadInElapsed). AEC3 above still keeps converging
+        // during the lead-in either way; this only withholds trust in the *result*.
+        if (aecActive && !leadInElapsed()) return
+
         val gained = ShortArray(cleanedChunk.size) { i ->
             (cleanedChunk[i] * BARGE_IN_GAIN).coerceIn(Short.MIN_VALUE.toFloat(), Short.MAX_VALUE.toFloat()).toInt().toShort()
         }
@@ -508,18 +559,30 @@ class VoicePipeline(private val context: Context) {
         }
     }
 
-    suspend fun textToSpeech(text: String) {
-        if (text.isBlank()) return
+    /**
+     * Speaks [text], preferring the low-latency streaming PCM path and falling back to whole-clip
+     * mp3 if streaming yields nothing. Returns `true` if this specific call streamed (the
+     * AEC3-covered path), `false` if it fell back to `playMp3` (no AEC3 coverage) — Phase 4's
+     * per-sentence signal for whether `HarnessService.respond()`'s inter-sentence gap is still
+     * needed after this sentence (streaming vs. mp3 fallback is chosen independently per call, not
+     * once per turn — see the plan's Current State Analysis). When nothing was actually spoken
+     * (blank text, or no client configured), returns `true`: no audio played, so there's nothing
+     * for a gap to protect against.
+     */
+    suspend fun textToSpeech(text: String): Boolean {
+        if (text.isBlank()) return true
         interruptRequested = false // fresh attempt — any earlier interrupt has already been handled
         val client = mistralClient ?: run {
             Log.e("VoicePipeline", "MistralClient not set, cannot speak")
-            return
+            return true
         }
         // Prefer low-latency streaming PCM; fall back to whole-clip mp3 if streaming yields nothing.
         if (!streamToSpeaker(client, text)) {
             Log.w("VoicePipeline", "Streaming TTS failed; falling back to mp3")
             playMp3(client, text)
+            return false
         }
+        return true
     }
 
     /**
