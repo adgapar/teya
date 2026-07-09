@@ -200,8 +200,11 @@ Extend the Admin console (`SettingsActivity`) — it already lists this as a pla
    in `ConfigManager`, surfaced as "Recent dreams" in Admin; "Run dream now" fires the full dreamer.
 
 ## Remaining follow-ups (minor)
-- Fully-incremental Contacts update (preserve lookupKeys instead of delete+reinsert+remap).
-- Orphan cleanup for member-deleted rows; richer per-session capture tuning; consolidation dedup.
+- ✅ Orphan cleanup for member-deleted rows (dreamer `pruneOrphans`, guarded).
+- ✅ Consolidation dedup (`hasSimilar` — don't re-promote an existing durable fact).
+- Fully-incremental Contacts update (preserve lookupKeys instead of delete+reinsert+remap) — a real
+  refactor needing a Contacts-side update path; the remap approach works, so deferred.
+- Richer per-session capture tuning (multi-fact); semantic (not just text) consolidation dedup.
 - On-device: exercise decay over real elapsed days; confirm the 3 AM `AlarmManager` fires while dozing.
 
 ## Open questions (non-blocking)
