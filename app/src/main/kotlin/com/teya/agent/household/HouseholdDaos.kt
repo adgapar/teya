@@ -54,6 +54,14 @@ interface MemoryDao {
 
     @Query("DELETE FROM memory_entry WHERE id = :id")
     suspend fun delete(id: Int)
+
+    /** Re-point every memory about [old] to [new] — when a member's Contacts lookupKey changes. */
+    @Query("UPDATE memory_entry SET subjectKey = :new WHERE subjectKey = :old")
+    suspend fun remapSubject(old: String, new: String)
+
+    /** Delete all memories about a subject (e.g. a member removed from the roster). */
+    @Query("DELETE FROM memory_entry WHERE subjectKey = :subjectKey")
+    suspend fun deleteBySubject(subjectKey: String)
 }
 
 @Dao

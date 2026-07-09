@@ -13,6 +13,7 @@ import com.teya.agent.safety.TeyaDatabase
 class HouseholdManager(context: Context) {
     private val contacts = ContactsRepository(context)
     private val contactExtraDao = TeyaDatabase.get(context).contactExtraDao()
+    private val memoryDao = TeyaDatabase.get(context).memoryDao()
     private val config = ConfigManager(context)
 
     /** The roster: contacts marked as members (they have a [ContactExtra] row), merged with aliases. */
@@ -29,21 +30,37 @@ class HouseholdManager(context: Context) {
     fun languages(): List<String> = config.languages
 
     /**
-     * Replace the whole household: delete previously-seeded members, insert the given ones fresh,
-     * and rewrite the alias augmentation. Idempotent — both onboarding and Admin "Save changes"
-     * call it. Members without a name are dropped (a name is the minimum identity).
+     * Replace the whole household: reinsert members fresh and rewrite the alias augmentation.
+     * Idempotent — both onboarding and Admin "Save changes" call it. Members without a name are
+     * dropped (a name is the minimum identity).
+     *
+     * Contacts' delete+reinsert hands back **new `lookupKey`s** every save, and persona memories are
+     * keyed by lookupKey — so we **remap** each retained member's memories old→new key (they'd
+     * otherwise be silently orphaned on any household edit), and **delete** memories for members
+     * dropped from the roster. (A fully-incremental Contacts update that preserves keys would avoid
+     * the churn entirely, but needs a Contacts-side update path — deferred.)
      */
     suspend fun saveHousehold(members: List<Member>) {
-        contactExtraDao.getAll().forEach { contacts.delete(it.lookupKey) }
+        val clean = members.filter { it.hasName }
+        val retainedOldKeys = clean.mapNotNull { it.lookupKey }.toSet()
+
+        // Delete the currently-persisted member contacts (we reinsert retained ones fresh below).
+        val previousKeys = contactExtraDao.getAll().map { it.lookupKey }
+        previousKeys.forEach { contacts.delete(it) }
         contactExtraDao.clear()
 
-        val clean = members.filter { it.hasName }
-        val lookupKeys = contacts.insertMembers(clean)
+        // Members removed from the roster: drop their persona memories (no longer meaningful).
+        previousKeys.filter { it !in retainedOldKeys }.forEach { memoryDao.deleteBySubject(it) }
+
+        // Reinsert; Contacts returns fresh lookupKeys (delete+insert doesn't preserve them).
+        val newKeys = contacts.insertMembers(clean)
         clean.forEachIndexed { i, m ->
-            val key = lookupKeys.getOrNull(i) ?: return@forEachIndexed
+            val newKey = newKeys.getOrNull(i) ?: return@forEachIndexed
             contactExtraDao.upsert(
-                ContactExtra(lookupKey = key, aliases = m.aliases.filter { it.isNotBlank() }.joinToString(","))
+                ContactExtra(lookupKey = newKey, aliases = m.aliases.filter { it.isNotBlank() }.joinToString(","))
             )
+            // Retained member whose key changed → re-point their memories so they survive the re-key.
+            m.lookupKey?.takeIf { it != newKey }?.let { oldKey -> memoryDao.remapSubject(oldKey, newKey) }
         }
     }
 
