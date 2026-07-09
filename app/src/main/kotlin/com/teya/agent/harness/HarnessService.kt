@@ -300,6 +300,10 @@ class HarnessService : Service() {
     private suspend fun runConversation() {
         val history = mutableListOf<ChatMessage>()
         try {
+            // AEC3's session-wide render feed (Plan B, Phase 2) — independent of setBargeInArmed's
+            // per-turn arm/disarm below, which continues to govern only sileroVad. See
+            // VoicePipeline.startAecSession()'s doc comment for why this is session-scoped.
+            voicePipeline.startAecSession()
             updateUiState(AgentState.SPEAKING)
             Log.d(TAG, "Prompting...")
             voicePipeline.setBargeInArmed(true)
@@ -329,6 +333,7 @@ class HarnessService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "Error in conversation", e)
         } finally {
+            voicePipeline.endAecSession()
             voicePipeline.setBargeInArmed(false)
             voicePipeline.resumeWakeWord() // back to idle wake-word listening for the next trigger
             updateUiState(AgentState.IDLE)

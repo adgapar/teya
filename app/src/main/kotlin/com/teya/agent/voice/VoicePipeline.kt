@@ -11,6 +11,8 @@ import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.util.Log
 import com.teya.agent.brain.MistralClient
+import com.teya.agent.voice.aec.NativeAec3
+import com.teya.agent.voice.aec.Resampler
 import com.teya.agent.voice.vad.SileroVad
 import io.ktor.utils.io.jvm.javaio.*
 import kotlinx.coroutines.CancellableContinuation
@@ -69,6 +71,25 @@ class VoicePipeline(private val context: Context) {
     private var vadChunkCounter = 0    // diagnostic
     private var vadPeakConfidence = 0f // diagnostic
     private var vadPeakRawAmplitude = 0 // diagnostic — pre-gain, to check the mic itself has signal
+
+    // AEC3 render feed (Plan B, Phase 2): unlike sileroVad above, aec3's lifecycle is deliberately
+    // NOT per-turn — it spans the whole conversation session (constructed/closed once by
+    // HarnessService.runConversation() via startAecSession()/endAecSession()), so its adaptive
+    // filter's convergence cost (Plan A's double-talk-from-frame-zero finding: ~0dB suppression
+    // from frame zero vs. ~72dB once converged) is paid once per session, not once per turn. A
+    // dedicated aecLock (not vadLock) guards this independently-scoped resource: analyzeRender
+    // runs on streamToSpeaker's IO-dispatcher thread while endAecSession() runs on the harness's
+    // coroutine thread, so a session-end close() could otherwise race a concurrent analyzeRender
+    // call, mirroring the exact race vadLock already guards against for sileroVad.
+    @Volatile private var aec3: NativeAec3? = null
+    private val aecLock = Any()
+    private var renderResampler = Resampler()
+    private var renderFrameBuffer = ShortArray(0)
+    // Set once — only if still 0L — the first time analyzeRender is actually fed a frame this
+    // session. Written from the render/TTS thread here; read from the capture thread by a later
+    // phase's convergence-lead-in gate, hence @Volatile for cross-thread visibility.
+    @Volatile private var firstRenderFrameAtMs: Long = 0L
+    private var renderFrameCount = 0 // diagnostic: render frames fed to AEC3 this session
 
     // Barge-in support: the currently-playing sink (whichever path is active) so [interrupt] can
     // cut it off immediately, plus a flag the harness checks to know a turn was cut short.
@@ -162,6 +183,72 @@ class VoicePipeline(private val context: Context) {
             synchronized(vadLock) {
                 sileroVad?.close()
                 sileroVad = null
+            }
+        }
+    }
+
+    /**
+     * Starts the whole-session [NativeAec3] instance. Call once near the top of
+     * [com.teya.agent.harness.HarnessService.runConversation] — deliberately independent of
+     * [setBargeInArmed]'s per-turn arm/disarm (see [aec3]'s doc comment above): mirroring
+     * [SileroVad]'s per-turn construct/close would force every turn, not just the one right after
+     * an interruption, to re-pay AEC3's convergence window.
+     */
+    fun startAecSession() {
+        synchronized(aecLock) {
+            if (aec3 != null) return // already started
+            renderResampler = Resampler()
+            renderFrameBuffer = ShortArray(0)
+            firstRenderFrameAtMs = 0L
+            renderFrameCount = 0
+            try {
+                aec3 = NativeAec3()
+                Log.d("VoicePipeline", "AEC3: session started")
+            } catch (e: Exception) {
+                Log.e("VoicePipeline", "AEC3: failed to init NativeAec3, staying without echo cancellation", e)
+                aec3 = null
+            }
+        }
+    }
+
+    /** Ends the whole-session [NativeAec3] instance. Call once in [runConversation]'s `finally`. */
+    fun endAecSession() {
+        synchronized(aecLock) {
+            aec3?.close()
+            aec3 = null
+        }
+    }
+
+    /**
+     * Resamples an arriving 24kHz TTS chunk to 16kHz and feeds [NativeAec3.FRAME_SIZE]-sized
+     * pieces to [NativeAec3.analyzeRender], buffering any leftover remainder (chunk lengths don't
+     * divide evenly) — the same leftover-buffer reassembly pattern [forwardArmedChunk] uses for
+     * Silero's frames. Session-scoped like [aec3] itself: runs for every sentence played via
+     * [streamToSpeaker], independent of [setBargeInArmed]'s per-turn state.
+     */
+    private fun feedRenderToAec3(chunk24k: ShortArray) {
+        synchronized(aecLock) {
+            val aec = aec3 ?: return
+            val resampled = renderResampler.resample(chunk24k)
+            if (resampled.isEmpty()) return
+
+            renderFrameBuffer += resampled
+            var offset = 0
+            while (renderFrameBuffer.size - offset >= NativeAec3.FRAME_SIZE) {
+                val frame = renderFrameBuffer.copyOfRange(offset, offset + NativeAec3.FRAME_SIZE)
+                offset += NativeAec3.FRAME_SIZE
+                aec.analyzeRender(frame)
+                if (firstRenderFrameAtMs == 0L) firstRenderFrameAtMs = System.currentTimeMillis()
+                renderFrameCount++
+            }
+            renderFrameBuffer = if (offset > 0) renderFrameBuffer.copyOfRange(offset, renderFrameBuffer.size) else renderFrameBuffer
+
+            // Diagnostic marker for manual logcat verification (~1s of render audio @16kHz, since
+            // FRAME_SIZE=160 samples=10ms): confirms real TTS audio is reaching analyzeRender
+            // while Teya speaks, without a device-instrumented test seam (see Phase 2 notes on why
+            // MistralClient isn't fakeable here).
+            if (renderFrameCount > 0 && renderFrameCount % 100 == 0) {
+                Log.d("VoicePipeline", "AEC3: render frames fed to analyzeRender this session = $renderFrameCount")
             }
         }
     }
@@ -441,6 +528,10 @@ class VoicePipeline(private val context: Context) {
                                 else -> v.toInt().toShort()
                             }
                         }
+                        // Feed AEC3's farend reference before writing to the speaker, so render
+                        // analysis for this chunk never depends on whether the write below
+                        // succeeds (Phase 2: the two are deliberately decoupled).
+                        feedRenderToAec3(shorts)
                         audioTrack.write(shorts, 0, shorts.size, AudioTrack.WRITE_BLOCKING)
                         totalFrames += shorts.size
                     }
