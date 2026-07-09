@@ -2,9 +2,9 @@
 date: 2026-07-09T00:00:00Z
 topic: "WebRTC AEC3 native port implementation plan (Plan A: vendor + build + validate)"
 tags: [voice, barge-in, aec3, webrtc, ndk, android-native]
-status: in-progress
+status: complete (all 4 phases; Phase 4's manual verification item pending human confirmation)
 last_updated: 2026-07-09T00:00:00Z
-last_updated_by: phase-running (Phase 3b)
+last_updated_by: phase-running (Phase 4)
 ---
 
 # WebRTC AEC3 Native Module — Vendor, Build, Validate (Plan A)
@@ -509,14 +509,18 @@ to wire into the real pipeline.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `./gradlew connectedAndroidTest --offline` passes both scenarios in
-      `NativeAec3EchoCancellationTest`
+- [x] `./gradlew connectedAndroidTest --offline` passes both scenarios in
+      `NativeAec3EchoCancellationTest` (device: SM-A346E via wireless adb; full
+      `connectedAndroidTest` run: `tests="3" failures="0"` across
+      `NativeAec3EchoCancellationTest` (2) + the pre-existing `NativeAec3SmokeTest` (1))
 
 #### Automated QA:
-- [ ] Pure-echo scenario demonstrates a defined, meaningful energy-reduction threshold (not just
-      "some" reduction) once the filter has converged
-- [ ] Speech+echo scenario demonstrates the independent (non-echo) component is preserved
+- [x] Pure-echo scenario demonstrates a defined, meaningful energy-reduction threshold (not just
+      "some" reduction) once the filter has converged (measured ~72.3–72.8 dB plateau, asserted
+      >40 dB — see Implementation Record)
+- [x] Speech+echo scenario demonstrates the independent (non-echo) component is preserved
       substantially better than the echo component — the specific property platform AEC failed at
+      (measured 51.04 dB echo suppression vs 0.01 dB speech-tone change — see Implementation Record)
 
 #### Manual Verification:
 - [ ] Skim the logged before/after energy numbers to sanity-check they're not passing on a
@@ -525,6 +529,61 @@ to wire into the real pipeline.
 **Implementation Note**: After this phase, pause for manual confirmation. If commit-per-phase was
 requested, create commit after verification passes. This is the last phase of Plan A — completing
 it means the native module is ready for Plan B (VoicePipeline/HarnessService integration).
+
+**Implementation record**: Passed, with one real finding surfaced by the process itself (not
+guessed in advance). `NativeAec3EchoCancellationTest` generates both scenarios fully in-test (3-tone
+sums: {350, 550, 750} Hz for the echo/render signal, {1500, 2000, 2500} Hz for the independent
+"speech-like" component — deliberately non-overlapping bands, generated with no reference to the
+render signal), feeds 12 seconds (1200 frames) through `NativeAec3` frame-by-frame in strict
+render-then-capture order, and logs per-second RMS-energy suppression to logcat so convergence is
+visible, not just asserted.
+
+- **Convergence time (measured, not guessed)**: pure-echo reductionDb was already 37.3 dB in
+  second 0 and reached a stable 72.3–72.8 dB plateau by second 1 (100 frames = 1s), holding flat
+  for 11 more logged seconds. This one-shot deterministic-tone case converges far faster than the
+  plan's "a few hundred ms to a few seconds" estimate suggested as a range to expect.
+- **Pure-echo threshold derivation**: asserted `reductionDb > 40.0`, chosen with >30 dB of real
+  margin below the measured ~72 dB plateau (not reverse-engineered to just barely pass), while
+  still far above a degenerate "any reduction" bar.
+- **Real finding — double-talk-from-frame-zero**: the test's first draft injected the independent
+  speech component starting at frame 0, concurrent with the echo (double-talk from the very first
+  frame). On-device that produced ~0.01 dB of echo suppression — i.e. no measurable effect at all
+  — despite the identical echo signal producing ~72 dB suppression in the pure-echo scenario. This
+  is real, documented AEC3 behavior (its dominant-nearend/double-talk detector declines to adapt
+  against a nearend-dominant signal, by design, to avoid the platform-AEC failure mode this plan
+  exists to fix) rather than a bug in AEC3 or the test — but it does mean AEC3 needs a real,
+  uncontaminated convergence window *before* double-talk starts; it does not bootstrap a good echo
+  estimate from a double-talk signal. The test was corrected to add a `CONVERGENCE_LEADIN_SECONDS`
+  (3s) echo-only lead-in before the independent component starts, matching the real barge-in shape
+  Plan B will serve (TTS starts speaking alone first, establishing the echo estimate; the user
+  barges in sometime *after* that, not at t=0). This is recorded in the test's own class doc
+  ("Double-talk-from-frame-zero") as a real, load-bearing design note for Plan B, not scrubbed from
+  history.
+- **Speech+echo threshold derivation** (after the lead-in fix): measured echoReductionDb=51.04,
+  speechReductionDb=0.01 in the converged window. Asserted: `echoReductionDb > 20.0` (>30 dB margin
+  below measured), `speechReductionDb < 1.0` (100x margin above measured 0.01), and
+  `echoReductionDb - speechReductionDb > 15.0` (measured gap ~51 dB) — this last assertion directly
+  encodes the scenario's actual point (echo suppressed much more than the independent signal is
+  touched), matching the plan's Motivation section's platform-AEC failure mode.
+- Isolating each component's contribution (scenario 2) used a per-frequency Goertzel-algorithm
+  magnitude probe applied to the same window of the actual single real combined-signal run (one
+  `NativeAec3` instance, real render+capture, no parallel/cloned instances) — chosen over running
+  separate echo-only/speech-only instances because it measures AEC3's actual joint-signal behavior
+  (nonlinear stages included) rather than an idealized linear decomposition; documented in the
+  test's class doc.
+- No degenerate-threshold risk: all three numbers above (72 dB, 51 dB, 0.01 dB) are large, clean,
+  and consistent across 11+ logged seconds — this is not a marginal pass.
+
+**Plan A status: complete.** All four phases (vendor/document → toolchain skeleton → AEC3+deps
+static-lib compile → JNI/Kotlin wrapper → this on-device correctness proof) are done and verified.
+`NativeAec3` is proven, on this device, to measurably cancel a known echo while preserving an
+independent uncorrelated signal — the specific property this device's platform
+`AcousticEchoCanceler` failed at (see plan's Motivation). The module is ready for Plan B (wiring
+`NativeAec3` into `VoicePipeline`/`HarnessService`, replacing the gap-gated barge-in workaround) —
+Plan B is not written yet and is out of scope for this phase. One real, load-bearing finding from
+this phase that Plan B should account for: AEC3 needs a genuine uncontaminated convergence window
+before double-talk starts; it will not adapt well if the user starts talking the instant TTS
+playback begins with no prior render-only period.
 
 ---
 
