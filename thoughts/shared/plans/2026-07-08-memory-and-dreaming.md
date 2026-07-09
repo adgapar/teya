@@ -2,14 +2,16 @@
 date: 2026-07-08T15:00:00Z
 topic: "Memory: persona blocks, categories, forgetting-curve decay + a nightly dreamer"
 tags: [memory, dreaming, decay, persona, room, rag, embeddings, admin, mistral-small]
-status: in-progress
+status: implemented
 ---
 
 # Memory — persona blocks, category-driven decay, and a nightly "dreamer"
 
-_Status: **slices 0–5 implemented** (2026-07-09); 0–3 live-verified on-device, 4–5 built + compiling
-(pending a live run). Only the dreamer's **LLM consolidation** of episodic detail is deferred (slice
-5b below). Builds on the
+_Status: **fully implemented** (2026-07-09), including slice 5b (episodic capture + LLM consolidation)
+and a dream **audit log** in Admin. Live-verified on-device: persona write/recall, general-pool RAG
+(`search_memory`), episodic capture. Plus post-review hardening: searchable cooled memories,
+safe `forget`, instant recall re-promote, and persona-memory survival across household saves
+(lookupKey remap). Remaining follow-ups are minor (see below). Builds on the
 dormant Room schema (`MemoryEntry` / `Persona` tables, seeded in `Migration(1,2)`, currently
 read/written by nobody) and the render-block pattern already proven by
 `HouseholdManager.profileContextBlock()`._
@@ -190,9 +192,17 @@ Extend the Admin console (`SettingsActivity`) — it already lists this as a pla
 5. ✅ **The dreamer (deterministic half).** Nightly ~3 AM via **AlarmManager** — not WorkManager
    (avoids a new dep that would break `--offline`; reuses the timer-reentry pattern, `ACTION_RUN_DREAM`).
    Admin "Run dream now" + last-run monitor. *Built + compiling; pending a live run.*
-5b. ⏳ **Deferred — LLM consolidation.** One `mistral-small` pass distilling recent EPISODIC detail
-   into durable facts. Needs the **T1 episodic capture** (end-of-session summaries) it would consume,
-   which doesn't exist yet — so both land together in a later slice.
+5b. ✅ **Episodic capture + LLM consolidation.** End-of-session `mistral-small` summary → EPISODIC note
+   (1–3 sentences, or NONE for trivia; embedded, 3d decay). The nightly dream then feeds notes added
+   since the last run to `mistral-small`, which conservatively promotes durable facts/preferences/
+   routines (`CATEGORY | SUBJECT | TEXT`), attributing to a member when named. Verified live (capture).
+6. ✅ **Dream audit log.** Rolling, capped history of each dream run (cooled/pruned + what it learned)
+   in `ConfigManager`, surfaced as "Recent dreams" in Admin; "Run dream now" fires the full dreamer.
+
+## Remaining follow-ups (minor)
+- Fully-incremental Contacts update (preserve lookupKeys instead of delete+reinsert+remap).
+- Orphan cleanup for member-deleted rows; richer per-session capture tuning; consolidation dedup.
+- On-device: exercise decay over real elapsed days; confirm the 3 AM `AlarmManager` fires while dozing.
 
 ## Open questions (non-blocking)
 
