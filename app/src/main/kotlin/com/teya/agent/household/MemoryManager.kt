@@ -108,6 +108,39 @@ class MemoryManager(context: Context) {
     /** EPISODIC notes captured since [since] — raw material for the dreamer's consolidation pass. */
     suspend fun recentEpisodic(since: Long): List<MemoryEntry> = dao.episodicSince(since)
 
+    /**
+     * Delete CONTACT memories whose subject is no longer a household member — dead weight left when a
+     * member's contact vanished outside the app (household edits already clean up their own removals).
+     * The caller MUST pass a genuine roster: never call with an empty set from a transient read, or
+     * it would wipe every persona memory. Returns how many were pruned.
+     */
+    suspend fun pruneOrphans(validContactKeys: Set<String>): Int {
+        if (validContactKeys.isEmpty()) return 0
+        val orphans = dao.getAll().filter { it.subjectType == SUBJECT_CONTACT && it.subjectKey !in validContactKeys }
+        orphans.forEach { dao.delete(it.id) }
+        return orphans.size
+    }
+
+    /**
+     * True if a durable (non-episodic) memory very similar to [text] already exists for this subject —
+     * so the dreamer's consolidation doesn't re-promote the same fact night after night. Normalized
+     * text match (case/punctuation-insensitive, either-contains-the-other).
+     */
+    suspend fun hasSimilar(text: String, subjectKey: String?): Boolean {
+        val norm = normalizeText(text)
+        if (norm.isEmpty()) return false
+        val pool = dao.getAll().filter { it.category.uppercase() != CAT_EPISODIC }
+        val scope = if (subjectKey != null) pool.filter { it.subjectKey == subjectKey }
+                    else pool.filter { it.subjectType == SUBJECT_GENERAL }
+        return scope.any {
+            val e = normalizeText(it.text)
+            e.isNotEmpty() && (e == norm || e.contains(norm) || norm.contains(e))
+        }
+    }
+
+    private fun normalizeText(s: String): String =
+        s.lowercase().replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
+
     /** Everything Teya has stored, newest first — for the Admin review screen. */
     suspend fun all(): List<MemoryEntry> = dao.getAll()
 

@@ -20,6 +20,7 @@ import com.teya.agent.R
 import com.teya.agent.brain.*
 import com.teya.agent.calendar.CalendarManager
 import com.teya.agent.household.HouseholdManager
+import com.teya.agent.household.Member
 import com.teya.agent.household.MemoryManager
 import com.teya.agent.persona.AgentTools
 import com.teya.agent.persona.TeyaPersona
@@ -168,9 +169,14 @@ class HarnessService : Service() {
     private suspend fun runDream() {
         val cfg = ConfigManager(this)
         val since = cfg.lastDreamAt   // consolidate only notes captured since the last run
-        val promoted = consolidateMemories(since)
+        val members = householdManager.members()
+        val promoted = consolidateMemories(since, members)
         val summary = withContext(Dispatchers.IO) { memoryManager.runDecay() }
-        val note = summary.note() + if (promoted.isNotEmpty()) " · learned: ${promoted.joinToString("; ")}" else ""
+        // Drop persona memories for members that vanished outside the app (guarded: needs a real roster).
+        val orphaned = memoryManager.pruneOrphans(members.mapNotNull { it.lookupKey }.toSet())
+        val note = summary.note() +
+            (if (promoted.isNotEmpty()) " · learned: ${promoted.joinToString("; ")}" else "") +
+            (if (orphaned > 0) " · dropped $orphaned orphan(s)" else "")
         cfg.lastDreamAt = summary.at
         cfg.lastDreamNote = note
         cfg.appendDreamLog(summary.at, note)
@@ -182,7 +188,7 @@ class HarnessService : Service() {
      * facts/preferences/routines it extracts into long-term memory (conservative; Admin can review).
      * Parses lines "CATEGORY | SUBJECT | TEXT". Returns how many were promoted.
      */
-    private suspend fun consolidateMemories(since: Long): List<String> {
+    private suspend fun consolidateMemories(since: Long, members: List<Member>): List<String> {
         val notes = memoryManager.recentEpisodic(since)
         if (notes.isEmpty()) { Log.d(TAG, "Consolidation: no new episodic notes since last dream"); return emptyList() }
         val out = brainClient.complete(
@@ -192,7 +198,6 @@ class HarnessService : Service() {
             Log.d(TAG, "Consolidation: reviewed ${notes.size} note(s), nothing durable to promote")
             return emptyList()
         }
-        val members = householdManager.members()
         val promoted = mutableListOf<String>()
         out.lineSequence().forEach { line ->
             val parts = line.split("|").map { it.trim() }
@@ -203,9 +208,11 @@ class HarnessService : Service() {
             if (text.isBlank()) return@forEach
             val member = subject.takeIf { it.isNotBlank() && !it.equals("GENERAL", ignoreCase = true) }
                 ?.let { householdManager.resolveMember(it, members) }
+            val subjectKey = member?.lookupKey
+            if (memoryManager.hasSimilar(text, subjectKey)) return@forEach   // already known → don't duplicate
             val emb = brainClient.embed(text)
-            val id = if (member?.lookupKey != null) {
-                memoryManager.remember(text, MemoryManager.SUBJECT_CONTACT, member.lookupKey, category, emb)
+            val id = if (subjectKey != null) {
+                memoryManager.remember(text, MemoryManager.SUBJECT_CONTACT, subjectKey, category, emb)
             } else {
                 memoryManager.remember(text, MemoryManager.SUBJECT_GENERAL, null, category, emb)
             }
