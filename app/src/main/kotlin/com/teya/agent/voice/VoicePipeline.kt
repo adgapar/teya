@@ -55,9 +55,8 @@ class VoicePipeline(private val context: Context) {
     // Silero VAD's own streaming algorithm run directly via ONNX Runtime): while armed, raw
     // wake-word-engine chunks are reassembled into VAD-sized frames and checked synchronously,
     // right on the mic capture thread — no network round-trip, so no channel/coroutine hand-off is
-    // needed (unlike the earlier Mistral Voxtral Realtime attempt this replaced; see
-    // thoughts/shared/research/2026-07-08-barge-in-vad-options.md). One instance per armed window
-    // since Silero carries RNN hidden state across calls.
+    // needed (unlike the earlier Mistral Voxtral Realtime attempt this replaced). One instance per
+    // armed window since Silero carries RNN hidden state across calls.
     @Volatile private var sileroVad: SileroVad? = null
     private var vadFrameBuffer = ShortArray(0)
     @Volatile private var bargeInFired = false
@@ -178,8 +177,7 @@ class VoicePipeline(private val context: Context) {
      * our own TTS audio is actively coming out of the speaker. This is the self-echo fix: this
      * device's `AcousticEchoCanceler` over-suppresses real speech during playback (see
      * WakeWordEngine), and with it off, Teya's own voice scored just as high as genuine speech to
-     * the VAD — no confidence threshold could tell them apart (see
-     * thoughts/shared/research/2026-07-08-barge-in-vad-options.md). Never listening while she's
+     * the VAD — no confidence threshold could tell them apart. Never listening while she's
      * actually speaking sidesteps that structurally: there's no echo to confuse with real speech
      * when nothing is playing. Tradeoff: can only interrupt in the gaps between sentences (where
      * `HarnessService.respond()`'s sentence-by-sentence TTS queue already pauses waiting for the
@@ -392,8 +390,7 @@ class VoicePipeline(private val context: Context) {
      * Calls stop() before draining so short clips (e.g. "Yes?") play out.
      *
      * Tried USAGE_VOICE_COMMUNICATION + AudioManager.MODE_IN_COMMUNICATION + forced speakerphone
-     * here as a barge-in/AEC experiment (see
-     * thoughts/shared/research/2026-07-08-barge-in-vad-options.md) — reverted twice now. First
+     * here as a barge-in/AEC experiment — reverted twice now. First
      * try (USAGE_VOICE_COMMUNICATION alone) silently rerouted playback to the earpiece. Second
      * try added AudioManager.mode/isSpeakerphoneOn management, but `audioManager.mode` read back
      * as MODE_NORMAL (0) immediately after being set to MODE_IN_COMMUNICATION — a silent no-op,

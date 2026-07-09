@@ -29,7 +29,7 @@ import java.nio.LongBuffer
  * per armed window (barge-in only runs while Teya is thinking/speaking) and [close] on disarm.
  *
  * Runs fully on-device (no network dependency/cost); does not by itself solve self-echo (Teya's
- * own voice bleeding into the mic) — see thoughts/shared/research/2026-07-08-barge-in-vad-options.md.
+ * own voice bleeding into the mic).
  */
 class SileroVad(
     context: Context,

@@ -41,8 +41,7 @@ import java.nio.channels.FileChannel
  * not a crude loudness guess either (that was tried, tuned blind, and never fired in testing).
  * Detection runs a local Silero VAD (see VoicePipeline.forwardArmedChunk, voice/vad/SileroVad.kt)
  * on these same raw chunks — an earlier attempt streamed them to Mistral's Voxtral Realtime STT
- * instead, but that never produced a single transcription event live (see
- * thoughts/shared/research/2026-07-08-barge-in-vad-options.md). Android can't reliably open a
+ * instead, but that never produced a single transcription event live. Android can't reliably open a
  * second concurrent `AudioRecord` on top of this one, so instead of a separate capture we tap the
  * same raw chunk stream here via [onArmedAudioChunk], gated by [bargeInArmed] so chunks only flow
  * out while the harness has actually armed it (mid-conversation, while Teya is thinking/speaking —
@@ -187,7 +186,7 @@ class WakeWordEngine(
                 // Left ON as a normal echo/noise cleanup effect. It's not barge-in's self-echo
                 // defense (see VoicePipeline.forwardArmedChunk, which never runs the VAD while our
                 // own audio is playing) — this device's AEC implementation isn't reliable enough
-                // for that; see thoughts/shared/research/2026-07-08-barge-in-vad-options.md.
+                // for that.
                 echoCanceler = AcousticEchoCanceler.create(sessionId)?.also { it.setEnabled(true) }
                 Log.d(TAG, "AEC available, enabled=${echoCanceler?.enabled}")
             } else {
