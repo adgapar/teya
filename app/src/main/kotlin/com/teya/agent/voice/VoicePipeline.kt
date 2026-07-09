@@ -72,6 +72,17 @@ class VoicePipeline(private val context: Context) {
     private var vadPeakConfidence = 0f // diagnostic
     private var vadPeakRawAmplitude = 0 // diagnostic — pre-gain, to check the mic itself has signal
 
+    // AEC3 capture-side leftover buffer (Plan B, Phase 3): reassembles forwardArmedChunk's raw
+    // 1280-sample mic chunks into NativeAec3.FRAME_SIZE (160-sample) pieces, same pattern as
+    // vadFrameBuffer above. Only ever touched from forwardArmedChunk, which always runs on
+    // WakeWordEngine's single dedicated capture thread (never concurrently with itself), so the
+    // buffer itself needs no lock of its own — access to the aec3 field alongside it is still
+    // guarded by aecLock inside cleanCaptureChunk(), for the same reason feedRenderToAec3() guards
+    // its analyzeRender calls: aec3 is written from the harness's coroutine thread
+    // (startAecSession()/endAecSession()), so a session-end close() could otherwise race a
+    // concurrent processCapture() call on this thread.
+    private var aecCaptureBuffer = ShortArray(0)
+
     // AEC3 render feed (Plan B, Phase 2): unlike sileroVad above, aec3's lifecycle is deliberately
     // NOT per-turn — it spans the whole conversation session (constructed/closed once by
     // HarnessService.runConversation() via startAecSession()/endAecSession()), so its adaptive
@@ -254,6 +265,37 @@ class VoicePipeline(private val context: Context) {
     }
 
     /**
+     * Second frame-reassembly stage (Plan B, Phase 3): splits [forwardArmedChunk]'s raw
+     * 1280-sample mic chunk into [NativeAec3.FRAME_SIZE]-sized (160-sample) pieces, runs each
+     * through [NativeAec3.processCapture] to strip Teya's own echo out of the mic signal *before*
+     * the existing gain + [SileroVad] reassembly ever sees it, and re-concatenates the cleaned
+     * pieces (buffering any leftover remainder in [aecCaptureBuffer] — defensive: WakeWordEngine's
+     * chunk size divides evenly by [NativeAec3.FRAME_SIZE] today, but this doesn't assume that
+     * stays true, mirroring [vadFrameBuffer]'s reassembly pattern).
+     *
+     * Falls back to the raw [chunk] unchanged when [aec3] is null (no active conversation
+     * session, or somehow not constructed) — this phase must not regress behavior when AEC3 isn't
+     * active for any reason. Wrapped in [aecLock] for the same reason [feedRenderToAec3] is: reads
+     * the [aec3] field, which [endAecSession] can null out from a different thread.
+     */
+    private fun cleanCaptureChunk(chunk: ShortArray): ShortArray {
+        synchronized(aecLock) {
+            val aec = aec3 ?: return chunk
+
+            aecCaptureBuffer += chunk
+            var cleaned = ShortArray(0)
+            var offset = 0
+            while (aecCaptureBuffer.size - offset >= NativeAec3.FRAME_SIZE) {
+                val frame = aecCaptureBuffer.copyOfRange(offset, offset + NativeAec3.FRAME_SIZE)
+                offset += NativeAec3.FRAME_SIZE
+                cleaned += aec.processCapture(frame)
+            }
+            aecCaptureBuffer = if (offset > 0) aecCaptureBuffer.copyOfRange(offset, aecCaptureBuffer.size) else aecCaptureBuffer
+            return cleaned
+        }
+    }
+
+    /**
      * Runs on [WakeWordEngine]'s capture thread. Reassembles the 1280-sample mic chunks into
      * [SileroVad.FRAME_SIZE]-sample frames (they don't divide evenly) and checks each
      * synchronously — cheap enough to do inline, no async hand-off needed. Applies the same
@@ -274,13 +316,22 @@ class VoicePipeline(private val context: Context) {
         if (bargeInFired) return // already interrupted this window; wait for disarm
         if (currentTrack != null || currentMediaPlayer != null) return // our own audio is playing right now
 
+        // Diagnostic peak is measured on the true raw mic chunk (pre-AEC3, pre-gain) — its purpose
+        // is "does the mic itself have signal at all," which is orthogonal to echo cancellation.
         var rawPeak = 0
-        val gained = ShortArray(chunk.size) { i ->
-            val abs = kotlin.math.abs(chunk[i].toInt())
+        for (s in chunk) {
+            val abs = kotlin.math.abs(s.toInt())
             if (abs > rawPeak) rawPeak = abs
-            (chunk[i] * BARGE_IN_GAIN).coerceIn(Short.MIN_VALUE.toFloat(), Short.MAX_VALUE.toFloat()).toInt().toShort()
         }
         if (rawPeak > vadPeakRawAmplitude) vadPeakRawAmplitude = rawPeak
+
+        // Phase 3: run the raw chunk through AEC3's capture side first, so Silero below sees
+        // echo-cancelled audio instead of the raw gained signal. cleanCaptureChunk() falls back to
+        // the unmodified chunk when aec3 is null (no active session).
+        val cleanedChunk = cleanCaptureChunk(chunk)
+        val gained = ShortArray(cleanedChunk.size) { i ->
+            (cleanedChunk[i] * BARGE_IN_GAIN).coerceIn(Short.MIN_VALUE.toFloat(), Short.MAX_VALUE.toFloat()).toInt().toShort()
+        }
 
         synchronized(vadLock) {
             val vad = sileroVad ?: return
