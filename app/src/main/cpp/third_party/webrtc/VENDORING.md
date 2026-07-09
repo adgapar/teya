@@ -100,21 +100,112 @@ diff against the upstream dependency declarations without re-fetching:
 `system_wrappers/BUILD.gn`, `modules/audio_processing/BUILD.gn`,
 `modules/audio_processing/utility/BUILD.gn`, `common_audio/third_party/ooura/BUILD.gn`.
 
-## Known gaps — deliberately deferred to Phase 3a
+## Phase 3a resolution — Abseil surface, remaining Phase 1 gaps, and build config
 
-Phase 1's dependency slice is **one level deep** from `aec3/BUILD.gn`'s own `deps` list — i.e. it
-vendors the files each direct dependency target ships, but does not recursively chase *those*
-targets' own further dependencies (e.g. `audio_buffer.cc`'s own deps on
-`api/audio:audio_frame_api`, `common_audio`, etc.; `environment.h`'s own deps on
-`rtc_event_log`/`task_queue`/`system_wrappers`). This is intentional, matching the plan's Failure
-Mode / Rollback section: Phase 3a (compiling AEC3 + deps as a standalone static lib) is explicitly
-where an incomplete Phase 1 slice is expected to surface as a missing-symbol/missing-header build
-error and get fixed, rather than trying to hand-resolve the entire transitive `gn` dependency graph
-up front without a compiler to check the work.
+Phase 1's dependency slice was **one level deep** from `aec3/BUILD.gn`'s own `deps` list, by
+design — deferring the "does this actually compile" question to Phase 3a, where a compiler (not a
+hand-read of the `gn` dependency graph) surfaces exactly what's missing. This section records what
+that process found and how each gap was closed.
 
-The exact Abseil header/target surface (`absl::strings:string_view` at the direct-target level,
-plus whatever `rtc_base`/`api` pull in transitively) is **not yet scoped** — that is Phase 3a item 1
-("Scope the exact Abseil surface"), to be recorded in this file once determined.
+### Abseil surface — resolved
+
+Grepping every vendored file (`grep -rho '#include "absl/[^"]*"'`) for the literal Abseil headers
+the tree references turned up exactly eight:
+
+```
+absl/base/attributes.h            (rtc_base/swap_queue.h — ABSL_MUST_USE_RESULT)
+absl/base/no_destructor.h         (rtc_base/logging.cc — not compiled, see below)
+absl/base/nullability.h           (api/audio/echo_control.h, api/environment/environment.h)
+absl/memory/memory.h              (rtc_base/experiments/struct_parameters_parser.h — not compiled, see below)
+absl/strings/has_absl_stringify.h (rtc_base/checks.h, rtc_base/logging.h — not compiled, see below)
+absl/strings/match.h              (api/field_trials_view.h — absl::StartsWith)
+absl/strings/str_cat.h            (rtc_base/checks.h, rtc_base/logging.h, struct_parameters_parser.cc — not compiled, see below)
+absl/strings/string_view.h        (widely used directly in aec3/*.cc, api/field_trials_view.h, rtc_base/experiments/field_trial_parser.*, ...)
+```
+
+**Decision: these are not vendored from upstream Abseil.** Real Abseil's own transitive header
+graph for even one of these (`absl/base/config.h`, `absl/base/policy_checks.h`,
+`absl/strings/internal/*`, `absl/numeric/int128.h` for `str_cat.h`'s numeric formatting, ...) is
+much larger than this narrow, leaf-utility usage — and per this plan's `--offline` constraint,
+there's no `FetchContent`-at-build-time option to fall back on if that subtree turns out to need
+network resolution of its own. Instead, `../../webrtc_shim/absl/` contains small, real (not
+stubbed) reimplementations of exactly the functions actually called:
+- `absl::string_view` → aliased to `std::string_view` (literally what real Abseil resolves to under
+  `ABSL_USES_STD_STRING_VIEW`, which any C++17+ build sets — not a simplification).
+- `absl::StartsWith`/`EndsWith`/`StrContains` → real substring checks on `std::string_view`.
+- `ABSL_MUST_USE_RESULT` → the real `__attribute__((warn_unused_result))` it expands to upstream.
+- `absl_nullable`/`absl_nonnull` → empty (these are pure annotations; they already compile to
+  nothing on toolchains lacking the corresponding Clang attributes).
+
+`absl/base/no_destructor.h`, `absl/memory/memory.h` and `absl/strings/str_cat.h` needed by
+`rtc_base/logging.cc` / `rtc_base/experiments/struct_parameters_parser.{h,cc}` /
+`absl/strings/has_absl_stringify.h` needed by the original `rtc_base/checks.h` are **not shimmed at
+all**, because none of those three files are compiled into `teya_aec3_core` — see below. See
+`../webrtc_shim/README.md` for the full per-shim rationale table.
+
+### Files replaced by Teya build shims (not vendored upstream implementations)
+
+Confirmed via grep across the whole vendored aec3 tree that these files' *real* implementations
+pull in Chromium-build-only machinery unrelated to AEC3's DSP (thread-safe log sink routing, UMA
+telemetry, a Chromium-wide DI container, full-APM buffer resampling/mixing/multi-band splitting).
+`../webrtc_shim/` (included on the compiler's `-I` path *before* this directory, so these override
+the real files below of the same name without modifying them) provides narrow, real, behavior-
+preserving replacements instead:
+
+| Real vendored file (unchanged on disk, **not compiled**) | Shim | Real API surface actually needed (confirmed by grep) |
+|---|---|---|
+| `rtc_base/checks.h` (+ `checks.cc`, also not compiled) | `webrtc_shim/rtc_base/checks.h` | `RTC_CHECK`/`RTC_DCHECK` family, same abort-on-failure contract, message via `ostringstream` instead of `absl::StrCat` |
+| `rtc_base/logging.h` (+ `logging.cc`, not compiled) | `webrtc_shim/rtc_base/logging.h` | `RTC_LOG(severity)`, `RTC_LOG_V(severity)` — straight to Android log, no `LogSink` registration |
+| `system_wrappers/include/metrics.h` (+ `source/metrics.cc`, not compiled) | `webrtc_shim/system_wrappers/include/metrics.h` | `RTC_HISTOGRAM_BOOLEAN`/`_COUNTS_LINEAR`/`_ENUMERATION` — no-ops (UMA telemetry, no backend) |
+| `api/environment/environment.h` | `webrtc_shim/api/environment/environment.h` | Only `env.field_trials()` — `.clock()`/`.task_queue_factory()`/`.event_log()` are never called by any vendored aec3 source |
+| `modules/audio_processing/audio_buffer.{cc,h}` (`.cc` not compiled; also not compiling `splitting_filter.{cc,h}`, `three_band_filter_bank.{cc,h}`, or the never-vendored `capture_mixer`/`audio_view`/`channel_buffer`/`audio_util`/full `api/audio/audio_processing.h`, all only needed by the *real* `audio_buffer.cc`) | `webrtc_shim/modules/audio_processing/audio_buffer.h` | `num_channels()`, `num_bands()`, `num_frames_per_band()`, `num_frames()`, `split_bands()`, `split_bands_const()`, `channels()`, `channels_const()`, `kSplitBandSize` — under the explicit assumption `num_bands() == 1` (true for this plan's 16kHz-mono-only scope; the real file's QMF sub-band splitting only activates above 32kHz, per this plan's own sourcing research) |
+
+`rtc_base/experiments/field_trial_list.{cc,h}`, `struct_parameters_parser.{cc,h}` and
+`field_trial_units.{cc,h}` were vendored in Phase 1 (as part of the `field_trial_parser` dep) but
+turned out to be dead weight: nothing in the compiled tree includes them (only
+`rtc_base/experiments/field_trial_parser.{cc,h}` is actually referenced, by `echo_canceller3.cc`'s
+`RetrieveFieldTrialValue`). They stay vendored-but-uncompiled for documentation purposes; deleting
+them is not necessary for correctness.
+
+### Newly vendored (real, unmodified) files — filling genuine Phase 1 gaps
+
+These are real upstream files at the pinned commit that Phase 1's one-level-deep slice missed, and
+whose real implementations (not shims — they're small, self-contained, and directly needed by files
+already vendored) were fetched to close the gap:
+
+- `rtc_base/numerics/safe_conversions.h` + `safe_conversions_impl.h` (needed by `field_trial_parser.cc`)
+- `rtc_base/numerics/safe_compare.h` + `rtc_base/type_traits.h` (needed by the already-vendored `safe_minmax.h`)
+- `rtc_base/platform_thread_types.h` + `.cc` (needed by `race_checker.{cc,h}`)
+- `rtc_base/system/rtc_export.h` (needed by `api/field_trials_view.h`, `api/environment/environment.h`, `api/audio/echo_canceller3_config.h` — expands to nothing without `WEBRTC_ENABLE_SYMBOL_EXPORT`, which this build doesn't define)
+- `rtc_base/system/unused.h` (needed by `rtc_base/cpu_info.cc`)
+
+### Build configuration discoveries (recorded here since they're load-bearing for re-vendoring)
+
+- **C++ standard is 20, not 17.** The plan's original "-std=c++17" assumption was wrong: the pinned
+  commit uses `std::span` pervasively (`block.h`, `fft_data.h`, `render_buffer.h`,
+  `apm_data_dumper.h`, ...), which is a C++20 library feature. NDK r27's clang supports C++20 fully;
+  `CMakeLists.txt` sets `cxx_std_20` on `teya_aec3_core`.
+- **`WEBRTC_HAS_NEON`** must be defined explicitly — real `gn` builds set it based on `target_cpu`,
+  it isn't derived from compiler predefines the way `rtc_base/system/arch.h`'s
+  `WEBRTC_ARCH_ARM_FAMILY` is. Selects the Ooura FFT's NEON kernel (mandatory on AArch64) over the
+  x86/MIPS fallback paths.
+- **`WEBRTC_ARCH_ARM64`** likewise must be defined explicitly (same reason) — selects the real
+  hardware NEON `vsqrtq_f32` path in `aec3/vector_math.h` over the 32-bit-ARM Newton–Raphson
+  software approximation, and the `gettid()`-based path in `platform_thread_types.cc`.
+- **`WEBRTC_POSIX`** must be defined for `rtc_base/platform_thread_types.h`'s `PlatformThreadId`/
+  `PlatformThreadRef` typedefs to exist at all (used by `race_checker.{cc,h}`).
+- **`WEBRTC_ANDROID` + `WEBRTC_LINUX`** are defined, but scoped to `platform_thread_types.cc` only
+  (via `set_source_files_properties`, not target-wide) — needed for that file's real, correct
+  `gettid()`/`prctl()`-based implementation (the generic POSIX fallback doesn't compile: it
+  `reinterpret_cast`s a 64-bit `pthread_t` to a 32-bit `pid_t`, which is ill-formed). Deliberately
+  **not** applied target-wide: `rtc_base/cpu_info.cc`'s `WEBRTC_ANDROID` branch needs
+  `<cpu-features.h>`, which isn't on the NDK's default include path (it's under the legacy
+  `sources/android/cpufeatures/` standalone library) — and nothing compiled here actually calls the
+  function that branch is in (`cpu_info::Supports(kNeon)`/`DetectNumberOfCores()` are unused by the
+  vendored aec3 sources; confirmed by grep).
+- **`WEBRTC_APM_DEBUG_DUMP=0`** — a real upstream build-time switch (not Teya-invented) that
+  disables `ApmDataDumper`'s WAV-file debug-dump machinery, avoiding a further dependency on
+  `common_audio/wav_file.h`/`rtc_base/string_utils.h`/`rtc_base/strings/string_builder.h`.
 
 ## Licensing summary
 

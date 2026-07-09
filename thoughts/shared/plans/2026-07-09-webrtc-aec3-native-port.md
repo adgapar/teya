@@ -4,7 +4,7 @@ topic: "WebRTC AEC3 native port implementation plan (Plan A: vendor + build + va
 tags: [voice, barge-in, aec3, webrtc, ndk, android-native]
 status: in-progress
 last_updated: 2026-07-09T00:00:00Z
-last_updated_by: phase-running (Phase 2)
+last_updated_by: phase-running (Phase 3a)
 ---
 
 # WebRTC AEC3 Native Module — Vendor, Build, Validate (Plan A)
@@ -352,9 +352,12 @@ actually exercises the static lib rather than silently dropping an unused target
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Compile-check: `./gradlew assembleDebug --offline` succeeds with `teya_aec3_core` built and
+- [x] Compile-check: `./gradlew assembleDebug --offline` succeeds with `teya_aec3_core` built and
       linked into its trivial consumer, with no missing-symbol/unresolved-reference errors (which
-      would indicate an incomplete Phase 1 dependency slice or Abseil surface)
+      would indicate an incomplete Phase 1 dependency slice or Abseil surface) — verified clean
+      after a full `.cxx`/CMake cache wipe, and confirmed zero undefined dynamic symbols (beyond
+      libc/libm/liblog/libdl) via `llvm-readelf --dyn-syms` on the built
+      `libteya_aec3_core_smoke_check.so`
 
 #### Manual Verification:
 - [ ] None expected — a clean compile+link is itself the proof this checkpoint exists to provide
@@ -363,6 +366,26 @@ actually exercises the static lib rather than silently dropping an unused target
 if this phase can't be made to compile within a bounded effort, stop and reassess with the user
 rather than pushing forward into Phase 3b's JNI work on top of a shaky foundation. If commit-per-
 phase was requested, create a commit after verification passes.
+
+**Implementation record**: Passed, after real iteration (not a trivial pass) — see
+`app/src/main/cpp/third_party/webrtc/VENDORING.md`'s "Phase 3a resolution" section for the full
+account. Highlights: (1) Abseil's real narrow-usage surface (8 headers) was resolved as small,
+real (not stubbed) Teya-authored shims in `app/src/main/cpp/webrtc_shim/absl/` rather than vendoring
+upstream Abseil's much larger transitive graph — documented as a deliberate deviation from "vendor
+Abseil source files" toward "vendor equivalent behavior," justified by the `--offline` constraint
+and the narrowness of the actual usage; (2) `rtc_base/checks.h`, `logging.h`,
+`system_wrappers/include/metrics.h`, `api/environment/environment.h`, and
+`modules/audio_processing/audio_buffer.h` were replaced with narrow, real (not correctness-stubbed)
+Teya shims in `app/src/main/cpp/webrtc_shim/` — each documented with the exact real API surface
+AEC3 core actually calls, confirmed by grep, not guessed; (3) a handful of genuinely-missing Phase 1
+dependency files (`safe_conversions.h`/`_impl.h`, `safe_compare.h`, `type_traits.h`,
+`platform_thread_types.{h,cc}`, `rtc_export.h`, `unused.h`) were vendored for real, unmodified,
+closing real Phase 1 gaps as anticipated; (4) the plan's own "-std=c++17" assumption was corrected
+to C++20 (the pinned commit uses `std::span` pervasively — a C++20 library feature); (5)
+`WEBRTC_HAS_NEON`/`WEBRTC_ARCH_ARM64`/`WEBRTC_POSIX`/`WEBRTC_APM_DEBUG_DUMP=0` build-config macros
+were set explicitly (real upstream switches gn normally derives from `target_cpu`, not
+Teya-invented). No AEC3 signal-processing logic was stubbed or altered — every `.cc` file under
+`modules/audio_processing/aec3/` compiles from its real, unmodified vendored source.
 
 ---
 
