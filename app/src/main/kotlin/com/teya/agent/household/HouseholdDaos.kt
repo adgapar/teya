@@ -44,8 +44,8 @@ interface MemoryDao {
     @Update
     suspend fun update(entry: MemoryEntry)
 
-    /** Reinforcement: bump strength + stamp the access time when a memory is used ("use it or lose it"). */
-    @Query("UPDATE memory_entry SET strength = :strength, lastAccessedAt = :at WHERE id = :id")
+    /** Reinforcement: refresh strength + access time AND re-promote to HOT the moment a memory is recalled. */
+    @Query("UPDATE memory_entry SET strength = :strength, lastAccessedAt = :at, tier = 'HOT' WHERE id = :id")
     suspend fun reinforce(id: Int, strength: Float, at: Long)
 
     /** The dreamer's re-tiering after it recomputes strength on the forgetting curve. */

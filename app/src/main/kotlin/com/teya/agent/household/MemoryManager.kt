@@ -58,12 +58,12 @@ class MemoryManager(context: Context) {
      */
     suspend fun forget(query: String, subjectKey: String? = null): Int {
         val q = query.trim().lowercase()
-        if (q.isEmpty()) return 0
+        // Guard against catastrophic over-delete: a 1–2 char query would substring-match (and wipe)
+        // many unrelated memories. Only delete rows whose text CONTAINS the query — never the reverse
+        // (which would delete any memory that happens to be a substring of a longer query).
+        if (q.length < 3) return 0
         val candidates = if (subjectKey != null) dao.bySubject(subjectKey) else dao.getAll()
-        val hits = candidates.filter {
-            val t = it.text.lowercase()
-            t.contains(q) || q.contains(t)
-        }
+        val hits = candidates.filter { it.text.lowercase().contains(q) }
         hits.forEach { dao.delete(it.id) }
         return hits.size
     }
@@ -82,16 +82,18 @@ class MemoryManager(context: Context) {
         val pool = dao.searchable()
         if (pool.isEmpty()) return emptyList()
 
-        val ranked = if (queryEmbedding != null) {
-            val scored = pool.mapNotNull { e ->
+        // Semantic hits over embedded rows (cosine >= MIN_SIM), PLUS keyword hits over the whole pool.
+        // The keyword pass covers rows with no embedding (e.g. cooled persona memories) and exact
+        // terms, and guarantees we never silently return nothing just because the cosine pass came up
+        // empty (dimension mismatch, all below threshold). Merge semantic-first, dedup by id.
+        val semantic = if (queryEmbedding != null) {
+            pool.mapNotNull { e ->
                 val emb = e.embedding?.toFloatArray() ?: return@mapNotNull null
-                e to cosine(queryEmbedding, emb)
-            }
-            if (scored.isEmpty()) keywordMatch(pool, q, topK)
-            else scored.filter { it.second >= MIN_SIM }.sortedByDescending { it.second }.take(topK).map { it.first }
-        } else {
-            keywordMatch(pool, q, topK)
-        }
+                val sim = cosine(queryEmbedding, emb)
+                if (sim >= MIN_SIM) e to sim else null
+            }.sortedByDescending { it.second }.map { it.first }
+        } else emptyList()
+        val ranked = (semantic + keywordMatch(pool, q, topK)).distinctBy { it.id }.take(topK)
 
         // Recall reinforces: reset to full strength + stamp access time ("use it or lose it"). The
         // next dream run re-promotes a reinforced COLD memory back to HOT.
@@ -122,7 +124,7 @@ class MemoryManager(context: Context) {
         var pruned = 0
         all.forEach { e ->
             val s = strengthNow(e, now)
-            if (e.category == CAT_EPISODIC && s < DEAD_THRESHOLD) {
+            if (e.category.uppercase() == CAT_EPISODIC && s < DEAD_THRESHOLD) {
                 dao.delete(e.id)
                 pruned++
             } else {

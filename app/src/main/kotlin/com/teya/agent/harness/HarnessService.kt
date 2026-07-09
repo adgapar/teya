@@ -175,7 +175,7 @@ class HarnessService : Service() {
             Intent(this, HarnessService::class.java).setAction(ACTION_RUN_DREAM),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        am.setInexactRepeating(AlarmManager.RTC, nextDreamTimeMillis(), AlarmManager.INTERVAL_DAY, pi)
+        am.setInexactRepeating(AlarmManager.RTC_WAKEUP, nextDreamTimeMillis(), AlarmManager.INTERVAL_DAY, pi)
         Log.d(TAG, "Dream scheduled for next ${DREAM_HOUR}:00")
     }
 
@@ -612,13 +612,13 @@ class HarnessService : Service() {
                 val about = tool.arguments["about"]?.trim().orEmpty()
                 val member = about.takeIf { it.isNotEmpty() }
                     ?.let { householdManager.resolveMember(it, householdManager.members()) }
+                // Embed every memory so it stays semantically searchable once it cools out of the
+                // always-loaded block (persona) or lives in the search-only general pool.
+                val embedding = brainClient.embed(fact)
                 val id = if (member?.lookupKey != null) {
-                    memoryManager.remember(fact, MemoryManager.SUBJECT_CONTACT, member.lookupKey, tool.arguments["category"])
+                    memoryManager.remember(fact, MemoryManager.SUBJECT_CONTACT, member.lookupKey, tool.arguments["category"], embedding)
                 } else {
-                    // Family-wide facts go in the searchable pool → embed for RAG (null = keyword fallback).
-                    memoryManager.remember(
-                        fact, MemoryManager.SUBJECT_GENERAL, null, tool.arguments["category"], brainClient.embed(fact)
-                    )
+                    memoryManager.remember(fact, MemoryManager.SUBJECT_GENERAL, null, tool.arguments["category"], embedding)
                 }
                 if (id < 0) "I couldn't save that."
                 else "Saved to memory" + (member?.displayName?.let { " (about $it)" } ?: "") + "."
