@@ -4,7 +4,7 @@ topic: "WebRTC AEC3 native port implementation plan (Plan A: vendor + build + va
 tags: [voice, barge-in, aec3, webrtc, ndk, android-native]
 status: in-progress
 last_updated: 2026-07-09T00:00:00Z
-last_updated_by: phase-running (Phase 1)
+last_updated_by: phase-running (Phase 2)
 ---
 
 # WebRTC AEC3 Native Module — Vendor, Build, Validate (Plan A)
@@ -293,16 +293,21 @@ real DSP code is added.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Compile-check: `./gradlew assembleDebug --offline`
-- [ ] Install: `./gradlew installDebug --offline`
-- [ ] Passthrough instrumented test passes: `./gradlew connectedAndroidTest --offline` (device
-      connected via wireless adb)
-- [ ] Built APK contains only the intended ABI: `unzip -l app/build/outputs/apk/debug/app-debug.apk
-      | grep lib/` shows `lib/arm64-v8a/libteya_aec3.so` and no other ABI directories
+- [x] Compile-check: `./gradlew assembleDebug --offline` (NDK r27d + CMake 3.22.1 installed via
+      `sdkmanager` — the plan's one online step; build succeeds fully offline after)
+- [x] Install: `./gradlew installDebug --offline` (device: SM-A346E via wireless adb)
+- [x] Passthrough instrumented test passes: `./gradlew connectedAndroidTest --offline` (required
+      one additional one-time online run first, to fetch the Unified Test Platform jars —
+      `connectedAndroidTest` had never run in this project before Phase 2, so those artifacts were
+      never cached; unrelated to the NDK/CMake/JNI toolchain itself. Confirmed `--offline` passes
+      cleanly afterward.)
+- [x] Built APK contains only the intended ABI: `unzip -l app/build/outputs/apk/debug/app-debug.apk
+      | grep lib/` shows `lib/arm64-v8a/libteya_aec3.so` and no other ABI directories (confirmed;
+      other prebuilt native deps — onnxruntime, tensorflowlite — are also arm64-v8a-only already)
 
 #### Automated QA:
-- [ ] `NativeAec3PingTest` demonstrates the full JNI round-trip end-to-end on-device, not just a
-      compile-time check
+- [x] `NativeAec3PingTest` demonstrates the full JNI round-trip end-to-end on-device, not just a
+      compile-time check (`ping_returnsSentinelValue` passed on SM-A346E, asserting `ping() == 42`)
 
 #### Manual Verification:
 - [ ] None expected — the instrumented test is a genuine on-device proof; flag here only if
