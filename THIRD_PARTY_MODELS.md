@@ -59,3 +59,20 @@ streaming algorithm Silero documents in its own reference code
 verified against the model's actual ONNX graph (`input`/`state`/`sr` inputs, `output`/state
 outputs) — a fixed-config version taking Teya's specific need (16kHz, 512-sample frames, one
 detector instance per armed barge-in window) rather than a general-purpose multi-backend library.
+
+## Native echo cancellation: WebRTC AEC3 (vendored source, native build)
+
+`app/src/main/cpp/third_party/webrtc/` vendors Google WebRTC's Acoustic Echo Canceller v3 (AEC3) —
+**AEC3 only, not the full Audio Processing Module** (no AGC, no noise suppression, no beamforming) —
+built as a native `.so` via NDK/CMake. See
+`app/src/main/cpp/third_party/webrtc/VENDORING.md` for the pinned commit hash, exact file list, and
+per-target dependency-resolution notes.
+
+| Component | Source | License | Commercial use |
+|---|---|---|---|
+| WebRTC AEC3 (`modules/audio_processing/aec3/` + minimal dep slice) | [webrtc.googlesource.com/src](https://webrtc.googlesource.com/src), pinned commit `99de2d09036e61b72e4e6bba3ab09fedc40d18fe` | BSD-3-Clause | ✅ Yes |
+| Abseil (`absl::strings:string_view`, transitively more) | [abseil/abseil-cpp](https://github.com/abseil/abseil-cpp) — a WebRTC build dependency, **not yet vendored** (scoping deferred to a later implementation phase; see `VENDORING.md`) | Apache-2.0 | ✅ Yes |
+| Ooura FFT (`common_audio/third_party/ooura/fft_size_128/`) | Takuya Ooura, [kurims.kyoto-u.ac.jp/~ooura/fft.html](http://www.kurims.kyoto-u.ac.jp/~ooura/fft.html), vendored via the WebRTC mirror | **Its own permissive attribution-request license** (Copyright Takuya Ooura, 1996–2001 — "you may use, copy, modify and distribute this code for any purpose, including commercial use, and without fee. Please refer to this package when you modify this code.") — **not** BSD or Apache, listed separately on purpose | ✅ Yes (with attribution) |
+
+`NativeAec3.kt` (the Kotlin wrapper, not yet written as of this entry) will be our own code, not a
+port of any third-party Android AEC wrapper — same pattern as `SileroVad.kt` above.
