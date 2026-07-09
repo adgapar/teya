@@ -1,5 +1,6 @@
 package com.teya.agent
 
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.Bundle
@@ -45,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.teya.agent.harness.ConfigManager
+import com.teya.agent.harness.HarnessService
 import com.teya.agent.household.HomeConfirmCard
 import com.teya.agent.household.HouseholdManager
 import com.teya.agent.household.LanguagePicker
@@ -59,6 +61,7 @@ import com.teya.agent.household.PrimaryButton
 import com.teya.agent.household.SectionHead
 import com.teya.agent.household.TeyaColors
 import com.teya.agent.household.TeyaField
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -105,9 +108,11 @@ class SettingsActivity : ComponentActivity() {
                     lifecycleScope.launch { memory.delete(id); loadedMemories.value = memory.all() }
                 },
                 onRunDream = {
+                    // Fire the real (full) dreamer in the service — LLM consolidation + decay — then
+                    // refresh after a moment (the consolidation call takes ~1-2s).
+                    startService(Intent(this, HarnessService::class.java).setAction(HarnessService.ACTION_RUN_DREAM))
                     lifecycleScope.launch {
-                        val s = memory.runDecay()
-                        config.lastDreamAt = s.at; config.lastDreamNote = s.note()
+                        delay(3000)
                         loadedMemories.value = memory.all()
                         lastDream.value = dreamText()
                     }

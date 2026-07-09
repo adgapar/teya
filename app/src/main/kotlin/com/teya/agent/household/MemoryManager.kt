@@ -105,6 +105,9 @@ class MemoryManager(context: Context) {
     private fun keywordMatch(pool: List<MemoryEntry>, q: String, topK: Int): List<MemoryEntry> =
         pool.filter { it.text.lowercase().contains(q) }.take(topK)
 
+    /** EPISODIC notes captured since [since] — raw material for the dreamer's consolidation pass. */
+    suspend fun recentEpisodic(since: Long): List<MemoryEntry> = dao.episodicSince(since)
+
     /** Everything Teya has stored, newest first — for the Admin review screen. */
     suspend fun all(): List<MemoryEntry> = dao.getAll()
 

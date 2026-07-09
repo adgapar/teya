@@ -160,11 +160,74 @@ class HarnessService : Service() {
         )
     }
 
-    /** Run the memory "dreamer" (deterministic decay/re-tier/prune) and record it for the Admin monitor. */
+    /**
+     * Run the memory "dreamer": first the LLM consolidation of recent episodic notes into durable
+     * facts, then the deterministic decay/re-tier/prune. Records a one-line summary for the Admin
+     * monitor.
+     */
     private suspend fun runDream() {
+        val cfg = ConfigManager(this)
+        val since = cfg.lastDreamAt   // consolidate only notes captured since the last run
+        val promoted = consolidateMemories(since)
         val summary = withContext(Dispatchers.IO) { memoryManager.runDecay() }
-        ConfigManager(this).apply { lastDreamAt = summary.at; lastDreamNote = summary.note() }
-        Log.d(TAG, "Dream done: ${summary.note()}")
+        val note = summary.note() + if (promoted > 0) " · promoted $promoted" else ""
+        cfg.lastDreamAt = summary.at
+        cfg.lastDreamNote = note
+        Log.d(TAG, "Dream done: $note")
+    }
+
+    /**
+     * The dreamer's LLM half: feed recent EPISODIC notes to mistral-small and promote any durable
+     * facts/preferences/routines it extracts into long-term memory (conservative; Admin can review).
+     * Parses lines "CATEGORY | SUBJECT | TEXT". Returns how many were promoted.
+     */
+    private suspend fun consolidateMemories(since: Long): Int {
+        val notes = memoryManager.recentEpisodic(since)
+        if (notes.isEmpty()) return 0
+        val out = brainClient.complete(
+            TeyaPersona.consolidationPrompt, notes.joinToString("\n") { "- ${it.text}" },
+        )?.trim()
+        if (out.isNullOrBlank() || out.uppercase() == "NONE") return 0
+        val members = householdManager.members()
+        var promoted = 0
+        out.lineSequence().forEach { line ->
+            val parts = line.split("|").map { it.trim() }
+            if (parts.size < 3) return@forEach
+            val category = parts[0]
+            val subject = parts[1]
+            val text = parts.drop(2).joinToString(" | ").trim()
+            if (text.isBlank()) return@forEach
+            val member = subject.takeIf { it.isNotBlank() && !it.equals("GENERAL", ignoreCase = true) }
+                ?.let { householdManager.resolveMember(it, members) }
+            val emb = brainClient.embed(text)
+            val id = if (member?.lookupKey != null) {
+                memoryManager.remember(text, MemoryManager.SUBJECT_CONTACT, member.lookupKey, category, emb)
+            } else {
+                memoryManager.remember(text, MemoryManager.SUBJECT_GENERAL, null, category, emb)
+            }
+            if (id >= 0) promoted++
+        }
+        Log.d(TAG, "Consolidation promoted $promoted memories from ${notes.size} notes")
+        return promoted
+    }
+
+    /**
+     * End-of-session capture (background): summarize a finished conversation into one EPISODIC note
+     * (or skip on NONE / trivia). Episodic notes decay fast and feed the nightly consolidation.
+     */
+    private fun captureEpisodic(history: List<ChatMessage>) {
+        if (history.size < 2) return
+        scope.launch {
+            val convo = history
+                .filter { it.role == "user" || (it.role == "assistant" && !it.content.isNullOrBlank()) }
+                .joinToString("\n") { "${it.role}: ${it.content}" }
+            if (convo.isBlank()) return@launch
+            val summary = brainClient.complete(TeyaPersona.episodicSummaryPrompt, convo)?.trim()
+            if (summary.isNullOrBlank() || summary.uppercase() == "NONE") return@launch
+            val emb = brainClient.embed(summary)
+            memoryManager.remember(summary, MemoryManager.SUBJECT_GENERAL, null, MemoryManager.CAT_EPISODIC, emb)
+            Log.d(TAG, "Captured episodic memory: $summary")
+        }
     }
 
     /** Schedule the nightly dreamer (~3 AM) via AlarmManager — the wall device is idle + charging then. */
@@ -251,6 +314,7 @@ class HarnessService : Service() {
                 voicePipeline.setBargeInArmed(true) // Teya's about to think/speak — arm for interruption
                 respond(history)
             }
+            captureEpisodic(history)   // summarize the finished session into episodic memory (background)
         } catch (e: Exception) {
             Log.e(TAG, "Error in conversation", e)
         } finally {

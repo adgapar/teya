@@ -31,6 +31,13 @@ interface BrainClient {
      * provider has no embedding model or the call fails — callers fall back to keyword search.
      */
     suspend fun embed(text: String): FloatArray? = null
+
+    /**
+     * A one-shot, tool-free chat completion ([system] + [user]) — used by the memory dreamer to
+     * summarize a finished session and to consolidate notes into durable facts. Null if the provider
+     * can't complete or the call fails.
+     */
+    suspend fun complete(system: String, user: String): String? = null
 }
 
 /**

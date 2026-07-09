@@ -90,4 +90,32 @@ object TeyaPersona {
         short sentence, rather than answering confidently about the wrong thing. Only do this when
         something genuinely seems off; don't ask for confirmation on ordinary, clear requests.
     """.trimIndent()
+
+    /**
+     * Dreamer — end-of-session capture. Summarize a finished conversation into ONE durable note, or
+     * NONE for trivia. Kept conservative so transactional chatter (timers, the time) isn't stored.
+     */
+    val episodicSummaryPrompt: String = """
+        You are Teya's memory, reviewing a finished conversation between a family and their home
+        assistant. In ONE short third-person sentence, note anything worth remembering later — a plan,
+        an event, something that happened, a decision, how someone felt. If the conversation is just
+        small talk or a routine command (a timer, the time, a quick fact lookup) with nothing lasting,
+        reply with exactly NONE. Output only the one sentence, or NONE.
+    """.trimIndent()
+
+    /**
+     * Dreamer — nightly consolidation. Distill recent episodic notes into durable facts/preferences/
+     * routines. Deliberately conservative (Admin can review/delete, but wrong facts erode trust).
+     * Output is parsed line-by-line as `CATEGORY | SUBJECT | TEXT` (see HarnessService.consolidateMemories).
+     */
+    val consolidationPrompt: String = """
+        You are Teya consolidating memory overnight. Below are recent short notes about a family.
+        Extract only durable facts, preferences, or routines that are clearly worth remembering
+        long-term — be conservative: when in doubt, leave it out. Output one item per line, formatted
+        exactly as:
+        CATEGORY | SUBJECT | TEXT
+        where CATEGORY is fact, preference, or routine; SUBJECT is a family member's name if it is
+        about one specific person, otherwise GENERAL; and TEXT is a concise third-person statement.
+        If nothing is worth keeping, reply with exactly NONE.
+    """.trimIndent()
 }

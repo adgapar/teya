@@ -112,6 +112,32 @@ class MistralClient(
         }
     }
 
+    /** One-shot, tool-free completion (system + user) — used by the memory dreamer. Null on failure. */
+    override suspend fun complete(system: String, user: String): String? {
+        if (user.isBlank()) return null
+        return try {
+            val resp = httpClient.post("${baseUrl}/chat/completions") {
+                header(HttpHeaders.Authorization, "Bearer ${cleanApiKey}")
+                contentType(ContentType.Application.Json)
+                setBody(MistralChatRequest(
+                    model = chatModel,
+                    messages = listOf(
+                        MistralMessage(role = "system", content = system),
+                        MistralMessage(role = "user", content = user),
+                    ),
+                ))
+            }
+            if (resp.status != HttpStatusCode.OK) {
+                Log.e("MistralClient", "Complete error: ${resp.status} - ${resp.bodyAsText()}")
+                return null
+            }
+            resp.body<MistralChatResponse>().choices.firstOrNull()?.message?.content?.trim()
+        } catch (e: Exception) {
+            Log.e("MistralClient", "Complete failed", e)
+            null
+        }
+    }
+
     override suspend fun processText(history: List<ChatMessage>, liveContext: String?): BrainResponse {
         Log.d("MistralClient", "Processing ${history.size} message(s)")
         val messages = buildMistralMessages(history, liveContext)

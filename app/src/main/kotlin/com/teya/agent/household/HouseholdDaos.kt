@@ -31,6 +31,10 @@ interface MemoryDao {
     @Query("SELECT * FROM memory_entry WHERE tier = 'HOT' ORDER BY strength DESC, addedAt DESC")
     suspend fun hot(): List<MemoryEntry>
 
+    /** EPISODIC notes captured since [since] — the dreamer's raw material for consolidation. */
+    @Query("SELECT * FROM memory_entry WHERE category = 'EPISODIC' AND addedAt > :since ORDER BY addedAt")
+    suspend fun episodicSince(since: Long): List<MemoryEntry>
+
     /**
      * The RAG search set: every row NOT in the always-loaded persona block — the general pool plus
      * any cooled (COLD) persona memory. (HOT persona memory is already visible in context.)
