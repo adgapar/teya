@@ -38,6 +38,7 @@ fun MemorySectionBody(
     memories: List<MemoryEntry>?,
     members: List<Member>,
     lastDreamText: String?,
+    dreamLog: List<String>,
     onRunDream: () -> Unit,
     onDelete: (Int) -> Unit,
 ) {
@@ -45,11 +46,11 @@ fun MemorySectionBody(
     if (memories.isEmpty()) {
         Note("Nothing remembered yet. Teya saves facts, preferences and routines when the family asks her to.")
         Spacer(Modifier.height(12.dp))
-        DreamerControl(lastDreamText, onRunDream)
+        DreamerControl(lastDreamText, dreamLog, onRunDream)
         return
     }
 
-    MemorySummary(memories, lastDreamText, onRunDream)
+    MemorySummary(memories, lastDreamText, dreamLog, onRunDream)
     Spacer(Modifier.height(16.dp))
 
     // Group per member (persona memory) by lookupKey; everything else falls under "General".
@@ -71,7 +72,7 @@ fun MemorySectionBody(
 }
 
 @Composable
-private fun MemorySummary(memories: List<MemoryEntry>, lastDreamText: String?, onRunDream: () -> Unit) {
+private fun MemorySummary(memories: List<MemoryEntry>, lastDreamText: String?, dreamLog: List<String>, onRunDream: () -> Unit) {
     val hot = memories.count { it.tier == MemoryManager.TIER_HOT }
     val cold = memories.size - hot
     val byCat = memories.groupingBy { it.category }.eachCount()
@@ -94,20 +95,35 @@ private fun MemorySummary(memories: List<MemoryEntry>, lastDreamText: String?, o
                 Text(cats, color = TeyaColors.Muted2, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
             }
             Spacer(Modifier.height(14.dp))
-            DreamerControl(lastDreamText, onRunDream)
+            DreamerControl(lastDreamText, dreamLog, onRunDream)
         }
     }
 }
 
-/** The dreamer monitor + manual trigger — last run info and a "Run dream now" button (debug/testing). */
+/** The dreamer monitor + manual trigger — last run, a rolling log of recent runs, and a "Run now" button. */
 @Composable
-private fun DreamerControl(lastDreamText: String?, onRunDream: () -> Unit) {
+private fun DreamerControl(lastDreamText: String?, dreamLog: List<String>, onRunDream: () -> Unit) {
     Text(
         "Dreamer — ${lastDreamText ?: "not run yet"}",
         color = TeyaColors.Muted2, fontSize = 11.sp, fontFamily = FontFamily.Monospace,
     )
     Spacer(Modifier.height(8.dp))
     SecondaryButton("Run dream now", Modifier.fillMaxWidth(), onRunDream)
+    if (dreamLog.isNotEmpty()) {
+        Spacer(Modifier.height(14.dp))
+        Text(
+            "RECENT DREAMS", color = TeyaColors.Muted, fontSize = 10.5.sp,
+            letterSpacing = 1.4.sp, fontFamily = FontFamily.Monospace,
+        )
+        Spacer(Modifier.height(6.dp))
+        dreamLog.take(12).forEach { entry ->
+            Text(
+                "· $entry", color = TeyaColors.Muted2, fontSize = 11.sp,
+                lineHeight = 15.sp, fontFamily = FontFamily.Monospace,
+            )
+            Spacer(Modifier.height(3.dp))
+        }
+    }
 }
 
 @Composable

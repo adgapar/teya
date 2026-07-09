@@ -54,6 +54,16 @@ class ConfigManager(context: Context) {
         get() = prefs.getString("last_dream_note", "") ?: ""
         set(value) = prefs.edit().putString("last_dream_note", value).apply()
 
+    /** Rolling audit log of recent dream runs, newest-first, each line "millis|note". Capped at 30. */
+    var dreamLog: List<String>
+        get() = prefs.getString("dream_log", null)?.split("\n")?.filter { it.isNotBlank() } ?: emptyList()
+        set(value) = prefs.edit().putString("dream_log", value.take(30).joinToString("\n")).apply()
+
+    /** Record a dream run in the rolling log (prepended, so newest is first). */
+    fun appendDreamLog(at: Long, note: String) {
+        dreamLog = listOf("$at|" + note.replace("\n", " ").replace("|", "/")) + dreamLog
+    }
+
     fun isConfigured(): Boolean {
         return !mistralApiKey.isNullOrBlank()
     }

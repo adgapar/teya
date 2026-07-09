@@ -170,9 +170,10 @@ class HarnessService : Service() {
         val since = cfg.lastDreamAt   // consolidate only notes captured since the last run
         val promoted = consolidateMemories(since)
         val summary = withContext(Dispatchers.IO) { memoryManager.runDecay() }
-        val note = summary.note() + if (promoted > 0) " · promoted $promoted" else ""
+        val note = summary.note() + if (promoted.isNotEmpty()) " · learned: ${promoted.joinToString("; ")}" else ""
         cfg.lastDreamAt = summary.at
         cfg.lastDreamNote = note
+        cfg.appendDreamLog(summary.at, note)
         Log.d(TAG, "Dream done: $note")
     }
 
@@ -181,18 +182,18 @@ class HarnessService : Service() {
      * facts/preferences/routines it extracts into long-term memory (conservative; Admin can review).
      * Parses lines "CATEGORY | SUBJECT | TEXT". Returns how many were promoted.
      */
-    private suspend fun consolidateMemories(since: Long): Int {
+    private suspend fun consolidateMemories(since: Long): List<String> {
         val notes = memoryManager.recentEpisodic(since)
-        if (notes.isEmpty()) { Log.d(TAG, "Consolidation: no new episodic notes since last dream"); return 0 }
+        if (notes.isEmpty()) { Log.d(TAG, "Consolidation: no new episodic notes since last dream"); return emptyList() }
         val out = brainClient.complete(
             TeyaPersona.consolidationPrompt, notes.joinToString("\n") { "- ${it.text}" },
         )?.trim()
         if (out.isNullOrBlank() || out.uppercase() == "NONE") {
             Log.d(TAG, "Consolidation: reviewed ${notes.size} note(s), nothing durable to promote")
-            return 0
+            return emptyList()
         }
         val members = householdManager.members()
-        var promoted = 0
+        val promoted = mutableListOf<String>()
         out.lineSequence().forEach { line ->
             val parts = line.split("|").map { it.trim() }
             if (parts.size < 3) return@forEach
@@ -208,9 +209,9 @@ class HarnessService : Service() {
             } else {
                 memoryManager.remember(text, MemoryManager.SUBJECT_GENERAL, null, category, emb)
             }
-            if (id >= 0) promoted++
+            if (id >= 0) promoted.add(text)
         }
-        Log.d(TAG, "Consolidation promoted $promoted memories from ${notes.size} notes")
+        Log.d(TAG, "Consolidation promoted ${promoted.size} memories from ${notes.size} notes")
         return promoted
     }
 
