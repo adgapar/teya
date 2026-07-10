@@ -114,6 +114,13 @@ class WakeWordEngine(
     private var echoCanceler: AcousticEchoCanceler? = null
     @Volatile private var isRunning = false
 
+    // Desired platform-AEC state, applied fresh by enableAudioEffects() on every mic restart
+    // (start() re-creates the audio session — and its effects — each time listenForCommand pauses
+    // and resumes wake-word listening, which happens repeatedly within a single conversation).
+    // Without this, a restart mid-session would silently re-enable(true) the effect and undo
+    // setPlatformAecEnabled(false), since enableAudioEffects previously hardcoded true.
+    @Volatile private var platformAecDesiredEnabled = true
+
     init {
         loadModels()
     }
@@ -163,10 +170,10 @@ class WakeWordEngine(
         ByteBuffer.allocateDirect(floats * 4).order(ByteOrder.nativeOrder())
 
     /**
-     * Attach AGC + noise suppression to the capture session (AEC is created but deliberately kept
-     * disabled — see the AcousticEchoCanceler branch below for why). This matters because this
-     * engine now keeps listening while Teya is talking (barge-in — see HarnessService), so the mic
-     * is picking up her own TTS bleeding out of the speaker.
+     * Attach AGC + noise suppression + echo cancellation to the capture session. This matters
+     * because this engine now keeps listening while Teya is talking (barge-in — see
+     * HarnessService), so the mic is picking up her own TTS bleeding out of the speaker; see the
+     * AcousticEchoCanceler branch below for how its enabled state is managed.
      */
     private fun enableAudioEffects(sessionId: Int) {
         try {
@@ -183,11 +190,12 @@ class WakeWordEngine(
                 Log.d(TAG, "NoiseSuppressor NOT available on this device")
             }
             if (AcousticEchoCanceler.isAvailable()) {
-                // Left ON as a normal echo/noise cleanup effect. It's not barge-in's self-echo
-                // defense (see VoicePipeline.forwardArmedChunk, which never runs the VAD while our
-                // own audio is playing) — this device's AEC implementation isn't reliable enough
-                // for that.
-                echoCanceler = AcousticEchoCanceler.create(sessionId)?.also { it.setEnabled(true) }
+                // Defaults ON as a normal echo/noise cleanup effect, but applies
+                // platformAecDesiredEnabled (not a hardcoded true) since this runs fresh on every
+                // mic restart within a conversation — see platformAecDesiredEnabled's doc comment:
+                // a restart between setPlatformAecEnabled(false) and endAecSession() must not
+                // silently re-enable the effect NativeAec3 is standing in for.
+                echoCanceler = AcousticEchoCanceler.create(sessionId)?.also { it.setEnabled(platformAecDesiredEnabled) }
                 Log.d(TAG, "AEC available, enabled=${echoCanceler?.enabled}")
             } else {
                 Log.d(TAG, "AEC NOT available on this device — barge-in relies on the playback-state gate in VoicePipeline instead")
@@ -195,6 +203,27 @@ class WakeWordEngine(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to enable audio effects", e)
         }
+    }
+
+    /**
+     * Toggles the platform [AcousticEchoCanceler] at runtime (safe to call anytime after [start] —
+     * it's an effect flag, not something tied to recreating the [AudioRecord] session). While our
+     * own session-scoped `NativeAec3` is active, this device's platform AEC — previously harmless
+     * because [onArmedAudioChunk] never ran during playback at all — would otherwise run
+     * concurrently with continuous mid-sentence listening and was found to over-suppress the
+     * captured signal to near-silence. `VoicePipeline` disables it for the duration of an AEC3
+     * session and re-enables it once the session ends, so idle wake-word listening (no playback,
+     * no NativeAec3 running) keeps its original noise/echo cleanup untouched.
+     *
+     * Persists [enabled] as [platformAecDesiredEnabled] in addition to applying it to the current
+     * effect instance immediately — the mic restarts repeatedly *within* one conversation session
+     * ([start] re-creates the audio session's effects on every restart), so without persisting the
+     * desired state here, the very next restart's [enableAudioEffects] would silently re-enable(true)
+     * the effect this call just turned off.
+     */
+    fun setPlatformAecEnabled(enabled: Boolean) {
+        platformAecDesiredEnabled = enabled
+        echoCanceler?.setEnabled(enabled)
     }
 
     @SuppressLint("MissingPermission")

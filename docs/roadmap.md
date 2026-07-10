@@ -4,7 +4,7 @@ Living status doc. Design lives in [ARCHITECTURE.md](../ARCHITECTURE.md); the fu
 is [thoughts/shared/research/2026-07-06-project-audit.md](../thoughts/shared/research/2026-07-06-project-audit.md).
 Audit IDs (C1, H2, …) below refer to that file.
 
-_Last updated: 2026-07-08 (barge-in interruption)._
+_Last updated: 2026-07-10 (native AEC3 barge-in attempt)._
 
 ## ✅ Done
 
@@ -109,6 +109,45 @@ _Last updated: 2026-07-08 (barge-in interruption)._
     hint, if the API supports one) — would fix this class of error at the source instead of after
     the fact. Worth revisiting; unverified whether Voxtral's `/audio/transcriptions` accepts it.
   - **Built + compiles; pending a live on-device test.**
+- **Native WebRTC AEC3 module — built, validated synthetically, wired in, but real mid-sentence
+  barge-in currently disabled** (`voice/aec/NativeAec3.kt`, `voice/aec/Resampler.kt`; plans:
+  `thoughts/shared/plans/2026-07-09-webrtc-aec3-native-port.md` and
+  `2026-07-09-webrtc-aec3-voicepipeline-integration.md`). Goal: replace the gap-gated workaround
+  above (barge-in only listens *between* sentences) with continuous listening, using our own
+  echo canceller instead of the platform's unreliable one. Vendored + built WebRTC's AEC3 as a
+  standalone JNI module (~72dB measured suppression on synthetic tones, on-device). Wired into
+  the real pipeline: session-scoped lifecycle (one instance per conversation, not per turn, so its
+  convergence cost is paid once), render-side (`analyzeRender`) fed from streamed TTS audio,
+  capture-side (`processCapture`) fed from the mic before Silero VAD, gate/gap removed for
+  AEC3-covered sentences, one-line kill-switch (`VoicePipeline.AEC3_BARGE_IN_ENABLED`).
+  - **Two real bugs found and fixed during live testing** (kept regardless of the switch below):
+    the platform `AcousticEchoCanceler` was still enabled during playback (harmless before, since
+    barge-in never listened during playback at all — became a live conflict once it started
+    listening continuously); and `WakeWordEngine` was silently re-enabling that same platform AEC
+    on every mic restart *within* a single conversation (each `listenForCommand` cycle), undoing
+    the disable moments after it was set.
+  - **Currently disabled** (`AEC3_BARGE_IN_ENABLED = false`): even with both bugs above fixed,
+    `NativeAec3`'s actual echo suppression on real device audio is inconsistent — sometimes
+    negligible, in one measured window the "cleaned" signal was *louder* than the raw input,
+    causing Teya to interrupt herself on her own voice. Diagnostic logging (raw vs. AEC3-cleaned
+    peak amplitude, `VoicePipeline.forwardArmedChunk`) confirmed this isn't a wiring problem —
+    suppression genuinely isn't happening reliably. Leading hypothesis: AEC3's adaptive filter
+    needs `analyzeRender` fed in reasonably tight time-sync with when audio actually leaves the
+    speaker to correlate render against capture; our pipeline calls `analyzeRender` at
+    network-chunk-arrival time (a proxy for "about to play," not "playing now"), and the ~72dB
+    synthetic result was almost certainly measured with render/capture frames fed in artificial
+    lockstep — not representative of this drift. Shrinking the TTS `AudioTrack` buffer from ~0.5s
+    to Android's true minimum (reducing how far ahead of real playback `analyzeRender` could run)
+    helped in one test window but didn't fix it consistently.
+  - **Net effect today**: barge-in behaves exactly as the gap-gated bullet above describes — no
+    regression, but no mid-sentence capability either. The AEC3 module itself, its resampler, and
+    the platform-AEC bug fixes are real, working, kept code — only the kill-switch is off.
+  - **Follow-up, not attempted**: proper render/capture time-alignment (e.g. an explicit delay
+    estimate/compensation, or restructuring when `analyzeRender` is called to track actual
+    playback position more tightly — Android's `AudioTrack` has no direct "this sample is playing
+    now" callback, only buffer-position polling) or retuning `EchoCanceller3Config` defaults for
+    this specific speaker/mic pair. Either is a deeper WebRTC AEC integration effort, not a
+    quick tweak.
 
 ## 🔜 Next (recommended order)
 
@@ -152,6 +191,11 @@ _Last updated: 2026-07-08 (barge-in interruption)._
   Voxtral doesn't expose speaker identity → needs separate diarization/verification. Feasibility TBD.
 - **Conversational onboarding (deferred)** — v1 is a **form** on purpose (STT isn't reliable before
   the language is set — chicken/egg). A later agentic setup (Teya asks, family answers) could layer on.
+  Shape (user feedback 2026-07-10): Typeform-style chat, one question per screen advancing turn by
+  turn ("What is your first name?" → "What is your last name?" → …), agent-framed ("I'm going to ask
+  you a few questions about X, Y, Z") instead of a bunch of form fields at once. Admin's forms are
+  fine as-is (editing existing records, not first-run onboarding) — this only applies to the guided
+  first-run wizard.
 - **KNOWN people + memory** — the deferred half of the Room schema (`persona` / `memory_entry`
   tables exist); see the Backlog "Implement memory" item + the Admin People/Memory sections.
 
@@ -232,6 +276,14 @@ Open-Meteo), with location from the household profile or native device location.
 
 ## 🧊 Backlog / ideas
 
+- **Bug**: onboarding "add person" form — the X (close) button shifts the **last name** field down,
+  misaligning it with first name (reported 2026-07-10).
+- **16 KB page-size alignment** — every install shows Android 16's "isn't 16 KB compatible" warning
+  for `libteya_aec3.so`/`libteya_aec3_core_smoke_check.so` (ours, needs the
+  `-Wl,-z,max-page-size=16384` linker flag in the AEC3 CMake build) plus `libonnxruntime.so`
+  (Silero VAD) and `libtensorflowlite_jni.so` (wake word), both prebuilt third-party AARs that'd
+  need newer 16 KB-aligned releases. Harmless today — this device's actual page size is 4 KB and
+  Teya is sideloaded, never Play-distributed — but worth cleaning up eventually (noted 2026-07-10).
 - Settings **voice picker** (live from `/audio/voices`) + persist choice.
 - **Implement memory / learning about people** — build the deferred half of the household model:
   `Person` rows with `kind=KNOWN` captured by voice ("remember Uncle Bob…"), a `MemoryEntry` table

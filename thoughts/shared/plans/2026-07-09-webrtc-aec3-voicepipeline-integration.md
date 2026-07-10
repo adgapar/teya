@@ -2,10 +2,17 @@
 date: 2026-07-09T00:00:00Z
 topic: "WebRTC AEC3 VoicePipeline/HarnessService integration (Plan B: wire the validated native module in)"
 tags: [voice, barge-in, aec3, webrtc, voicepipeline, harnessservice]
-status: in-progress
+status: paused
 last_updated: 2026-07-10T00:00:00Z
 last_updated_by: phase-running (Phase 4)
 ---
+
+**Status note (2026-07-10)**: Phases 1–4 implemented and committed. Live testing found AEC3's real
+echo suppression insufficient (inconsistent, occasionally negative) — feature is shipped but
+disabled via `VoicePipeline.AEC3_BARGE_IN_ENABLED = false`. Two real wiring bugs found along the
+way are fixed and kept regardless. See `docs/roadmap.md`'s "Native WebRTC AEC3 module" entry for
+the durable, up-to-date summary — this file remains as the detailed historical record (design
+decisions, phase-by-phase changes, full diagnostic evidence).
 
 # WebRTC AEC3 VoicePipeline/HarnessService Integration (Plan B)
 
@@ -566,6 +573,75 @@ barge-in, replacing the gap-gated workaround end to end.
 - **Follow-up plans**: none identified yet. If Phase 5's real-device tuning reveals AEC3's default
   `EchoCanceller3Config` needs adjustment for this specific speaker/mic hardware, that would be a
   natural follow-up plan (explicitly out of scope here, per "What We're NOT Doing").
+- **Real-device finding, discovered live-testing Phase 4 (2026-07-10), not yet confirmed fixed**:
+  mid-sentence interruption did not work on the first Phase 4 build. Root cause: the platform
+  `AcousticEchoCanceler` on `WakeWordEngine`'s shared `AudioRecord` (`WakeWordEngine.kt`,
+  `enableAudioEffects`) was still enabled during playback. It was harmless before Phase 4 (barge-in
+  never listened during playback at all), but Phase 4 turns on continuous listening *during*
+  playback, where this device's platform AEC — already documented in this file and in
+  `2026-07-08-barge-in-vad-options.md` as unreliable/over-suppressive — was found to crush the
+  captured signal to near-silence before `NativeAec3`/Silero ever saw it (logcat showed raw
+  pre-gain amplitude reading a hard `0/32767` across every 2-second diagnostic window during
+  playback, which a genuinely live mic essentially never does).
+  - **Fix attempt 1** (uncommitted, superseded by fix 2): `VoicePipeline.startAecSession()` /
+    `endAecSession()` call a new `WakeWordEngine.setPlatformAecEnabled(Boolean)` to disable the
+    platform AEC for the session and re-enable it after. Retested: still didn't work.
+  - **Fix attempt 2** (uncommitted, current state as of last edit): found `WakeWordEngine.start()`
+    calls `enableAudioEffects()` fresh on **every mic restart**, which happens repeatedly *within*
+    one conversation (once after every `listenForCommand()` cycle) — each restart was
+    unconditionally re-`setEnabled(true)`-ing the platform AEC, silently undoing fix 1's disable
+    well before the user got a chance to interrupt mid-response. Added
+    `WakeWordEngine.platformAecDesiredEnabled` (persisted, `@Volatile`) so `enableAudioEffects`
+    applies the last-requested state instead of hardcoding `true`, and `setPlatformAecEnabled` both
+    updates that persisted flag and applies it live.
+  - **Status**: fix 1 + fix 2 confirmed working (2026-07-10 retest, logcat evidence): `AEC available,
+    enabled=false` persists correctly across mic restarts within the session, and raw pre-gain
+    amplitude is no longer stuck at 0 (`18026/32767` observed) — the platform-AEC wiring bug is
+    resolved. Both Kotlin files (`VoicePipeline.kt`, `WakeWordEngine.kt`) still **uncommitted**.
+  - **New, deeper finding (same retest)**: with the platform AEC genuinely off and real signal
+    reaching Silero, `NativeAec3` itself is not sufficiently cancelling Teya's own TTS echo in this
+    real acoustic environment. Logcat: `Barge-in: speech detected (confidence=0.9909005)` /
+    `(confidence=0.89004755)` firing on Teya's own voice, ~7s and ~1.8s respectively into two
+    separate turns (well past the 2s lead-in, so not a lead-in-timing issue) — user's own
+    follow-up utterance ("Okay, so you keep interrupting yourself, no?") confirms these were
+    self-triggers, not real interruption attempts. Plan A's ~72dB suppression number was measured
+    against clean synthetic tones (Plan A Phase 4); real broadband TTS speech through this device's
+    actual speaker→mic acoustic path is a harder case that wasn't validated end-to-end before now.
+    Candidate causes, untested as of this note: (a) `BARGE_IN_GAIN` (6x software gain in
+    `VoicePipeline.kt`, applied *after* `cleanCaptureChunk`) amplifying a residual echo that AEC3
+    left behind — the loud TTS source signal may leave a larger absolute residual than the quiet
+    real speech this gain was originally tuned for, even at reasonable dB suppression; (b) AEC3's
+    internal delay estimation not locking onto this device's actual render→capture round-trip
+    latency (a classic real-hardware AEC challenge synthetic tests don't exercise); (c)
+    `EchoCanceller3Config` defaults genuinely needing retuning for this speaker/mic pair (explicitly
+    out of scope for this plan, flagged as a likely follow-up in the Appendix above). This is
+    exactly the "stop and reassess" trigger described in Failure Mode / Rollback — decision on how
+    to proceed is the user's, not something to force through by continuing to patch blindly.
+  - **Root cause confirmed (2026-07-10, diagnostic logging added to `forwardArmedChunk`/
+    `VoicePipeline.kt`, comparing raw vs. AEC3-cleaned peak amplitude on the same chunk)**: AEC3
+    provides negligible-to-zero real suppression in the live pipeline. Evidence from the retest:
+    `confidence=0.91788214, rawPeak=12056, cleanedPeak(pre-gain)=12098` (cleaned **higher** than
+    raw — zero suppression), `confidence=0.96789384, rawPeak=4776, cleanedPeak(pre-gain)=3786`
+    (~21%/~2dB reduction, nowhere near Plan A's measured ~72dB), and one 2-second window where
+    `peak RAW = 1910` and `peak CLEANED = 1910` were bit-for-bit identical. This rules out
+    candidate cause (a) (gain amplifying a *residual* echo — there is essentially no suppression
+    to amplify) and points squarely at (b): **render/capture time-alignment**. AEC3's adaptive
+    filter only cancels echo it can correlate against a time-aligned render reference; Plan A's
+    synthetic on-device test (Phase 4) almost certainly fed render+capture frames in lockstep
+    (an idealized fixed delay), which is not representative of this live pipeline, where
+    `analyzeRender` is called from `streamToSpeaker`'s per-chunk callback right before
+    `audioTrack.write()` (`VoicePipeline.kt`) — a proxy for "about to play," not "physically
+    emitting from the speaker right now." Any drift between that call and the real acoustic delay
+    (`AudioTrack` internal buffering, streaming/network chunk irregularities, hardware DAC latency)
+    can easily exceed what AEC3's delay estimator can lock onto, collapsing suppression to ~0dB
+    regardless of how converged the adaptive filter otherwise is. This is a materially harder,
+    more open-ended problem than any of the wiring bugs fixed so far — likely requiring either (i)
+    an explicit delay estimate/compensation passed to AEC3 (check whether the JNI wrapper or
+    `EchoCanceller3Config` exposes a settable nominal delay), or (ii) restructuring where/when
+    `analyzeRender` is called to track actual output timing much more tightly (nontrivial: Android's
+    `AudioTrack` doesn't expose a direct "this sample is playing now" callback, only buffer-position
+    polling). **Not attempted or fixed as of this note** — this is squarely a "stop and reassess"
+    point per Failure Mode/Rollback, not something to keep patching inline.
 - **Derail notes**:
   - **Resolved during review**: `playMp3` fallback selection is per-sentence, not per-response.
     `textToSpeech()` (`VoicePipeline.kt:373-385`) calls `streamToSpeaker` fresh for every sentence

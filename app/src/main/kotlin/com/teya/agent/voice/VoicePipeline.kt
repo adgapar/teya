@@ -41,23 +41,28 @@ class VoicePipeline(private val context: Context) {
         private const val TTS_SAMPLE_RATE = 24000                         // Voxtral PCM output rate
         private const val BARGE_IN_GAIN = 6.0f  // matches WakeWordEngine.INPUT_GAIN — no hardware AGC
 
-        // Phase 4 kill-switch (Plan B): true = the new continuous mid-sentence barge-in behavior —
-        // forwardArmedChunk's self-echo gate is exempted for the streamToSpeaker path (once past
-        // the convergence lead-in below) and HarnessService.respond() skips its inter-sentence gap
-        // for sentences that streamed. false = both revert to their exact pre-Plan-B behavior (gate
-        // + gap intact), regardless of whether aec3 is constructed/fed. Flip this one line for an
-        // instant rollback if Phase 5's real-device testing goes worse than the old gap-gated
-        // workaround it replaces (see the plan's Failure Mode / Rollback section).
-        const val AEC3_BARGE_IN_ENABLED = true
+        // Kill-switch for AEC3-based continuous mid-sentence barge-in: true = forwardArmedChunk's
+        // self-echo gate is exempted for the streamToSpeaker path (once past the convergence
+        // lead-in below) and HarnessService.respond() skips its inter-sentence gap for sentences
+        // that streamed. false = both revert to the old gap-gated behavior (gate + gap intact),
+        // regardless of whether aec3 is constructed/fed.
+        //
+        // Currently false: on real-device testing, NativeAec3's actual echo suppression is
+        // inconsistent — sometimes negligible, occasionally even negative (cleaned signal louder
+        // than raw) — causing Teya to self-interrupt on her own voice. Root cause is believed to be
+        // AEC3's render/capture frame pairing not producing reliable cancellation on real audio
+        // (see docs/roadmap.md for the diagnostic evidence and candidate next steps) rather than a
+        // wiring bug — two real wiring bugs (platform AcousticEchoCanceler left enabled during
+        // playback, and WakeWordEngine re-enabling it on every mic restart) were found and fixed
+        // independently of this switch and are kept regardless of its value.
+        const val AEC3_BARGE_IN_ENABLED = false
 
-        // Convergence lead-in (Phase 4): how long after the session's first render frame
-        // (firstRenderFrameAtMs) before barge-in detection is trusted, per Plan A's
-        // double-talk-from-frame-zero finding (~0dB suppression from frame zero vs. ~72dB once
-        // converged). Derived from Plan A's measured ~1s synthetic-tone convergence time, doubled
-        // as a safety margin since that number was measured against a clean synthetic signal, not
-        // this device's real speaker->mic acoustic path and real voice — Phase 5 re-checks and
-        // tunes this against actual on-device behavior rather than assuming the synthetic number
-        // transfers exactly.
+        // How long after the session's first render frame (firstRenderFrameAtMs) before barge-in
+        // detection is trusted. AEC3 does not converge instantly — fed real double-talk from frame
+        // zero, its suppression is negligible; given a genuine render-only lead-in first, it
+        // converges quickly. This duration adds a safety margin on top of the roughly one-second
+        // convergence time measured in isolated testing, since that number was against a clean
+        // synthetic signal, not this device's real speaker->mic acoustic path and real voice.
         private const val AEC3_LEAD_IN_MS = 2000L
     }
 
@@ -90,34 +95,38 @@ class VoicePipeline(private val context: Context) {
     private var vadChunkCounter = 0    // diagnostic
     private var vadPeakConfidence = 0f // diagnostic
     private var vadPeakRawAmplitude = 0 // diagnostic — pre-gain, to check the mic itself has signal
+    // Diagnostic: peak of AEC3's *cleaned* output, pre-gain, alongside vadPeakRawAmplitude above —
+    // comparing the two tells us whether NativeAec3 is suppressing Teya's own echo at all in the
+    // current acoustic environment (as opposed to a downstream gain/threshold issue), without
+    // needing a second, state-corrupting Silero pass.
+    private var vadPeakCleanedAmplitude = 0
 
-    // AEC3 capture-side leftover buffer (Plan B, Phase 3): reassembles forwardArmedChunk's raw
-    // 1280-sample mic chunks into NativeAec3.FRAME_SIZE (160-sample) pieces, same pattern as
-    // vadFrameBuffer above. Only ever touched from forwardArmedChunk, which always runs on
-    // WakeWordEngine's single dedicated capture thread (never concurrently with itself), so the
-    // buffer itself needs no lock of its own — access to the aec3 field alongside it is still
-    // guarded by aecLock inside cleanCaptureChunk(), for the same reason feedRenderToAec3() guards
-    // its analyzeRender calls: aec3 is written from the harness's coroutine thread
-    // (startAecSession()/endAecSession()), so a session-end close() could otherwise race a
-    // concurrent processCapture() call on this thread.
+    // AEC3 capture-side leftover buffer: reassembles forwardArmedChunk's raw 1280-sample mic
+    // chunks into NativeAec3.FRAME_SIZE (160-sample) pieces, same pattern as vadFrameBuffer above.
+    // Only ever touched from forwardArmedChunk, which always runs on WakeWordEngine's single
+    // dedicated capture thread (never concurrently with itself), so the buffer itself needs no
+    // lock of its own — access to the aec3 field alongside it is still guarded by aecLock inside
+    // cleanCaptureChunk(), for the same reason feedRenderToAec3() guards its analyzeRender calls:
+    // aec3 is written from the harness's coroutine thread (startAecSession()/endAecSession()), so
+    // a session-end close() could otherwise race a concurrent processCapture() call on this thread.
     private var aecCaptureBuffer = ShortArray(0)
 
-    // AEC3 render feed (Plan B, Phase 2): unlike sileroVad above, aec3's lifecycle is deliberately
-    // NOT per-turn — it spans the whole conversation session (constructed/closed once by
+    // AEC3 render feed: unlike sileroVad above, aec3's lifecycle is deliberately NOT per-turn — it
+    // spans the whole conversation session (constructed/closed once by
     // HarnessService.runConversation() via startAecSession()/endAecSession()), so its adaptive
-    // filter's convergence cost (Plan A's double-talk-from-frame-zero finding: ~0dB suppression
-    // from frame zero vs. ~72dB once converged) is paid once per session, not once per turn. A
-    // dedicated aecLock (not vadLock) guards this independently-scoped resource: analyzeRender
-    // runs on streamToSpeaker's IO-dispatcher thread while endAecSession() runs on the harness's
-    // coroutine thread, so a session-end close() could otherwise race a concurrent analyzeRender
-    // call, mirroring the exact race vadLock already guards against for sileroVad.
+    // filter's convergence cost (fed real double-talk from frame zero, suppression is negligible;
+    // it converges quickly given a genuine render-only lead-in first) is paid once per session, not
+    // once per turn. A dedicated aecLock (not vadLock) guards this independently-scoped resource:
+    // analyzeRender runs on streamToSpeaker's IO-dispatcher thread while endAecSession() runs on
+    // the harness's coroutine thread, so a session-end close() could otherwise race a concurrent
+    // analyzeRender call, mirroring the exact race vadLock already guards against for sileroVad.
     @Volatile private var aec3: NativeAec3? = null
     private val aecLock = Any()
     private var renderResampler = Resampler()
     private var renderFrameBuffer = ShortArray(0)
     // Set once — only if still 0L — the first time analyzeRender is actually fed a frame this
-    // session. Written from the render/TTS thread here; read from the capture thread by a later
-    // phase's convergence-lead-in gate, hence @Volatile for cross-thread visibility.
+    // session. Written from the render/TTS thread here; read from the capture thread by the
+    // convergence-lead-in gate below, hence @Volatile for cross-thread visibility.
     @Volatile private var firstRenderFrameAtMs: Long = 0L
     private var renderFrameCount = 0 // diagnostic: render frames fed to AEC3 this session
 
@@ -194,6 +203,7 @@ class VoicePipeline(private val context: Context) {
                 vadChunkCounter = 0
                 vadPeakConfidence = 0f
                 vadPeakRawAmplitude = 0
+                vadPeakCleanedAmplitude = 0
                 try {
                     // Self-echo is handled structurally (forwardArmedChunk's currentTrack/
                     // currentMediaPlayer gate), not by threshold, so this sits close to Silero's
@@ -233,7 +243,15 @@ class VoicePipeline(private val context: Context) {
             renderFrameCount = 0
             try {
                 aec3 = NativeAec3()
-                Log.d("VoicePipeline", "AEC3: session started")
+                // The platform AcousticEchoCanceler previously never mattered during playback
+                // (forwardArmedChunk always returned early then) but now runs concurrently with
+                // continuous mid-sentence listening, where it was found to over-suppress the
+                // captured signal to near-silence before our own AEC3/Silero ever see it (this
+                // device's platform AEC is documented as unreliable — see
+                // WakeWordEngine.enableAudioEffects). Disable it for the duration of our own
+                // session-scoped AEC3 instance, which is the intended replacement.
+                wakeWordEngine.setPlatformAecEnabled(false)
+                Log.d("VoicePipeline", "AEC3: session started (platform AEC disabled)")
             } catch (e: Exception) {
                 Log.e("VoicePipeline", "AEC3: failed to init NativeAec3, staying without echo cancellation", e)
                 aec3 = null
@@ -246,6 +264,7 @@ class VoicePipeline(private val context: Context) {
         synchronized(aecLock) {
             aec3?.close()
             aec3 = null
+            wakeWordEngine.setPlatformAecEnabled(true)
         }
     }
 
@@ -275,8 +294,7 @@ class VoicePipeline(private val context: Context) {
 
             // Diagnostic marker for manual logcat verification (~1s of render audio @16kHz, since
             // FRAME_SIZE=160 samples=10ms): confirms real TTS audio is reaching analyzeRender
-            // while Teya speaks, without a device-instrumented test seam (see Phase 2 notes on why
-            // MistralClient isn't fakeable here).
+            // while Teya speaks.
             if (renderFrameCount > 0 && renderFrameCount % 100 == 0) {
                 Log.d("VoicePipeline", "AEC3: render frames fed to analyzeRender this session = $renderFrameCount")
             }
@@ -284,18 +302,18 @@ class VoicePipeline(private val context: Context) {
     }
 
     /**
-     * Second frame-reassembly stage (Plan B, Phase 3): splits [forwardArmedChunk]'s raw
-     * 1280-sample mic chunk into [NativeAec3.FRAME_SIZE]-sized (160-sample) pieces, runs each
-     * through [NativeAec3.processCapture] to strip Teya's own echo out of the mic signal *before*
-     * the existing gain + [SileroVad] reassembly ever sees it, and re-concatenates the cleaned
-     * pieces (buffering any leftover remainder in [aecCaptureBuffer] — defensive: WakeWordEngine's
-     * chunk size divides evenly by [NativeAec3.FRAME_SIZE] today, but this doesn't assume that
-     * stays true, mirroring [vadFrameBuffer]'s reassembly pattern).
+     * Second frame-reassembly stage: splits [forwardArmedChunk]'s raw 1280-sample mic chunk into
+     * [NativeAec3.FRAME_SIZE]-sized (160-sample) pieces, runs each through
+     * [NativeAec3.processCapture] to strip Teya's own echo out of the mic signal *before* the
+     * existing gain + [SileroVad] reassembly ever sees it, and re-concatenates the cleaned pieces
+     * (buffering any leftover remainder in [aecCaptureBuffer] — defensive: WakeWordEngine's chunk
+     * size divides evenly by [NativeAec3.FRAME_SIZE] today, but this doesn't assume that stays
+     * true, mirroring [vadFrameBuffer]'s reassembly pattern).
      *
      * Falls back to the raw [chunk] unchanged when [aec3] is null (no active conversation
-     * session, or somehow not constructed) — this phase must not regress behavior when AEC3 isn't
-     * active for any reason. Wrapped in [aecLock] for the same reason [feedRenderToAec3] is: reads
-     * the [aec3] field, which [endAecSession] can null out from a different thread.
+     * session, or somehow not constructed) — must not regress behavior when AEC3 isn't active for
+     * any reason. Wrapped in [aecLock] for the same reason [feedRenderToAec3] is: reads the
+     * [aec3] field, which [endAecSession] can null out from a different thread.
      */
     private fun cleanCaptureChunk(chunk: ShortArray): ShortArray {
         synchronized(aecLock) {
@@ -315,12 +333,12 @@ class VoicePipeline(private val context: Context) {
     }
 
     /**
-     * Phase 4 convergence lead-in gate: has enough render-only time elapsed since the session's
-     * first render frame ([firstRenderFrameAtMs], set once by [feedRenderToAec3] and never reset
-     * per turn) to trust barge-in detection? Returns `false` (don't trust yet) if AEC3 hasn't
-     * rendered a single frame this session at all. Read here from [WakeWordEngine]'s capture
-     * thread; [firstRenderFrameAtMs] is written from the render/TTS thread, hence `@Volatile`
-     * there for cross-thread visibility.
+     * Convergence lead-in gate: has enough render-only time elapsed since the session's first
+     * render frame ([firstRenderFrameAtMs], set once by [feedRenderToAec3] and never reset per
+     * turn) to trust barge-in detection? Returns `false` (don't trust yet) if AEC3 hasn't rendered
+     * a single frame this session at all. Read here from [WakeWordEngine]'s capture thread;
+     * [firstRenderFrameAtMs] is written from the render/TTS thread, hence `@Volatile` there for
+     * cross-thread visibility.
      */
     private fun leadInElapsed(): Boolean {
         val startedAt = firstRenderFrameAtMs
@@ -337,23 +355,23 @@ class VoicePipeline(private val context: Context) {
      *
      * Historically skipped processing entirely while [currentTrack]/[currentMediaPlayer] was
      * non-null (our own TTS actively coming out of the speaker) — the self-echo fix for this
-     * device's over-suppressing `AcousticEchoCanceler` (see WakeWordEngine). Phase 4 (Plan B)
-     * narrows that: [currentMediaPlayer] (the `playMp3` fallback, no AEC3 coverage — see "What
-     * We're NOT Doing") still always gates, but [currentTrack] (the `streamToSpeaker` path) is
-     * exempted whenever [aec3] is actively cleaning the signal and [AEC3_BARGE_IN_ENABLED] is on,
-     * which is what actually enables mid-sentence interruption. That exemption is itself gated by
-     * [leadInElapsed] — AEC3 keeps converging via [cleanCaptureChunk] regardless, but the result
-     * isn't trusted (passed to Silero / allowed to fire [bargeInFired]) until the session-wide
-     * lead-in has elapsed, per Plan A's double-talk-from-frame-zero finding. Kill-switch: when
-     * [AEC3_BARGE_IN_ENABLED] is `false`, this function behaves exactly as it did before Phase 4.
+     * device's over-suppressing `AcousticEchoCanceler` (see WakeWordEngine). That gate is narrowed
+     * when AEC3-based barge-in is active: [currentMediaPlayer] (the `playMp3` fallback, no AEC3
+     * coverage) still always gates, but [currentTrack] (the `streamToSpeaker` path) is exempted
+     * whenever [aec3] is actively cleaning the signal and [AEC3_BARGE_IN_ENABLED] is on, which is
+     * what enables mid-sentence interruption. That exemption is itself gated by [leadInElapsed] —
+     * AEC3 keeps converging via [cleanCaptureChunk] regardless, but the result isn't trusted
+     * (passed to Silero / allowed to fire [bargeInFired]) until the session-wide lead-in has
+     * elapsed. Kill-switch: when [AEC3_BARGE_IN_ENABLED] is `false`, this function behaves exactly
+     * as it did before AEC3-based barge-in existed (gap-gated only).
      */
     private fun forwardArmedChunk(chunk: ShortArray) {
         if (bargeInFired) return // already interrupted this window; wait for disarm
 
         // Both the self-echo-gate exemption and the lead-in gate below only apply when the
         // feature is on AND a session-scoped AEC3 instance is actually active — otherwise this
-        // falls straight through to the exact pre-Plan-B gap-gated behavior (see
-        // AEC3_BARGE_IN_ENABLED's kill-switch doc comment).
+        // falls straight through to the old gap-gated behavior (see AEC3_BARGE_IN_ENABLED's
+        // kill-switch doc comment).
         val aecActive = AEC3_BARGE_IN_ENABLED && aec3 != null
 
         if (currentMediaPlayer != null) return // mp3 fallback: no AEC3 coverage, always gap-gated
@@ -368,16 +386,29 @@ class VoicePipeline(private val context: Context) {
         }
         if (rawPeak > vadPeakRawAmplitude) vadPeakRawAmplitude = rawPeak
 
-        // Phase 3: run the raw chunk through AEC3's capture side first, so Silero below sees
-        // echo-cancelled audio instead of the raw gained signal. cleanCaptureChunk() falls back to
-        // the unmodified chunk when aec3 is null (no active session). Always runs — independent of
-        // the kill-switch — so AEC3 keeps converging even while its result isn't yet trusted below.
+        // Run the raw chunk through AEC3's capture side first, so Silero below sees echo-cancelled
+        // audio instead of the raw gained signal. cleanCaptureChunk() falls back to the unmodified
+        // chunk when aec3 is null (no active session). Always runs — independent of the
+        // kill-switch — so AEC3 keeps converging even while its result isn't yet trusted below.
         val cleanedChunk = cleanCaptureChunk(chunk)
 
-        // Phase 4 convergence lead-in gate: don't pass the cleaned signal to Silero / allow
-        // bargeInFired to be set until the session-wide lead-in has elapsed since the very first
-        // render frame (not reset per turn — see leadInElapsed). AEC3 above still keeps converging
-        // during the lead-in either way; this only withholds trust in the *result*.
+        // Diagnostic: peak of this chunk's *cleaned* output, pre-gain — comparing this to rawPeak
+        // above (same chunk) is the fastest way to tell whether AEC3 is suppressing Teya's own
+        // echo at all in the current acoustic environment.
+        var cleanedPeak = -1
+        if (aecActive) {
+            cleanedPeak = 0
+            for (s in cleanedChunk) {
+                val abs = kotlin.math.abs(s.toInt())
+                if (abs > cleanedPeak) cleanedPeak = abs
+            }
+            if (cleanedPeak > vadPeakCleanedAmplitude) vadPeakCleanedAmplitude = cleanedPeak
+        }
+
+        // Convergence lead-in gate: don't pass the cleaned signal to Silero / allow bargeInFired
+        // to be set until the session-wide lead-in has elapsed since the very first render frame
+        // (not reset per turn — see leadInElapsed). AEC3 above still keeps converging during the
+        // lead-in either way; this only withholds trust in the *result*.
         if (aecActive && !leadInElapsed()) return
 
         val gained = ShortArray(cleanedChunk.size) { i ->
@@ -396,7 +427,11 @@ class VoicePipeline(private val context: Context) {
                 if (vad.lastConfidence > vadPeakConfidence) vadPeakConfidence = vad.lastConfidence
                 if (isSpeech) {
                     bargeInFired = true
-                    Log.d("VoicePipeline", "Barge-in: speech detected (confidence=${vad.lastConfidence})")
+                    Log.d(
+                        "VoicePipeline",
+                        "Barge-in: speech detected (confidence=${vad.lastConfidence}, " +
+                            "rawPeak=$rawPeak, cleanedPeak(pre-gain)=$cleanedPeak)"
+                    )
                     onBargeIn()
                     break
                 }
@@ -406,14 +441,18 @@ class VoicePipeline(private val context: Context) {
 
         // Diagnostic: peak VAD confidence every ~25 mic chunks (~2s), so we can see whether the
         // model is responding to real speech at all, independent of whether it crosses threshold.
+        // cleanedAmplitude alongside rawAmplitude shows whether AEC3 is suppressing anything in
+        // this window at all — if the two numbers are close, AEC3 isn't helping here.
         if (++vadChunkCounter % 25 == 0) {
             Log.d(
                 "VoicePipeline",
                 "Barge-in: peak VAD confidence (last ~2s) = $vadPeakConfidence, " +
-                    "peak RAW (pre-gain) amplitude = $vadPeakRawAmplitude / 32767"
+                    "peak RAW (pre-gain) amplitude = $vadPeakRawAmplitude / 32767, " +
+                    "peak CLEANED (pre-gain) amplitude = ${if (aecActive) vadPeakCleanedAmplitude.toString() else "n/a"} / 32767"
             )
             vadPeakConfidence = 0f
             vadPeakRawAmplitude = 0
+            vadPeakCleanedAmplitude = 0
         }
     }
 
@@ -562,12 +601,11 @@ class VoicePipeline(private val context: Context) {
     /**
      * Speaks [text], preferring the low-latency streaming PCM path and falling back to whole-clip
      * mp3 if streaming yields nothing. Returns `true` if this specific call streamed (the
-     * AEC3-covered path), `false` if it fell back to `playMp3` (no AEC3 coverage) — Phase 4's
-     * per-sentence signal for whether `HarnessService.respond()`'s inter-sentence gap is still
-     * needed after this sentence (streaming vs. mp3 fallback is chosen independently per call, not
-     * once per turn — see the plan's Current State Analysis). When nothing was actually spoken
-     * (blank text, or no client configured), returns `true`: no audio played, so there's nothing
-     * for a gap to protect against.
+     * AEC3-covered path), `false` if it fell back to `playMp3` (no AEC3 coverage) —
+     * `HarnessService.respond()` uses this per-sentence result to decide whether its inter-sentence
+     * gap is still needed after this sentence (streaming vs. mp3 fallback is chosen independently
+     * per call, not once per turn). When nothing was actually spoken (blank text, or no client
+     * configured), returns `true`: no audio played, so there's nothing for a gap to protect against.
      */
     suspend fun textToSpeech(text: String): Boolean {
         if (text.isBlank()) return true
@@ -623,7 +661,16 @@ class VoicePipeline(private val context: Context) {
                             .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                             .build()
                     )
-                    .setBufferSizeInBytes(maxOf(minBuf, TTS_SAMPLE_RATE)) // ~0.5s (2 bytes/frame)
+                    // Was maxOf(minBuf, TTS_SAMPLE_RATE) (~0.5s), padded for smooth streaming over
+                    // network jitter — but with WRITE_BLOCKING, that let feedRenderToAec3()/
+                    // analyzeRender (called just before each write) run up to ~0.5s ahead of when
+                    // audio actually leaves the speaker, likely exceeding AEC3's delay-correlation
+                    // window and collapsing real suppression toward 0dB (confirmed via
+                    // raw-vs-cleaned amplitude logging: near-identical, sometimes cleaned > raw).
+                    // Shrinking to Android's true minimum keeps analyzeRender's timeline much
+                    // closer to actual playback, trading some streaming-jitter resilience for AEC3
+                    // having a chance to actually correlate render vs. capture.
+                    .setBufferSizeInBytes(minBuf)
                     .setTransferMode(AudioTrack.MODE_STREAM)
                     .build()
                 track = audioTrack
@@ -644,7 +691,7 @@ class VoicePipeline(private val context: Context) {
                         }
                         // Feed AEC3's farend reference before writing to the speaker, so render
                         // analysis for this chunk never depends on whether the write below
-                        // succeeds (Phase 2: the two are deliberately decoupled).
+                        // succeeds — the two are deliberately decoupled.
                         feedRenderToAec3(shorts)
                         audioTrack.write(shorts, 0, shorts.size, AudioTrack.WRITE_BLOCKING)
                         totalFrames += shorts.size

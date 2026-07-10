@@ -59,10 +59,10 @@ class HarnessService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val TAG = "HarnessService"
         private const val FOLLOWUP_LISTEN_MS = 8000  // wait this long for a follow-up before ending
-        // Deliberate pause after each sentence — see runConversation's speaker loop. Phase 4 (Plan
-        // B): only applied when that specific sentence fell back to playMp3 (no AEC3 coverage) or
-        // when VoicePipeline.AEC3_BARGE_IN_ENABLED is off; sentences that streamed via the
-        // AEC3-covered streamToSpeaker path skip it entirely (barge-in listens continuously).
+        // Deliberate pause after each sentence — see runConversation's speaker loop. Only applied
+        // when that specific sentence fell back to playMp3 (no AEC3 coverage) or when
+        // VoicePipeline.AEC3_BARGE_IN_ENABLED is off; sentences that streamed via the AEC3-covered
+        // streamToSpeaker path skip it entirely (barge-in listens continuously).
         private const val BARGE_IN_GAP_MS = 900L
         private const val MAX_HISTORY = 10           // bounded conversation history sent to the model
         private const val MAX_TOOL_ROUNDS = 4        // cap tool→result→model loops per user turn
@@ -304,8 +304,8 @@ class HarnessService : Service() {
     private suspend fun runConversation() {
         val history = mutableListOf<ChatMessage>()
         try {
-            // AEC3's session-wide render feed (Plan B, Phase 2) — independent of setBargeInArmed's
-            // per-turn arm/disarm below, which continues to govern only sileroVad. See
+            // AEC3's session-wide render feed — independent of setBargeInArmed's per-turn
+            // arm/disarm below, which continues to govern only sileroVad. See
             // VoicePipeline.startAecSession()'s doc comment for why this is session-scoped.
             voicePipeline.startAecSession()
             updateUiState(AgentState.SPEAKING)
@@ -414,21 +414,20 @@ class HarnessService : Service() {
                             if (spokenSoFar.isNotEmpty()) spokenSoFar.append(' ')
                             spokenSoFar.append(sentence)
                             sendDebug(agent = spokenSoFar.toString())   // reveal as this sentence is voiced
-                            var streamed = true // path this specific sentence actually took (Phase 4)
+                            var streamed = true // path this specific sentence actually took
                             try {
                                 streamed = voicePipeline.textToSpeech(sentence)
                             } catch (e: Exception) {
                                 Log.e(TAG, "TTS failed for sentence", e)
                             }
                             if (voicePipeline.isInterrupted()) break // barge-in — stop queuing more speech
-                            // Phase 4 (Plan B): sentences that streamed via the AEC3-covered
-                            // streamToSpeaker path don't need this gap — barge-in listens
-                            // continuously during and after them (see
-                            // VoicePipeline.forwardArmedChunk). Sentences that fell back to
-                            // playMp3 have no AEC3 coverage and keep the original gap-gated
+                            // Sentences that streamed via the AEC3-covered streamToSpeaker path
+                            // don't need this gap — barge-in listens continuously during and after
+                            // them (see VoicePipeline.forwardArmedChunk). Sentences that fell back
+                            // to playMp3 have no AEC3 coverage and keep the original gap-gated
                             // behavior; the kill-switch (VoicePipeline.AEC3_BARGE_IN_ENABLED) forces
-                            // the gap unconditionally when off, exactly as before Phase 4. Cancelled
-                            // instantly via activeTurnJob the moment barge-in fires either way.
+                            // the gap unconditionally when off. Cancelled instantly via
+                            // activeTurnJob the moment barge-in fires either way.
                             if (!VoicePipeline.AEC3_BARGE_IN_ENABLED || !streamed) {
                                 Log.d(TAG, "Barge-in: listening gap open (${BARGE_IN_GAP_MS}ms)")
                                 delay(BARGE_IN_GAP_MS)
