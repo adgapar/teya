@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head><title>AEC Background Experiment</title></head>
+<body>
+<!--
+  Phase 0 spike (thoughts/shared/plans/2026-07-11-webview-chromium-aec-barge-in.md): does a WebView's
+  getUserMedia keep delivering real samples when the hosting Activity is backgrounded / the screen is
+  off? This is the one architectural risk that could invalidate the whole WebView-AEC plan, so it's
+  tested standalone before any real integration work.
+
+  Unlike aec_experiment.html (a one-shot, two-phase tone test), this page runs indefinitely: a quiet
+  continuous tone plays through Web Audio (stands in for TTS render, and lets Phase 2's playback
+  question piggyback on this same run) while getUserMedia({echoCancellation:true}) captures the mic.
+  Every second it logs audioCtx.state, track state, and capture sample/peak/rms stats back to Android
+  via the "Android" bridge (see AecBackgroundExperimentActivity) — so a real device test is: launch,
+  confirm logs are flowing, background the app / lock the screen for 60s+, then check whether the
+  logs (and their sample counts) kept advancing the whole time or went stale/flat.
+-->
+<script>
+const SAMPLE_RATE = 16000;
+const TONE_FREQ = 500;
+const TONE_GAIN = 0.05; // quiet on purpose — this runs for minutes, not a one-shot loud tone
+
+function log(msg) {
+  if (window.Android && window.Android.log) window.Android.log(msg);
+  console.log(msg);
+}
+
+async function main() {
+  log("Background experiment starting.");
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+  await audioCtx.resume();
+  log(`audioCtx.state=${audioCtx.state} sampleRate=${audioCtx.sampleRate}`);
+
+  const osc = audioCtx.createOscillator();
+  osc.frequency.value = TONE_FREQ;
+  const toneGain = audioCtx.createGain();
+  toneGain.gain.value = TONE_GAIN;
+  osc.connect(toneGain).connect(audioCtx.destination);
+  osc.start();
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: false,
+      autoGainControl: false,
+      channelCount: 1,
+    },
+  });
+
+  const track = stream.getAudioTracks()[0];
+  if (track) {
+    log(`track: label="${track.label}" readyState=${track.readyState} muted=${track.muted} enabled=${track.enabled}`);
+    track.onmute = () => log("track.onmute fired");
+    track.onunmute = () => log("track.onunmute fired");
+    track.onended = () => log("track.onended fired");
+  } else {
+    log("WARNING: no audio track in the returned stream");
+  }
+
+  document.addEventListener("visibilitychange", () => log(`document.visibilityState=${document.visibilityState}`));
+  window.addEventListener("blur", () => log("window blur"));
+  window.addEventListener("focus", () => log("window focus"));
+
+  const source = audioCtx.createMediaStreamSource(stream);
+  const processor = audioCtx.createScriptProcessor(2048, 1, 1);
+  const mute = audioCtx.createGain();
+  mute.gain.value = 0; // route through the graph without audibly looping the mic back out
+
+  let peak = 0;
+  let sumSquares = 0;
+  let sampleCount = 0;
+  let totalSamples = 0;
+  processor.onaudioprocess = (e) => {
+    const data = e.inputBuffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      const v = Math.abs(data[i]);
+      if (v > peak) peak = v;
+      sumSquares += data[i] * data[i];
+      sampleCount++;
+    }
+  };
+  source.connect(processor);
+  processor.connect(mute);
+  mute.connect(audioCtx.destination);
+
+  let tick = 0;
+  setInterval(() => {
+    tick++;
+    const rms = sampleCount > 0 ? Math.sqrt(sumSquares / sampleCount) : 0;
+    log(`t=${tick}s audioCtx.state=${audioCtx.state} track.readyState=${track ? track.readyState : "n/a"} `
+      + `track.muted=${track ? track.muted : "n/a"} samplesThisTick=${sampleCount} totalSamples=${totalSamples + sampleCount} `
+      + `peak=${peak.toFixed(5)} rms=${rms.toFixed(5)} visibility=${document.visibilityState}`);
+    totalSamples += sampleCount;
+    sampleCount = 0;
+    sumSquares = 0;
+    peak = 0;
+  }, 1000);
+}
+
+window.addEventListener("load", () => {
+  setTimeout(main, 500);
+});
+</script>
+</body>
+</html>

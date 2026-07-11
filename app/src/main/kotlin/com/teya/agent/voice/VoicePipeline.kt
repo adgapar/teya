@@ -13,11 +13,15 @@ import android.util.Log
 import com.teya.agent.brain.MistralClient
 import com.teya.agent.voice.aec.NativeAec3
 import com.teya.agent.voice.aec.Resampler
+import com.teya.agent.voice.aec.WebViewAecHost
 import com.teya.agent.voice.vad.SileroVad
 import io.ktor.utils.io.jvm.javaio.*
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -32,11 +36,17 @@ class VoicePipeline(private val context: Context) {
 
     companion object {
         private const val SAMPLE_RATE = 16000
-        private const val FRAME_MS = 20
-        private const val FRAME_SAMPLES = SAMPLE_RATE / (1000 / FRAME_MS) // 320 samples @ 20ms
-        private const val SILENCE_RMS_THRESHOLD = 700.0                   // energy floor for "speech"
+        // Must match SileroVad.FRAME_SIZE (512 samples @ 16kHz = 32ms) — recordWithVad feeds these
+        // frames straight to SileroVad now instead of thresholding raw energy.
+        private const val FRAME_SAMPLES = 512
+        private const val FRAME_MS = FRAME_SAMPLES * 1000 / SAMPLE_RATE // 32ms
+        // Fallback only, if SileroVad fails to construct in recordWithVad — see its doc comment.
+        // Real recordings were hitting MAX_RECORDING_MS instead of stopping on trailing silence
+        // with this threshold, since real room noise doesn't reliably stay under it.
+        private const val SILENCE_RMS_THRESHOLD = 700.0
         private const val TRAILING_SILENCE_MS = 800                       // silence that ends a command
         private const val DEFAULT_INITIAL_SILENCE_MS = 4000               // give up if nobody speaks (default)
+        private const val BARGE_IN_AUDIO_BUFFER_MAX_SAMPLES = SAMPLE_RATE * 3 // ~3s cap — see bargeInAudioBuffer's doc comment
         private const val MAX_RECORDING_MS = 10000                        // hard cap on a single command
         private const val TTS_SAMPLE_RATE = 24000                         // Voxtral PCM output rate
         private const val BARGE_IN_GAIN = 6.0f  // matches WakeWordEngine.INPUT_GAIN — no hardware AGC
@@ -64,6 +74,20 @@ class VoicePipeline(private val context: Context) {
         // convergence time measured in isolated testing, since that number was against a clean
         // synthetic signal, not this device's real speaker->mic acoustic path and real voice.
         private const val AEC3_LEAD_IN_MS = 2000L
+
+        // Poll cadence for pacing analyzeRender to actual AudioTrack playback position (see
+        // streamToSpeaker's feedPlayedRenderFrames) — matches NativeAec3.FRAME_SIZE's own 10ms
+        // granularity at 16kHz, so frames become available to feed about as often as they're sized.
+        private const val AEC3_RENDER_POLL_MS = 10L
+
+        // Kill-switch for the WebView/Chromium AEC replacement plan's Phase 1 scaffolding (see
+        // thoughts/shared/plans/2026-07-11-webview-chromium-aec-barge-in.md and
+        // voice/aec/WebViewAecHost.kt). true = a session-scoped overlay WebView is constructed
+        // alongside NativeAec3 (not replacing it yet) and a bridge round-trip latency is measured
+        // and logged once per session. No real render/capture audio flows through this WebView yet
+        // (Phase 2/3) — this only proves the bidirectional bridge scaffolding. Default false: this
+        // must not change any shipped behavior until later phases are validated.
+        const val WEBVIEW_AEC_HOST_ENABLED = false
     }
 
     private val wakeWordEngine = WakeWordEngine(
@@ -86,6 +110,17 @@ class VoicePipeline(private val context: Context) {
     @Volatile private var sileroVad: SileroVad? = null
     private var vadFrameBuffer = ShortArray(0)
     @Volatile private var bargeInFired = false
+    // Rolling buffer of cleaned (post-AEC3, pre-gain) mic audio captured continuously during the
+    // armed window — NOT gated on bargeInFired, unlike the VAD path below, so it keeps covering
+    // right up through the moment of interrupt. Exists because forwardArmedChunk previously threw
+    // away everything the user said during "speaking" mode (Silero only ever produced a yes/no
+    // signal, never kept the audio) — meaning whatever triggered/accompanied the interrupt was
+    // lost, and the fresh AudioRecord listenForCommand starts afterward only picks up speech from
+    // ~750-800ms later (WakeWordEngine's mic must fully stop first — Android can't run two
+    // AudioRecords at once), producing STT fragments like "works." or "Now," instead of the whole
+    // sentence. Capped at BARGE_IN_AUDIO_BUFFER_MAX_SAMPLES so a long Teya response before any
+    // interrupt doesn't grow this unboundedly. See [consumeBargeInAudio].
+    private var bargeInAudioBuffer = ShortArray(0)
     // Guards sileroVad's create/use/close: forwardArmedChunk runs on WakeWordEngine's capture
     // thread while setBargeInArmed(false) runs on the harness's coroutine thread — without this,
     // a disarm's close() can race a concurrent isSpeech() call and crash natively (use-after-free
@@ -106,7 +141,7 @@ class VoicePipeline(private val context: Context) {
     // Only ever touched from forwardArmedChunk, which always runs on WakeWordEngine's single
     // dedicated capture thread (never concurrently with itself), so the buffer itself needs no
     // lock of its own — access to the aec3 field alongside it is still guarded by aecLock inside
-    // cleanCaptureChunk(), for the same reason feedRenderToAec3() guards its analyzeRender calls:
+    // cleanCaptureChunk(), for the same reason streamToSpeaker's feedPlayedRenderFrames guards its analyzeRender calls:
     // aec3 is written from the harness's coroutine thread (startAecSession()/endAecSession()), so
     // a session-end close() could otherwise race a concurrent processCapture() call on this thread.
     private var aecCaptureBuffer = ShortArray(0)
@@ -117,13 +152,24 @@ class VoicePipeline(private val context: Context) {
     // filter's convergence cost (fed real double-talk from frame zero, suppression is negligible;
     // it converges quickly given a genuine render-only lead-in first) is paid once per session, not
     // once per turn. A dedicated aecLock (not vadLock) guards this independently-scoped resource:
-    // analyzeRender runs on streamToSpeaker's IO-dispatcher thread while endAecSession() runs on
-    // the harness's coroutine thread, so a session-end close() could otherwise race a concurrent
-    // analyzeRender call, mirroring the exact race vadLock already guards against for sileroVad.
+    // analyzeRender runs on streamToSpeaker's IO-dispatcher thread (and its render-pacing poller
+    // coroutine — see feedPlayedRenderFrames) while endAecSession() runs on the harness's coroutine
+    // thread, so a session-end close() could otherwise race a concurrent analyzeRender call,
+    // mirroring the exact race vadLock already guards against for sileroVad.
+    //
+    // renderResampler is session-scoped (not per-utterance) purely for its own resampling
+    // continuity across sentence boundaries; the actual buffering of not-yet-played resampled
+    // samples is per-utterance local state inside streamToSpeaker, since it's keyed off
+    // AudioTrack.playbackHeadPosition, which resets to 0 with each fresh AudioTrack.
     @Volatile private var aec3: NativeAec3? = null
     private val aecLock = Any()
+
+    // Phase 1 scaffolding for the WebView/Chromium AEC replacement (see WEBVIEW_AEC_HOST_ENABLED's
+    // doc comment) — session-scoped like aec3 above, but not yet touched by any concurrent
+    // render/capture thread (no real audio flows through it yet), so unlike aec3 it needs no lock
+    // of its own today. That will change once Phase 2/3 wire real render/capture through it.
+    private var webViewAecHost: WebViewAecHost? = null
     private var renderResampler = Resampler()
-    private var renderFrameBuffer = ShortArray(0)
     // Set once — only if still 0L — the first time analyzeRender is actually fed a frame this
     // session. Written from the render/TTS thread here; read from the capture thread by the
     // convergence-lead-in gate below, hence @Volatile for cross-thread visibility.
@@ -140,6 +186,66 @@ class VoicePipeline(private val context: Context) {
     fun setMistralClient(client: MistralClient) {
         this.mistralClient = client
     }
+
+    /**
+     * Synthesizes and plays a short pure-tone cue (fire-and-forget — runs its own short-lived
+     * thread so callers, including [interrupt] on the capture thread, never block). Wall-mounted,
+     * screen-not-always-visible device: the orb's listening/thinking/speaking state changes aren't
+     * visible unless you're looking at it, so key transitions get an audible cue too. Uses
+     * USAGE_MEDIA (same as [streamToSpeaker]'s TTS output, already confirmed clearly audible at a
+     * distance) rather than USAGE_ASSISTANCE_SONIFICATION — the latter maps to a separate
+     * system-sound volume stream that was too quiet to hear reliably even at 15cm.
+     */
+    private fun playTone(freqHz: Double, durationMs: Int, volume: Float = 0.9f) {
+        Thread {
+            var track: AudioTrack? = null
+            try {
+                val sampleRate = 16000
+                val numSamples = sampleRate * durationMs / 1000
+                val fadeSamples = (numSamples / 10).coerceAtLeast(1) // 10% fade in/out — avoids a click
+                val buffer = ShortArray(numSamples)
+                for (i in 0 until numSamples) {
+                    val envelope = when {
+                        i < fadeSamples -> i.toDouble() / fadeSamples
+                        i > numSamples - fadeSamples -> (numSamples - i).toDouble() / fadeSamples
+                        else -> 1.0
+                    }
+                    val angle = 2.0 * Math.PI * i * freqHz / sampleRate
+                    buffer[i] = (Math.sin(angle) * envelope * volume * Short.MAX_VALUE).toInt().toShort()
+                }
+                track = AudioTrack.Builder()
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(sampleRate)
+                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                            .build()
+                    )
+                    .setBufferSizeInBytes(buffer.size * 2)
+                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .build()
+                track.write(buffer, 0, buffer.size)
+                track.play()
+                Thread.sleep((durationMs + 30).toLong()) // let it finish before releasing
+            } catch (e: Exception) {
+                Log.e("VoicePipeline", "Failed to play tone cue", e)
+            } finally {
+                try { track?.release() } catch (_: Exception) {}
+            }
+        }.start()
+    }
+
+    /** Cue: Teya has started listening for your command — see [playTone]'s doc comment. */
+    fun playListeningChime() = playTone(freqHz = 880.0, durationMs = 100)
+
+    /** Cue: a barge-in interrupt just registered and stopped her — see [playTone]'s doc comment. */
+    fun playInterruptChime() = playTone(freqHz = 440.0, durationMs = 80)
 
     /**
      * Barge-in: stop whatever Teya is saying right now. Called from the barge-in VAD callback
@@ -200,6 +306,7 @@ class VoicePipeline(private val context: Context) {
                 if (sileroVad != null) return // already armed
                 bargeInFired = false
                 vadFrameBuffer = ShortArray(0)
+                bargeInAudioBuffer = ShortArray(0)
                 vadChunkCounter = 0
                 vadPeakConfidence = 0f
                 vadPeakRawAmplitude = 0
@@ -228,77 +335,77 @@ class VoicePipeline(private val context: Context) {
     }
 
     /**
+     * Returns and clears [bargeInAudioBuffer] — whatever cleaned mic audio was captured during the
+     * armed window, up to ~3s of it. Call right after a barge-in interrupt, before the next
+     * [listenForCommand], and pass the result as [listenForCommand]'s `prefixAudio` so what the
+     * user was already saying when they interrupted carries through into that recording instead of
+     * being silently discarded (see [bargeInAudioBuffer]'s doc comment for why that was happening).
+     */
+    fun consumeBargeInAudio(): ShortArray {
+        synchronized(vadLock) {
+            val audio = bargeInAudioBuffer
+            bargeInAudioBuffer = ShortArray(0)
+            return audio
+        }
+    }
+
+    /**
      * Starts the whole-session [NativeAec3] instance. Call once near the top of
      * [com.teya.agent.harness.HarnessService.runConversation] — deliberately independent of
      * [setBargeInArmed]'s per-turn arm/disarm (see [aec3]'s doc comment above): mirroring
      * [SileroVad]'s per-turn construct/close would force every turn, not just the one right after
      * an interruption, to re-pay AEC3's convergence window.
      */
-    fun startAecSession() {
+    suspend fun startAecSession() {
         synchronized(aecLock) {
-            if (aec3 != null) return // already started
-            renderResampler = Resampler()
-            renderFrameBuffer = ShortArray(0)
-            firstRenderFrameAtMs = 0L
-            renderFrameCount = 0
-            try {
-                aec3 = NativeAec3()
-                // The platform AcousticEchoCanceler previously never mattered during playback
-                // (forwardArmedChunk always returned early then) but now runs concurrently with
-                // continuous mid-sentence listening, where it was found to over-suppress the
-                // captured signal to near-silence before our own AEC3/Silero ever see it (this
-                // device's platform AEC is documented as unreliable — see
-                // WakeWordEngine.enableAudioEffects). Disable it for the duration of our own
-                // session-scoped AEC3 instance, which is the intended replacement.
-                wakeWordEngine.setPlatformAecEnabled(false)
-                Log.d("VoicePipeline", "AEC3: session started (platform AEC disabled)")
-            } catch (e: Exception) {
-                Log.e("VoicePipeline", "AEC3: failed to init NativeAec3, staying without echo cancellation", e)
-                aec3 = null
+            if (aec3 == null) {
+                renderResampler = Resampler()
+                firstRenderFrameAtMs = 0L
+                renderFrameCount = 0
+                try {
+                    aec3 = NativeAec3()
+                    // The platform AcousticEchoCanceler previously never mattered during playback
+                    // (forwardArmedChunk always returned early then) but now runs concurrently with
+                    // continuous mid-sentence listening, where it was found to over-suppress the
+                    // captured signal to near-silence before our own AEC3/Silero ever see it (this
+                    // device's platform AEC is documented as unreliable — see
+                    // WakeWordEngine.enableAudioEffects). Disable it for the duration of our own
+                    // session-scoped AEC3 instance, which is the intended replacement.
+                    wakeWordEngine.setPlatformAecEnabled(false)
+                    Log.d("VoicePipeline", "AEC3: session started (platform AEC disabled)")
+                } catch (e: Exception) {
+                    Log.e("VoicePipeline", "AEC3: failed to init NativeAec3, staying without echo cancellation", e)
+                    aec3 = null
+                }
             }
+        }
+
+        // Phase 1 scaffolding, alongside (not replacing) NativeAec3 above — see
+        // WEBVIEW_AEC_HOST_ENABLED's doc comment. Deliberately outside aecLock: this doesn't touch
+        // any state aecLock guards, and start()/measureRoundTripLatency() suspend (hop to the main
+        // thread), which synchronized{} can't do.
+        if (WEBVIEW_AEC_HOST_ENABLED && webViewAecHost == null) {
+            val host = WebViewAecHost(context)
+            webViewAecHost = host
+            host.start()
+            val latencyMs = host.measureRoundTripLatency()
+            Log.d(
+                "VoicePipeline",
+                "WebViewAecHost: bridge round-trip latency = " +
+                    (latencyMs?.let { "${it}ms" } ?: "no response (overlay permission missing, or host failed to start)")
+            )
         }
     }
 
     /** Ends the whole-session [NativeAec3] instance. Call once in [runConversation]'s `finally`. */
-    fun endAecSession() {
+    suspend fun endAecSession() {
         synchronized(aecLock) {
             aec3?.close()
             aec3 = null
             wakeWordEngine.setPlatformAecEnabled(true)
         }
-    }
-
-    /**
-     * Resamples an arriving 24kHz TTS chunk to 16kHz and feeds [NativeAec3.FRAME_SIZE]-sized
-     * pieces to [NativeAec3.analyzeRender], buffering any leftover remainder (chunk lengths don't
-     * divide evenly) — the same leftover-buffer reassembly pattern [forwardArmedChunk] uses for
-     * Silero's frames. Session-scoped like [aec3] itself: runs for every sentence played via
-     * [streamToSpeaker], independent of [setBargeInArmed]'s per-turn state.
-     */
-    private fun feedRenderToAec3(chunk24k: ShortArray) {
-        synchronized(aecLock) {
-            val aec = aec3 ?: return
-            val resampled = renderResampler.resample(chunk24k)
-            if (resampled.isEmpty()) return
-
-            renderFrameBuffer += resampled
-            var offset = 0
-            while (renderFrameBuffer.size - offset >= NativeAec3.FRAME_SIZE) {
-                val frame = renderFrameBuffer.copyOfRange(offset, offset + NativeAec3.FRAME_SIZE)
-                offset += NativeAec3.FRAME_SIZE
-                aec.analyzeRender(frame)
-                if (firstRenderFrameAtMs == 0L) firstRenderFrameAtMs = System.currentTimeMillis()
-                renderFrameCount++
-            }
-            renderFrameBuffer = if (offset > 0) renderFrameBuffer.copyOfRange(offset, renderFrameBuffer.size) else renderFrameBuffer
-
-            // Diagnostic marker for manual logcat verification (~1s of render audio @16kHz, since
-            // FRAME_SIZE=160 samples=10ms): confirms real TTS audio is reaching analyzeRender
-            // while Teya speaks.
-            if (renderFrameCount > 0 && renderFrameCount % 100 == 0) {
-                Log.d("VoicePipeline", "AEC3: render frames fed to analyzeRender this session = $renderFrameCount")
-            }
-        }
+        webViewAecHost?.stop()
+        webViewAecHost = null
     }
 
     /**
@@ -312,7 +419,7 @@ class VoicePipeline(private val context: Context) {
      *
      * Falls back to the raw [chunk] unchanged when [aec3] is null (no active conversation
      * session, or somehow not constructed) — must not regress behavior when AEC3 isn't active for
-     * any reason. Wrapped in [aecLock] for the same reason [feedRenderToAec3] is: reads the
+     * any reason. Wrapped in [aecLock] for the same reason streamToSpeaker's render pacing is: reads the
      * [aec3] field, which [endAecSession] can null out from a different thread.
      */
     private fun cleanCaptureChunk(chunk: ShortArray): ShortArray {
@@ -334,7 +441,7 @@ class VoicePipeline(private val context: Context) {
 
     /**
      * Convergence lead-in gate: has enough render-only time elapsed since the session's first
-     * render frame ([firstRenderFrameAtMs], set once by [feedRenderToAec3] and never reset per
+     * render frame ([firstRenderFrameAtMs], set once by streamToSpeaker's render pacing and never reset per
      * turn) to trust barge-in detection? Returns `false` (don't trust yet) if AEC3 hasn't rendered
      * a single frame this session at all. Read here from [WakeWordEngine]'s capture thread;
      * [firstRenderFrameAtMs] is written from the render/TTS thread, hence `@Volatile` there for
@@ -366,8 +473,6 @@ class VoicePipeline(private val context: Context) {
      * as it did before AEC3-based barge-in existed (gap-gated only).
      */
     private fun forwardArmedChunk(chunk: ShortArray) {
-        if (bargeInFired) return // already interrupted this window; wait for disarm
-
         // Both the self-echo-gate exemption and the lead-in gate below only apply when the
         // feature is on AND a session-scoped AEC3 instance is actually active — otherwise this
         // falls straight through to the old gap-gated behavior (see AEC3_BARGE_IN_ENABLED's
@@ -391,6 +496,23 @@ class VoicePipeline(private val context: Context) {
         // chunk when aec3 is null (no active session). Always runs — independent of the
         // kill-switch — so AEC3 keeps converging even while its result isn't yet trusted below.
         val cleanedChunk = cleanCaptureChunk(chunk)
+
+        // Rolling pre-interrupt audio buffer — see bargeInAudioBuffer's doc comment. Runs before
+        // the bargeInFired check below (a few more chunks may still arrive while onBargeIn's
+        // cancellation propagates — worth keeping), capped so it never grows past ~3s regardless.
+        // Guarded by vadLock, same as every other mutation of this field (setBargeInArmed's reset,
+        // consumeBargeInAudio's read+clear) — forwardArmedChunk runs on WakeWordEngine's capture
+        // thread while those run from the harness's coroutine thread.
+        synchronized(vadLock) {
+            bargeInAudioBuffer += cleanedChunk
+            if (bargeInAudioBuffer.size > BARGE_IN_AUDIO_BUFFER_MAX_SAMPLES) {
+                bargeInAudioBuffer = bargeInAudioBuffer.copyOfRange(
+                    bargeInAudioBuffer.size - BARGE_IN_AUDIO_BUFFER_MAX_SAMPLES, bargeInAudioBuffer.size
+                )
+            }
+        }
+
+        if (bargeInFired) return // already interrupted this window; wait for disarm
 
         // Diagnostic: peak of this chunk's *cleaned* output, pre-gain — comparing this to rawPeak
         // above (same chunk) is the fastest way to tell whether AEC3 is suppressing Teya's own
@@ -453,6 +575,32 @@ class VoicePipeline(private val context: Context) {
             vadPeakConfidence = 0f
             vadPeakRawAmplitude = 0
             vadPeakCleanedAmplitude = 0
+            logAec3Metrics()
+        }
+    }
+
+    /**
+     * Diagnostic only: logs AEC3's own [NativeAec3.getMetrics] snapshot — its self-reported
+     * render/capture delay estimate and cancellation strength (ERL/ERLE). Whether [delayMs] is
+     * stable and small, or unstable/implausibly large, is the direct way to confirm or rule out
+     * that delay estimation (as opposed to AEC3's suppression math) is the reason real-device
+     * suppression has been inconsistent — see the 2026-07-10 barge-in handoff doc. No behavior
+     * change; [NativeAec3.setAudioBufferDelay] is not called yet pending what this shows.
+     */
+    private fun logAec3Metrics() {
+        synchronized(aecLock) {
+            val aec = aec3 ?: return
+            try {
+                val m = aec.getMetrics()
+                Log.d(
+                    "VoicePipeline",
+                    "AEC3 metrics: delayMs=${m.delayMs}, " +
+                        "echoReturnLossDb=${"%.1f".format(m.echoReturnLossDb)}, " +
+                        "echoReturnLossEnhancementDb=${"%.1f".format(m.echoReturnLossEnhancementDb)}"
+                )
+            } catch (e: Exception) {
+                Log.e("VoicePipeline", "AEC3: failed to read metrics", e)
+            }
         }
     }
 
@@ -461,15 +609,24 @@ class VoicePipeline(private val context: Context) {
      * silence, or gives up after [maxInitialSilenceMs] if no speech starts), then transcribes it
      * via Voxtral. The caller must pause the wake-word recorder first ([pauseWakeWord]) to avoid
      * microphone contention. Returns "" on any failure or silence.
+     *
+     * [prefixAudio] — pass [consumeBargeInAudio]'s result here right after a barge-in interrupt —
+     * is prepended to whatever this call captures live, so speech already underway when the user
+     * interrupted (which the WakeWordEngine handoff gap would otherwise cut off — see
+     * [bargeInAudioBuffer]'s doc comment) carries through into the transcription.
      */
-    suspend fun listenForCommand(maxInitialSilenceMs: Int = DEFAULT_INITIAL_SILENCE_MS, contextBias: List<String> = emptyList()): String =
+    suspend fun listenForCommand(
+        maxInitialSilenceMs: Int = DEFAULT_INITIAL_SILENCE_MS,
+        contextBias: List<String> = emptyList(),
+        prefixAudio: ShortArray = ShortArray(0),
+    ): String =
         withContext(Dispatchers.IO) {
             val client = mistralClient ?: run {
                 Log.e("VoicePipeline", "MistralClient not set, cannot transcribe")
                 return@withContext ""
             }
             try {
-                val wavFile = recordWithVad(maxInitialSilenceMs) ?: run {
+                val wavFile = recordWithVad(maxInitialSilenceMs, prefixAudio) ?: run {
                     Log.d("VoicePipeline", "No command audio captured")
                     return@withContext ""
                 }
@@ -491,7 +648,7 @@ class VoicePipeline(private val context: Context) {
     }
 
     @SuppressLint("MissingPermission")
-    private fun recordWithVad(maxInitialSilenceMs: Int): File? {
+    private fun recordWithVad(maxInitialSilenceMs: Int, prefixAudio: ShortArray = ShortArray(0)): File? {
         val minBuffer = AudioRecord.getMinBufferSize(
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
@@ -515,9 +672,30 @@ class VoicePipeline(private val context: Context) {
             return null
         }
 
+        // Real recordings were hitting MAX_RECORDING_MS instead of stopping on trailing silence —
+        // SILENCE_RMS_THRESHOLD doesn't reliably stay under real ambient room noise. Use the same
+        // SileroVad already proven reliable for barge-in in this exact acoustic environment
+        // instead; falls back to the old RMS approach only if SileroVad fails to construct, so a
+        // model/asset problem degrades gracefully rather than making every command capture silent.
+        val vad = try {
+            SileroVad(context)
+        } catch (e: Exception) {
+            Log.e("VoicePipeline", "Failed to init SileroVad for command recording, falling back to RMS energy detection", e)
+            null
+        }
+
         val pcm = ByteArrayOutputStream()
         val frame = ShortArray(FRAME_SAMPLES)
-        var speechStarted = false
+        // If we already have pre-interrupt audio (see prefixAudio's doc comment), seed the buffer
+        // with it and treat speech as already started — the leading-silence trim below only
+        // applies to what this call captures live, not to audio we already know contains speech.
+        if (prefixAudio.isNotEmpty()) {
+            val bytes = ByteArray(prefixAudio.size * 2)
+            ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().put(prefixAudio)
+            pcm.write(bytes)
+            Log.d("VoicePipeline", "Prepending ${prefixAudio.size} samples of pre-interrupt audio")
+        }
+        var speechStarted = prefixAudio.isNotEmpty()
         var trailingSilenceMs = 0
         var elapsedMs = 0
 
@@ -529,13 +707,16 @@ class VoicePipeline(private val context: Context) {
                 if (read <= 0) continue
                 elapsedMs += FRAME_MS
 
-                var sumSquares = 0.0
-                for (i in 0 until read) {
-                    val s = frame[i].toDouble()
-                    sumSquares += s * s
+                val isSpeech = if (vad != null && read == FRAME_SAMPLES) {
+                    vad.isSpeech(frame)
+                } else {
+                    var sumSquares = 0.0
+                    for (i in 0 until read) {
+                        val s = frame[i].toDouble()
+                        sumSquares += s * s
+                    }
+                    sqrt(sumSquares / read) > SILENCE_RMS_THRESHOLD
                 }
-                val rms = sqrt(sumSquares / read)
-                val isSpeech = rms > SILENCE_RMS_THRESHOLD
 
                 if (isSpeech) {
                     speechStarted = true
@@ -560,6 +741,7 @@ class VoicePipeline(private val context: Context) {
         } finally {
             try { recorder.stop() } catch (_: Exception) {}
             recorder.release()
+            vad?.close()
         }
 
         val pcmBytes = pcm.toByteArray()
@@ -606,10 +788,18 @@ class VoicePipeline(private val context: Context) {
      * gap is still needed after this sentence (streaming vs. mp3 fallback is chosen independently
      * per call, not once per turn). When nothing was actually spoken (blank text, or no client
      * configured), returns `true`: no audio played, so there's nothing for a gap to protect against.
+     *
+     * Does NOT reset [interruptRequested] — callers speaking multiple sentences per turn (see
+     * `HarnessService.respond()`'s speaker loop) call this once per sentence, on a different
+     * thread than [onBargeIn]/[interrupt] fires from. Resetting the flag here raced against a
+     * genuine interrupt landing right as the loop moved to the next queued sentence — the reset
+     * could clobber a fresh `true` before the loop's `isInterrupted()` check ever saw it, letting
+     * that next sentence play through uninterrupted despite the UI already having flipped to
+     * "listening". Callers starting a genuinely fresh speaking phase must call [consumeInterrupted]
+     * themselves first (see `HarnessService.runConversation`'s two call sites).
      */
     suspend fun textToSpeech(text: String): Boolean {
         if (text.isBlank()) return true
-        interruptRequested = false // fresh attempt — any earlier interrupt has already been handled
         val client = mistralClient ?: run {
             Log.e("VoicePipeline", "MistralClient not set, cannot speak")
             return true
@@ -643,6 +833,7 @@ class VoicePipeline(private val context: Context) {
     private suspend fun streamToSpeaker(client: MistralClient, text: String): Boolean =
         withContext(Dispatchers.IO) {
             var track: AudioTrack? = null
+            var renderPollerJob: Job? = null
             try {
                 val minBuf = AudioTrack.getMinBufferSize(
                     TTS_SAMPLE_RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT
@@ -662,20 +853,70 @@ class VoicePipeline(private val context: Context) {
                             .build()
                     )
                     // Was maxOf(minBuf, TTS_SAMPLE_RATE) (~0.5s), padded for smooth streaming over
-                    // network jitter — but with WRITE_BLOCKING, that let feedRenderToAec3()/
-                    // analyzeRender (called just before each write) run up to ~0.5s ahead of when
-                    // audio actually leaves the speaker, likely exceeding AEC3's delay-correlation
-                    // window and collapsing real suppression toward 0dB (confirmed via
-                    // raw-vs-cleaned amplitude logging: near-identical, sometimes cleaned > raw).
-                    // Shrinking to Android's true minimum keeps analyzeRender's timeline much
-                    // closer to actual playback, trading some streaming-jitter resilience for AEC3
-                    // having a chance to actually correlate render vs. capture.
+                    // network jitter — shrunk to Android's true minimum since a large buffer widens
+                    // the gap between "write() returns" and "actually audible." That gap is now
+                    // irrelevant to AEC3 correctness (see feedPlayedRenderFrames below, which paces
+                    // analyzeRender off real playback position instead of assuming write-time ==
+                    // play-time), but a smaller buffer still keeps genuine playback latency low.
                     .setBufferSizeInBytes(minBuf)
                     .setTransferMode(AudioTrack.MODE_STREAM)
                     .build()
                 track = audioTrack
                 currentTrack = audioTrack
                 audioTrack.play()
+
+                // Render pacing state for this utterance only — AudioTrack.playbackHeadPosition
+                // resets to 0 with each fresh AudioTrack, so this can't live on aec3's
+                // session-scoped fields. Chunks are resampled to 16kHz and buffered as they arrive
+                // from the network, but only fed to NativeAec3.analyzeRender once playbackHeadPosition
+                // confirms they've actually played, polled on a steady cadence independent of network
+                // arrival timing. This is the fix for the delay-estimator failure diagnosed in
+                // thoughts/shared/research/2026-07-10-aec3-delay-estimator-diagnostic.md: feeding
+                // analyzeRender at network-chunk-arrival time (the old approach) left the true
+                // render/capture offset drifting within a single utterance, which AEC3's matched
+                // filter can't correlate against — hence delayMs stuck near 0 and ERLE near 0dB on
+                // real-device testing. Guarded by aecLock, same as every other AEC3-adjacent access
+                // in this class (see aec3's field doc comment).
+                var pendingRender16k = ShortArray(0)
+                var fedRender16k = 0L
+
+                fun feedPlayedRenderFrames() {
+                    synchronized(aecLock) {
+                        val aec = aec3 ?: return
+                        val played16k = SAMPLE_RATE.toLong() * audioTrack.playbackHeadPosition.toLong() / TTS_SAMPLE_RATE
+                        val available = minOf(played16k - fedRender16k, pendingRender16k.size.toLong())
+                            .coerceAtLeast(0L).toInt()
+                        var offset = 0
+                        while (available - offset >= NativeAec3.FRAME_SIZE) {
+                            val frame = pendingRender16k.copyOfRange(offset, offset + NativeAec3.FRAME_SIZE)
+                            offset += NativeAec3.FRAME_SIZE
+                            aec.analyzeRender(frame)
+                            fedRender16k += NativeAec3.FRAME_SIZE
+                            if (firstRenderFrameAtMs == 0L) firstRenderFrameAtMs = System.currentTimeMillis()
+                            renderFrameCount++
+                        }
+                        if (offset > 0) {
+                            pendingRender16k = pendingRender16k.copyOfRange(offset, pendingRender16k.size)
+                            // Diagnostic marker for manual logcat verification (~1s of render audio
+                            // @16kHz, since FRAME_SIZE=160 samples=10ms): confirms real TTS audio is
+                            // reaching analyzeRender while Teya speaks.
+                            if (renderFrameCount % 100 == 0) {
+                                Log.d("VoicePipeline", "AEC3: render frames fed to analyzeRender this session = $renderFrameCount")
+                            }
+                        }
+                    }
+                }
+
+                renderPollerJob = launch {
+                    while (isActive) {
+                        try {
+                            feedPlayedRenderFrames()
+                        } catch (e: Exception) {
+                            Log.e("VoicePipeline", "AEC3: render pacing poll failed", e)
+                        }
+                        delay(AEC3_RENDER_POLL_MS)
+                    }
+                }
 
                 var totalFrames = 0
                 val got = client.streamSpeechPcm(text) { floats ->
@@ -689,10 +930,15 @@ class VoicePipeline(private val context: Context) {
                                 else -> v.toInt().toShort()
                             }
                         }
-                        // Feed AEC3's farend reference before writing to the speaker, so render
-                        // analysis for this chunk never depends on whether the write below
-                        // succeeds — the two are deliberately decoupled.
-                        feedRenderToAec3(shorts)
+                        // Resample and buffer for feedPlayedRenderFrames (above) to feed to AEC3
+                        // once actually played — deliberately NOT fed to analyzeRender here at
+                        // network-arrival time (see this function's doc comment on why that broke
+                        // AEC3's delay estimation).
+                        synchronized(aecLock) {
+                            if (aec3 != null) {
+                                pendingRender16k += renderResampler.resample(shorts)
+                            }
+                        }
                         audioTrack.write(shorts, 0, shorts.size, AudioTrack.WRITE_BLOCKING)
                         totalFrames += shorts.size
                     }
@@ -710,12 +956,15 @@ class VoicePipeline(private val context: Context) {
                     if (pos == last) { if (++stable > 25) break } else { stable = 0; last = pos }
                     delay(20)
                 }
+                // Last pass to catch anything the poller's final tick missed before it's cancelled.
+                feedPlayedRenderFrames()
                 Log.d("VoicePipeline", "Playback finished (streamed $totalFrames frames)")
                 true
             } catch (e: Exception) {
                 Log.e("VoicePipeline", "AudioTrack streaming error", e)
                 false
             } finally {
+                renderPollerJob?.cancel()
                 try { track?.release() } catch (_: Exception) {}
                 currentTrack = null
             }

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head><title>AEC Bridge</title></head>
+<body>
+<!--
+  Phase 1 scaffolding (thoughts/shared/plans/2026-07-11-webview-chromium-aec-barge-in.md): proves a
+  persistent, bidirectional Kotlin<->JS bridge over the WindowManager-hosted WebView confirmed
+  working in Phase 0 (see WebViewAecHost.kt). No real audio here yet — just push (Kotlin calls
+  onPing via evaluateJavascript) and pull (this page calls back into Kotlin's AecBridge interface),
+  so WebViewAecHost can measure round-trip latency before Phase 2/3 build real render/capture
+  plumbing on top of this same channel.
+-->
+<script>
+function log(msg) {
+  if (window.AecBridge && window.AecBridge.log) window.AecBridge.log(msg);
+  console.log(msg);
+}
+
+// Called by Kotlin via evaluateJavascript("onPing('<id>')") — immediately calls back into Kotlin
+// so the round trip is: Kotlin pushes -> JS runs -> JS pulls back to Kotlin, all in one measurement.
+function onPing(id) {
+  if (window.AecBridge && window.AecBridge.onPong) {
+    window.AecBridge.onPong(id);
+  }
+}
+
+window.addEventListener("load", () => log("AEC bridge page loaded."));
+</script>
+</body>
+</html>

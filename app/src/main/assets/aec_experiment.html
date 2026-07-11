@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head><title>AEC Experiment</title></head>
+<body>
+<!--
+  Standalone spike (see docs/experiments.md): does Chromium's own getUserMedia
+  ({echoCancellation:true}) suppress a self-generated tone (standing in for TTS render audio)
+  picked up by the same device's mic, better than our native AEC3 path did?
+
+  Plays a steady tone through the page's own audio output while simultaneously capturing the mic,
+  once with echoCancellation on and once off, and logs peak/RMS for both back to Android via the
+  "Android" JS bridge (see AecWebExperimentActivity) so they can be compared directly. Mirrors Plan
+  A's synthetic-tone methodology (thoughts/shared/plans/2026-07-09-webrtc-aec3-native-port.md) for
+  a like-for-like comparison against that ~72dB synthetic-tone number.
+-->
+<script>
+const SAMPLE_RATE = 16000;
+const TONE_FREQ = 500;   // Hz — arbitrary steady tone, easy to recognize in captured peak/RMS
+const TONE_GAIN = 0.9;   // 0..1 — loud on purpose: the user needs to be able to confirm audibly whether it's really playing
+const PHASE_MS = 4000;   // each phase (echoCancellation on/off) runs this long
+
+function log(msg) {
+  if (window.Android && window.Android.log) window.Android.log(msg);
+  console.log(msg);
+}
+
+function runPhase(echoCancellation, label) {
+  return new Promise(async (resolve, reject) => {
+    log(`--- Phase start: ${label} (echoCancellation=${echoCancellation}) ---`);
+    // Hoisted so the catch block below can always tear these down, even if getUserMedia rejects
+    // after the oscillator has already started — this exact gap (oscillator started, then an
+    // exception before it's ever stopped) is what caused a stuck audible tone in an earlier run.
+    let audioCtx = null;
+    let osc = null;
+    let stream = null;
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+      await audioCtx.resume(); // WebView may start suspended even with autoplay allowed natively
+      log(`audioCtx.state=${audioCtx.state} sampleRate=${audioCtx.sampleRate}`);
+
+      // Render side: a steady tone through the page's own output, standing in for TTS audio.
+      osc = audioCtx.createOscillator();
+      osc.frequency.value = TONE_FREQ;
+      const toneGain = audioCtx.createGain();
+      toneGain.gain.value = TONE_GAIN;
+      osc.connect(toneGain).connect(audioCtx.destination);
+      osc.start();
+
+      // Capture side: request the mic with the phase's echoCancellation setting under test.
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: echoCancellation,
+          noiseSuppression: false,
+          autoGainControl: false,
+          channelCount: 1,
+        },
+      });
+
+      // Diagnostics: distinguish "mic never delivering data" from "delivering data that happens
+      // to be silent" — a track that's muted/ended/disabled would explain flat zero results
+      // without it being about echoCancellation at all.
+      const track = stream.getAudioTracks()[0];
+      if (track) {
+        log(`track: label="${track.label}" readyState=${track.readyState} muted=${track.muted} enabled=${track.enabled}`);
+        log(`track.getSettings(): ${JSON.stringify(track.getSettings())}`);
+        track.onmute = () => log("track.onmute fired");
+        track.onunmute = () => log("track.onunmute fired");
+        track.onended = () => log("track.onended fired");
+      } else {
+        log("WARNING: no audio track in the returned stream");
+      }
+
+      const source = audioCtx.createMediaStreamSource(stream);
+      // ScriptProcessorNode only fires onaudioprocess while part of the active render graph —
+      // route through a zero-gain node instead of connecting straight to destination, so this
+      // doesn't audibly play the mic back out (which would howl/feedback).
+      const processor = audioCtx.createScriptProcessor(2048, 1, 1);
+      const mute = audioCtx.createGain();
+      mute.gain.value = 0;
+
+      let peak = 0;
+      let sumSquares = 0;
+      let sampleCount = 0;
+      processor.onaudioprocess = (e) => {
+        const data = e.inputBuffer.getChannelData(0);
+        for (let i = 0; i < data.length; i++) {
+          const v = Math.abs(data[i]);
+          if (v > peak) peak = v;
+          sumSquares += data[i] * data[i];
+          sampleCount++;
+        }
+      };
+      source.connect(processor);
+      processor.connect(mute);
+      mute.connect(audioCtx.destination);
+
+      // Mid-phase progress check — confirms the render side is actually advancing and shows
+      // whether ANY signal has reached the capture callback yet, before the final result.
+      const progressTimer = setInterval(() => {
+        log(`...progress: audioCtx.currentTime=${audioCtx.currentTime.toFixed(2)} samplesSoFar=${sampleCount} peakSoFar=${peak.toFixed(5)}`);
+      }, 1000);
+
+      setTimeout(() => {
+        clearInterval(progressTimer);
+        const rms = sampleCount > 0 ? Math.sqrt(sumSquares / sampleCount) : 0;
+        log(`RESULT: ${label} (echoCancellation=${echoCancellation}) -> peak=${peak.toFixed(5)} rms=${rms.toFixed(5)} samples=${sampleCount}`);
+        osc.stop();
+        stream.getTracks().forEach((t) => t.stop());
+        processor.disconnect();
+        source.disconnect();
+        audioCtx.close();
+        resolve();
+      }, PHASE_MS);
+    } catch (e) {
+      log(`ERROR in phase ${label}: ${e.message}`);
+      // Must stop the oscillator here too — it was already started above and nothing else will
+      // ever stop it if getUserMedia (or anything after) throws.
+      try { osc && osc.stop(); } catch (_) {}
+      try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+      try { audioCtx && audioCtx.close(); } catch (_) {}
+      reject(e);
+    }
+  });
+}
+
+async function main() {
+  log("AEC experiment starting.");
+  try {
+    await runPhase(true, "AEC_ON");
+    await runPhase(false, "AEC_OFF");
+    log("AEC experiment finished — compare the two RESULT lines above.");
+  } catch (e) {
+    log(`AEC experiment aborted: ${e.message}`);
+  }
+}
+
+window.addEventListener("load", () => {
+  // Small delay so the WebView/mic-permission dance settles before requesting getUserMedia.
+  setTimeout(main, 500);
+});
+</script>
+</body>
+</html>
