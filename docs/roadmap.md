@@ -258,11 +258,18 @@ Open-Meteo), with location from the household profile or native device location.
 - **Bug**: onboarding "add person" form — the X (close) button shifts the **last name** field down,
   misaligning it with first name (reported 2026-07-10).
 - **16 KB page-size alignment** — every install shows Android 16's "isn't 16 KB compatible" warning
-  for `libteya_aec3.so`/`libteya_aec3_core_smoke_check.so` (ours, needs the
-  `-Wl,-z,max-page-size=16384` linker flag in the AEC3 CMake build) plus `libonnxruntime.so`
-  (Silero VAD) and `libtensorflowlite_jni.so` (wake word), both prebuilt third-party AARs that'd
-  need newer 16 KB-aligned releases. Harmless today — this device's actual page size is 4 KB and
-  Teya is sideloaded, never Play-distributed — but worth cleaning up eventually (noted 2026-07-10).
+  for `libonnxruntime.so` (Silero VAD) and `libtensorflowlite_jni.so` (wake word), both prebuilt
+  third-party AARs that'd need newer 16 KB-aligned releases (our own native AEC3 module, previously
+  also flagged here, was removed entirely on 2026-07-11 — see `docs/experiments.md`). Harmless
+  today — this device's actual page size is 4 KB and Teya is sideloaded, never Play-distributed —
+  but worth cleaning up eventually if either dependency ships an aligned build (noted 2026-07-10).
+- **Admin-configurable barge-in/wake-word tuning** — expose the currently-hardcoded tuning knobs
+  (`VoicePipeline`'s Silero `threshold`/`speechDurationMs`/`silenceDurationMs`/`BARGE_IN_GAIN`,
+  `HarnessService.BARGE_IN_GAP_MS`, `WakeWordEngine`'s `THRESHOLD`/`INPUT_GAIN`/`PATIENCE`) through
+  `SettingsActivity`, backed by `ConfigManager` (same `EncryptedSharedPreferences` store as the
+  Mistral API key) with today's hardcoded values as defaults. Would let future tuning passes (e.g.
+  Phase 5 of the WebView AEC work, or retuning wake word for a different device) happen from the
+  admin screen instead of a rebuild+install cycle each time (noted 2026-07-11).
 - Settings **voice picker** (live from `/audio/voices`) + persist choice.
 - **Implement memory / learning about people** — build the deferred half of the household model:
   `Person` rows with `kind=KNOWN` captured by voice ("remember Uncle Bob…"), a `MemoryEntry` table
