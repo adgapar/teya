@@ -53,6 +53,8 @@ A wall-mounted Android phone (even an old €50 device, plugged in) becomes the 
 
 **No server, no local agent stack.** Today's AI-agent wave runs heavy — people buy Mac Minis to host coding agents and orchestration frameworks locally. Teya needs none of it: the intelligence lives in the cloud, reached with a few API calls per turn, so the hardware is just a cheap phone that makes those calls, renders the face, and drives the device. The point isn't autonomous coding on expensive silicon — it's **everyday family life, delivered from the cheapest hardware that can already do it**.
 
+> **What phone to buy:** any Android phone running **Android 8.0 (Oreo, 2017) or newer** — so basically anything from the last ~8 years, including old hand-me-downs. Below Android 8, voice still works, but you lose the ability to naturally interrupt Teya mid-sentence (you'd have to wait for her to finish talking before speaking over her). During first-time setup, you'll also flip one extra permission toggle ("display over other apps") — a one-time step, not something you do again.
+
 ### What the phone commands via Android
 
 The agent works through the phone's **own native surface** — no DIY electronics, no wiring:
