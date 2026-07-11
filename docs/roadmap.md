@@ -4,7 +4,7 @@ Living status doc. Design lives in [ARCHITECTURE.md](../ARCHITECTURE.md); the fu
 is [thoughts/shared/research/2026-07-06-project-audit.md](../thoughts/shared/research/2026-07-06-project-audit.md).
 Audit IDs (C1, H2, …) below refer to that file.
 
-_Last updated: 2026-07-10 (native AEC3 barge-in attempt)._
+_Last updated: 2026-07-11 (barge-in experiment trail moved to `docs/experiments.md`)._
 
 ## ✅ Done
 
@@ -109,45 +109,15 @@ _Last updated: 2026-07-10 (native AEC3 barge-in attempt)._
     hint, if the API supports one) — would fix this class of error at the source instead of after
     the fact. Worth revisiting; unverified whether Voxtral's `/audio/transcriptions` accepts it.
   - **Built + compiles; pending a live on-device test.**
-- **Native WebRTC AEC3 module — built, validated synthetically, wired in, but real mid-sentence
-  barge-in currently disabled** (`voice/aec/NativeAec3.kt`, `voice/aec/Resampler.kt`; plans:
-  `thoughts/shared/plans/2026-07-09-webrtc-aec3-native-port.md` and
-  `2026-07-09-webrtc-aec3-voicepipeline-integration.md`). Goal: replace the gap-gated workaround
-  above (barge-in only listens *between* sentences) with continuous listening, using our own
-  echo canceller instead of the platform's unreliable one. Vendored + built WebRTC's AEC3 as a
-  standalone JNI module (~72dB measured suppression on synthetic tones, on-device). Wired into
-  the real pipeline: session-scoped lifecycle (one instance per conversation, not per turn, so its
-  convergence cost is paid once), render-side (`analyzeRender`) fed from streamed TTS audio,
-  capture-side (`processCapture`) fed from the mic before Silero VAD, gate/gap removed for
-  AEC3-covered sentences, one-line kill-switch (`VoicePipeline.AEC3_BARGE_IN_ENABLED`).
-  - **Two real bugs found and fixed during live testing** (kept regardless of the switch below):
-    the platform `AcousticEchoCanceler` was still enabled during playback (harmless before, since
-    barge-in never listened during playback at all — became a live conflict once it started
-    listening continuously); and `WakeWordEngine` was silently re-enabling that same platform AEC
-    on every mic restart *within* a single conversation (each `listenForCommand` cycle), undoing
-    the disable moments after it was set.
-  - **Currently disabled** (`AEC3_BARGE_IN_ENABLED = false`): even with both bugs above fixed,
-    `NativeAec3`'s actual echo suppression on real device audio is inconsistent — sometimes
-    negligible, in one measured window the "cleaned" signal was *louder* than the raw input,
-    causing Teya to interrupt herself on her own voice. Diagnostic logging (raw vs. AEC3-cleaned
-    peak amplitude, `VoicePipeline.forwardArmedChunk`) confirmed this isn't a wiring problem —
-    suppression genuinely isn't happening reliably. Leading hypothesis: AEC3's adaptive filter
-    needs `analyzeRender` fed in reasonably tight time-sync with when audio actually leaves the
-    speaker to correlate render against capture; our pipeline calls `analyzeRender` at
-    network-chunk-arrival time (a proxy for "about to play," not "playing now"), and the ~72dB
-    synthetic result was almost certainly measured with render/capture frames fed in artificial
-    lockstep — not representative of this drift. Shrinking the TTS `AudioTrack` buffer from ~0.5s
-    to Android's true minimum (reducing how far ahead of real playback `analyzeRender` could run)
-    helped in one test window but didn't fix it consistently.
-  - **Net effect today**: barge-in behaves exactly as the gap-gated bullet above describes — no
-    regression, but no mid-sentence capability either. The AEC3 module itself, its resampler, and
-    the platform-AEC bug fixes are real, working, kept code — only the kill-switch is off.
-  - **Follow-up, not attempted**: proper render/capture time-alignment (e.g. an explicit delay
-    estimate/compensation, or restructuring when `analyzeRender` is called to track actual
-    playback position more tightly — Android's `AudioTrack` has no direct "this sample is playing
-    now" callback, only buffer-position polling) or retuning `EchoCanceller3Config` defaults for
-    this specific speaker/mic pair. Either is a deeper WebRTC AEC integration effort, not a
-    quick tweak.
+- **Native WebRTC AEC3 module — built and wired in, real mid-sentence barge-in still not
+  reliable.** Vendored WebRTC's AEC3 as a JNI module (`voice/aec/NativeAec3.kt`), wired into
+  `VoicePipeline` session-scoped, kill-switch `VoicePipeline.AEC3_BARGE_IN_ENABLED = false`. Two
+  real platform-AEC wiring bugs found and fixed along the way (kept, unrelated to the switch). Two
+  deeper root causes found since via `EchoCanceller3::GetMetrics()` diagnostics — render/capture
+  timing drift (partially fixed) and a signal-energy convergence gate AEC3's own filter-confidence
+  check never crosses on this device's quiet self-echo (open). **Net effect today**: same as the
+  gap-gated bullet above — no regression, no mid-sentence capability yet. Full experiment trail,
+  what's been tried and ruled out, and what's currently being tested: **`docs/experiments.md`**.
 
 ## 🔜 Next (recommended order)
 
@@ -165,12 +135,20 @@ _Last updated: 2026-07-10 (native AEC3 barge-in attempt)._
    - Use `ACTION_CALL` for outbound — **C2**. (Default-dialer / `ROLE_DIALER` was for inbound; not needed.)
    - Exact-match single lookup + phone-number validation (no `LIKE` wildcard bypass) — **C3**.
    - Runtime permission recheck at call time — **H11**.
-2. **Wake word** — ✅ now works at ~1.5 m (software front-end: `NoiseSuppressor` + 6× gain, threshold
+2. **Make interruption work well** — mid-sentence barge-in during Teya's own speech, not just the
+   gap-gated fallback (which works, and got several real improvements: shorter gap,
+   `SileroVad`-based command-recording silence detection, pre-interrupt audio no longer lost, audible
+   state cues for the wall-mounted screen). The harder problem — continuous AEC3-covered listening —
+   is still open; `NativeAec3` never achieved real suppression on this device, but a WebView/Chromium
+   spike is now confirmed across two runs (36dB, 41dB RMS suppression) — the leading candidate.
+   Integration plan ready: `thoughts/shared/plans/2026-07-11-webview-chromium-aec-barge-in.md`.
+   Full status + experiment trail: **`docs/experiments.md`**.
+3. **Wake word** — ✅ now works at ~1.5 m (software front-end: `NoiseSuppressor` + 6× gain, threshold
    0.2 / patience 1). Remaining: **train a custom "Hey Teya" model** for further range + commercial use
    (`hey_jarvis` is dev-only / non-commercial — see `THIRD_PARTY_MODELS.md`); true whole-room likely
    also needs a mic array. Tuning knobs live in `WakeWordEngine` (`THRESHOLD`, `INPUT_GAIN`, `PATIENCE`).
-3. **Security pass** — no plaintext key fallback (**C4**), `allowBackup=false` (**H1**), gate PII logs behind `BuildConfig.DEBUG` (**H2**).
-4. **Resource leaks** — close TFLite interpreters + `HttpClient` in `onDestroy` (**H3/H4**).
+4. **Security pass** — no plaintext key fallback (**C4**), `allowBackup=false` (**H1**), gate PII logs behind `BuildConfig.DEBUG` (**H2**).
+5. **Resource leaks** — close TFLite interpreters + `HttpClient` in `onDestroy` (**H3/H4**).
 
 ## 🏠 Household setup & personalization
 

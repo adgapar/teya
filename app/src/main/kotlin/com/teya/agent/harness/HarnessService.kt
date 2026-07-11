@@ -63,7 +63,16 @@ class HarnessService : Service() {
         // when that specific sentence fell back to playMp3 (no AEC3 coverage) or when
         // VoicePipeline.AEC3_BARGE_IN_ENABLED is off; sentences that streamed via the AEC3-covered
         // streamToSpeaker path skip it entirely (barge-in listens continuously).
-        private const val BARGE_IN_GAP_MS = 900L
+        //
+        // This is currently the ONLY window where the mic is listened to at all (AEC3 mid-sentence
+        // barge-in is disabled — see VoicePipeline.AEC3_BARGE_IN_ENABLED's doc comment and
+        // thoughts/shared/research/2026-07-10-aec3-delay-estimator-diagnostic.md), so it's paid on
+        // every sentence in a multi-sentence response. Was 900ms — cut to 350ms since that felt like
+        // real dead air on longer responses; still leaves ~300ms for speech onset plus Silero's
+        // speechDurationMs=50 confirm (see VoicePipeline.setBargeInArmed). Narrows the catch window
+        // (you need to start talking closer to the exact end of a sentence) in exchange for a much
+        // less sluggish conversation — a deliberate trade, not a free win.
+        private const val BARGE_IN_GAP_MS = 350L
         private const val MAX_HISTORY = 10           // bounded conversation history sent to the model
         private const val MAX_TOOL_ROUNDS = 4        // cap tool→result→model loops per user turn
         private const val DREAM_REQUEST_CODE = 7     // PendingIntent id for the nightly dream alarm
@@ -75,6 +84,10 @@ class HarnessService : Service() {
     private val conversationActive = AtomicBoolean(false)
     // The in-flight "think + speak" round, if any — cancelled on barge-in (see onTrigger).
     @Volatile private var activeTurnJob: Job? = null
+    // Captured at interrupt time (see onBargeIn) and consumed by the next listenForCommand call in
+    // runConversation's loop, so whatever the user was already saying when they interrupted
+    // carries through into that recording — see VoicePipeline.consumeBargeInAudio's doc comment.
+    @Volatile private var pendingBargeInAudio: ShortArray? = null
 
     private lateinit var voicePipeline: VoicePipeline
     private lateinit var brainClient: BrainClient
@@ -290,7 +303,9 @@ class HarnessService : Service() {
     private fun onBargeIn() {
         if (!conversationActive.get()) return // nothing to interrupt
         Log.d(TAG, "Barge-in — interrupting Teya")
+        pendingBargeInAudio = voicePipeline.consumeBargeInAudio() // grab before it's reset on next arm
         voicePipeline.interrupt()
+        voicePipeline.playInterruptChime() // audible confirmation — wall-mounted, screen not always visible
         activeTurnJob?.cancel()
     }
 
@@ -311,15 +326,18 @@ class HarnessService : Service() {
             updateUiState(AgentState.SPEAKING)
             Log.d(TAG, "Prompting...")
             voicePipeline.setBargeInArmed(true)
+            voicePipeline.consumeInterrupted() // clear any stale flag before this fresh speaking phase — see VoicePipeline.textToSpeech's doc comment on why this can't live inside textToSpeech itself
             voicePipeline.textToSpeech("Yes?")
 
             while (true) {
                 voicePipeline.setBargeInArmed(false)
                 voicePipeline.pauseWakeWord()
                 updateUiState(AgentState.LISTENING)
+                voicePipeline.playListeningChime() // audible cue — wall-mounted, screen not always visible
                 sendDebug(user = "…", agent = "")
                 Log.d(TAG, "Listening for command...")
-                val text = voicePipeline.listenForCommand(FOLLOWUP_LISTEN_MS, sttContextBias())
+                val prefixAudio = pendingBargeInAudio.also { pendingBargeInAudio = null } ?: ShortArray(0)
+                val text = voicePipeline.listenForCommand(FOLLOWUP_LISTEN_MS, sttContextBias(), prefixAudio)
                 voicePipeline.resumeWakeWord()
                 if (text.isBlank()) {
                     Log.d(TAG, "No follow-up heard — ending conversation")
@@ -331,6 +349,7 @@ class HarnessService : Service() {
                 trimHistory(history)
 
                 voicePipeline.setBargeInArmed(true) // Teya's about to think/speak — arm for interruption
+                voicePipeline.consumeInterrupted() // clear any stale flag before this fresh speaking phase — see VoicePipeline.textToSpeech's doc comment
                 respond(history)
             }
             captureEpisodic(history)   // summarize the finished session into episodic memory (background)

@@ -67,8 +67,32 @@ class NativeAec3(sampleRateHz: Int = 16000) : Closeable {
         }
     }
 
+    /** AEC3's own [EchoCanceller3::GetMetrics] snapshot — see [Metrics] for field meanings. */
+    fun getMetrics(): Metrics {
+        synchronized(lock) {
+            val h = handle
+            check(h != CLOSED_HANDLE) { "NativeAec3 used after close()" }
+            val raw = nativeGetMetrics(h)
+            return Metrics(echoReturnLossDb = raw[0], echoReturnLossEnhancementDb = raw[1], delayMs = raw[2].toInt())
+        }
+    }
+
+    /**
+     * AEC3's self-reported view of render/capture alignment and cancellation quality, straight
+     * from `EchoControl::Metrics` (see `api/audio/echo_control.h`):
+     * - [echoReturnLossDb]: how much the acoustic path itself (room/speaker/mic) already attenuates
+     *   the echo, before AEC3 does anything — reflects physical setup, not AEC3's own work.
+     * - [echoReturnLossEnhancementDb]: how much *more* AEC3's adaptive filter removes on top of
+     *   that — near zero means the filter isn't actually cancelling anything.
+     * - [delayMs]: AEC3's current best estimate of the render-to-capture delay it's tracking.
+     *   Unstable or implausibly large values here point at a delay-estimation problem rather than
+     *   a suppression-strength problem.
+     */
+    data class Metrics(val echoReturnLossDb: Double, val echoReturnLossEnhancementDb: Double, val delayMs: Int)
+
     private external fun nativeCreate(sampleRateHz: Int): Long
     private external fun nativeAnalyzeRender(handle: Long, frame: ShortArray)
     private external fun nativeProcessCapture(handle: Long, frame: ShortArray): ShortArray
+    private external fun nativeGetMetrics(handle: Long): DoubleArray
     private external fun nativeDestroy(handle: Long)
 }

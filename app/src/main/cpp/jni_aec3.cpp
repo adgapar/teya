@@ -119,3 +119,18 @@ Java_com_teya_agent_voice_aec_NativeAec3_nativeDestroy(JNIEnv* /*env*/, jobject 
                                                         jlong handle) {
   delete reinterpret_cast<AecHandle*>(handle);
 }
+
+// Diagnostic only, no behavior change: [echo_return_loss, echo_return_loss_enhancement, delay_ms]
+// straight from EchoCanceller3::GetMetrics(), to see what AEC3 itself believes about the
+// render/capture delay it's tracking, before deciding whether SetAudioBufferDelay is worth adding.
+extern "C" JNIEXPORT jdoubleArray JNICALL
+Java_com_teya_agent_voice_aec_NativeAec3_nativeGetMetrics(JNIEnv* env, jobject /*thiz*/,
+                                                           jlong handle) {
+  auto* h = reinterpret_cast<AecHandle*>(handle);
+  webrtc::EchoControl::Metrics m = h->echo_canceller.GetMetrics();
+  jdoubleArray out = env->NewDoubleArray(3);
+  jdouble values[3] = {m.echo_return_loss, m.echo_return_loss_enhancement,
+                       static_cast<jdouble>(m.delay_ms)};
+  env->SetDoubleArrayRegion(out, 0, 3, values);
+  return out;
+}
