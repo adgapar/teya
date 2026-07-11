@@ -19,8 +19,13 @@ Key files:
   Interface + types in `brain/BrainClient.kt`, wire types in `brain/MistralModels.kt`.
 - `persona/` — **where the agent's identity & capabilities live** (kept out of the provider):
   `TeyaPersona` (system prompt), `AgentTools` (tool specs), `ToolSpec`.
-- `voice/VoicePipeline.kt` — VAD mic capture (`listenForCommand`), TTS playback (streaming `AudioTrack` int16 +
-  mp3 fallback), `pauseWakeWord`/`resumeWakeWord`.
+- `voice/VoicePipeline.kt` — VAD mic capture (`listenForCommand`), TTS playback, `pauseWakeWord`/`resumeWakeWord`,
+  barge-in detection. Render/capture both go through `voice/aec/WebViewAecHost.kt` (see below) when it's active —
+  continuous mid-sentence barge-in with real echo cancellation; falls back automatically to plain `AudioTrack`
+  playback + gap-gated capture (listens only between sentences, no echo cancellation) if the host fails to start.
+- `voice/aec/WebViewAecHost.kt` — session-scoped WebView hosting Chromium's own `getUserMedia({echoCancellation:true})`
+  for barge-in's real AEC. Hosted via `WindowManager.addView(TYPE_APPLICATION_OVERLAY)`, not an Activity, so it
+  runs with `HarnessService` regardless of what's on screen. Bridge page: `assets/aec_bridge.html`.
 - `voice/WakeWordEngine.kt` — openWakeWord 3-model chain (assets: melspectrogram/embedding/hey_jarvis tflite);
   `NoiseSuppressor` + software `INPUT_GAIN`, `THRESHOLD`, `PATIENCE`.
 - `safety/` — Room contact allowlist (call safety). `telephony/` — dialer/actuator (call feature).
@@ -48,4 +53,14 @@ Key files:
 - Never commit `.env`; `app/build/` is gitignored.
 - Wake word: generic `hey_jarvis` is near/mid-field only + CC-BY-NC (dev-only). Tuning knobs in `WakeWordEngine`
   (`THRESHOLD`, `INPUT_GAIN`, `PATIENCE`). Durable far-field/commercial fix = custom "Hey Teya" model. Tap-to-talk is the reliable path.
+- **WebView AEC (barge-in) needs Android 8.0+ (API 26) — this is `minSdk`, not headroom.**
+  `WebViewAecHost` hosts its overlay via `TYPE_APPLICATION_OVERLAY` (introduced in API 26), no
+  fallback for older devices. Also needs `SYSTEM_ALERT_WINDOW` ("draw over other apps"), which
+  Android makes the user grant manually via Settings — not a standard runtime permission dialog —
+  so it's a one-time setup step on a fresh install; until granted, barge-in silently falls back to
+  gap-gated with no echo cancellation (`WebViewAecHost.isActive()` reports `false`, nothing crashes).
+  Validated on one device only (Samsung A34, MediaTek chipset) — a real regression this session
+  traced to the device's own platform `AcousticEchoCanceler` interfering with Chromium's separate
+  `getUserMedia` AEC (see `docs/experiments.md`) suggests this interaction may be chipset-specific;
+  a different phone model could need its own tuning pass.
 - Commit trailers: `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>` + `Claude-Session:` (see `git log`).
