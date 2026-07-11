@@ -104,6 +104,19 @@ class VoicePipeline(private val context: Context) {
         // WEBVIEW_AEC_HOST_ENABLED. Still gap-gated like today (no AEC3-style lead-in exemption —
         // that's Phase 4). Default false, same reasoning as the other WebView flags.
         const val WEBVIEW_CAPTURE_ENABLED = false
+
+        // Phase 4 kill-switch: removes forwardWebViewCapturedChunk's self-echo gate during active
+        // WebView-rendered playback (webViewRenderActive) and HarnessService.respond()'s
+        // BARGE_IN_GAP_MS delay for sentences that streamed via the WebView path — enabling genuine
+        // continuous mid-sentence listening, the same thing AEC3_BARGE_IN_ENABLED was meant to do
+        // for NativeAec3. Only meaningful when WEBVIEW_AEC_HOST_ENABLED, WEBVIEW_RENDER_ENABLED, and
+        // WEBVIEW_CAPTURE_ENABLED are all also true — this flag alone does nothing. currentTrack
+        // (AudioTrack render active instead of WebView) and currentMediaPlayer (mp3 fallback) are
+        // NOT exempted by this flag: neither has a getUserMedia self-echo reference to cancel
+        // against, so they stay gap-gated regardless. Default false, same reasoning as every other
+        // WebView flag — this is the phase where a real self-echo false-positive would first show up
+        // (everything up through Phase 3 was still gap-gated, so it was never actually exercised).
+        const val WEBVIEW_CONTINUOUS_BARGE_IN_ENABLED = false
     }
 
     private val wakeWordEngine = WakeWordEngine(
@@ -643,10 +656,16 @@ class VoicePipeline(private val context: Context) {
      * whenever this path is enabled).
      *
      * [cleanedChunk] arrives already echo-cancelled by Chromium's `getUserMedia`, so unlike
-     * [forwardArmedChunk] there's no [cleanCaptureChunk] step here. Deliberately mirrors the
-     * *pre-AEC3* gap-gated shape (unconditional gate on any of the three playback-active flags, no
-     * lead-in exemption) — Phase 3 is only "does cleaned audio reach `SileroVad` correctly," not yet
-     * "remove the gap" (that's Phase 4).
+     * [forwardArmedChunk] there's no [cleanCaptureChunk] step here. [currentMediaPlayer] (mp3
+     * fallback) and [currentTrack] (AudioTrack render active instead of WebView) always gate —
+     * neither has a `getUserMedia` self-echo reference for Chromium to cancel against.
+     * [webViewRenderActive] gates unconditionally *unless* [WEBVIEW_CONTINUOUS_BARGE_IN_ENABLED] is
+     * on, in which case it doesn't — this is Phase 4's whole point: continuous mid-sentence
+     * listening, trusting Chromium's own echo cancellation to suppress Teya's WebView-rendered
+     * voice well enough that real user speech is still detectable during it. No AEC3-style
+     * convergence lead-in here (yet) — Chromium's AEC is a mature, independently-shipped feature,
+     * not a from-scratch adaptive filter paying its own convergence cost; test live whether one
+     * turns out to be needed anyway before assuming it isn't.
      *
      * Unlike [forwardArmedChunk] (only ever invoked while armed — [WakeWordEngine] itself gates
      * that at the call site), this callback fires for the WebView capture's entire session
@@ -656,7 +675,9 @@ class VoicePipeline(private val context: Context) {
      */
     private fun forwardWebViewCapturedChunk(cleanedChunk: ShortArray) {
         if (sileroVad == null) return // not armed — mirrors WakeWordEngine's own bargeInArmed gate
-        if (currentMediaPlayer != null || currentTrack != null || webViewRenderActive) return
+        if (currentMediaPlayer != null) return // mp3 fallback: no WebView coverage, always gap-gated
+        if (currentTrack != null) return // AudioTrack render active instead of WebView: no self-echo reference to cancel against
+        if (webViewRenderActive && !WEBVIEW_CONTINUOUS_BARGE_IN_ENABLED) return
 
         // Rolling pre-interrupt audio buffer — see bargeInAudioBuffer's doc comment. Same
         // reasoning as forwardArmedChunk's identical block: runs before the bargeInFired check

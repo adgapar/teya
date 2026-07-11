@@ -274,7 +274,7 @@ flags reverted to `false` after testing. Full log: `docs/experiments.md`.
 nothing was playing. Phase 4, which removes this gate, is where that actually gets exercised for the
 first time.
 
-### Phase 4 — Remove the gap, enable continuous listening
+### Phase 4 — Remove the gap, enable continuous listening — ✅ DONE 2026-07-11 — HEADLINE RESULT
 
 Once Phase 3 is validated with a live conversation (not just synthetic audio), remove the
 `currentTrack != null && !aecActive` self-echo gate in `forwardArmedChunk` for the WebView-covered
@@ -283,6 +283,38 @@ path and `BARGE_IN_GAP_MS`'s forced delay in `HarnessService.respond()` — mirr
 Keep the gap-gated path as an automatic fallback (kill-switch, same pattern as
 `AEC3_BARGE_IN_ENABLED`) in case the WebView pipeline fails to initialize for any reason — this
 must never regress today's working gap-gated behavior.
+
+**Result: done, and this is the result the entire plan was chasing.** A new
+`WEBVIEW_CONTINUOUS_BARGE_IN_ENABLED` kill-switch (default `false`, requires all three earlier
+WebView flags) exempts `forwardWebViewCapturedChunk`'s `webViewRenderActive` gate — `currentTrack`
+and `currentMediaPlayer` still always gate unconditionally, since neither has a `getUserMedia`
+self-echo reference to cancel against. `HarnessService.respond()`'s gap-skip condition was extended
+the same way `AEC3_BARGE_IN_ENABLED` already worked: `streamed && (WEBVIEW_CONTINUOUS_BARGE_IN_ENABLED
+|| AEC3_BARGE_IN_ENABLED)` skips `BARGE_IN_GAP_MS`. No AEC3-style convergence lead-in was added
+preemptively — Chromium's AEC is a mature, independently-shipped feature rather than a from-scratch
+adaptive filter paying its own convergence cost, and this was deliberately left untested-for rather
+than assumed unnecessary.
+
+Live-tested with all four flags on, across multiple real conversation turns:
+- **Zero false positives**: dozens of `peak VAD confidence` diagnostic readings during active
+  Teya-voice playback stayed in the 0.002-0.33 range (barge-in threshold is 0.7) — including one
+  full 26-second uninterrupted story with no false trigger at any point.
+- **Two genuine deliberate interrupts, both correct**: `speech detected (confidence=0.78177327,
+  cleanedPeak=14626)` and `speech detected (confidence=0.96623135, cleanedPeak=21075)`, both firing
+  while she was actively mid-sentence, both cleanly stopping her
+  (`HarnessService: Barge-in — interrupting Teya`) and correctly recovering (pre-interrupt audio
+  prepended via the unmodified `consumeBargeInAudio` path, straight back to listening, conversation
+  continuing normally afterward).
+- No lead-in gate turned out to be needed — real interrupts scored decisively above threshold from
+  the very first live test, no early false-positive window was observed even at the start of a fresh
+  utterance.
+
+**This is where `NativeAec3` failed and this plan succeeded**: continuous mid-sentence barge-in,
+demonstrated with real conversational speech (not synthetic tones), across multiple turns, with both
+false-positive resistance and true-positive responsiveness shown live — not assumed from the
+isolated tone spike's numbers. All four flags reverted to `false` after testing; this is a proven
+result, not yet the shipped default, pending Phase 5's broader validation. Full log:
+`docs/experiments.md`.
 
 ### Phase 5 — Real-world tuning and validation
 

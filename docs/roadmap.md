@@ -4,7 +4,7 @@ Living status doc. Design lives in [ARCHITECTURE.md](../ARCHITECTURE.md); the fu
 is [thoughts/shared/research/2026-07-06-project-audit.md](../thoughts/shared/research/2026-07-06-project-audit.md).
 Audit IDs (C1, H2, …) below refer to that file.
 
-_Last updated: 2026-07-11 (barge-in experiment trail moved to `docs/experiments.md`)._
+_Last updated: 2026-07-11 (continuous mid-sentence barge-in confirmed working live via WebView AEC)._
 
 ## ✅ Done
 
@@ -136,12 +136,14 @@ _Last updated: 2026-07-11 (barge-in experiment trail moved to `docs/experiments.
    - Exact-match single lookup + phone-number validation (no `LIKE` wildcard bypass) — **C3**.
    - Runtime permission recheck at call time — **H11**.
 2. **Make interruption work well** — mid-sentence barge-in during Teya's own speech, not just the
-   gap-gated fallback (which works, and got several real improvements: shorter gap,
-   `SileroVad`-based command-recording silence detection, pre-interrupt audio no longer lost, audible
-   state cues for the wall-mounted screen). The harder problem — continuous AEC3-covered listening —
-   is still open; `NativeAec3` never achieved real suppression on this device, but a WebView/Chromium
-   spike is now confirmed across two runs (36dB, 41dB RMS suppression) — the leading candidate.
-   Integration plan ready: `thoughts/shared/plans/2026-07-11-webview-chromium-aec-barge-in.md`.
+   gap-gated fallback (which still works and remains the shipped default). **Continuous mid-sentence
+   barge-in now works**, confirmed live: a WebView/Chromium-hosted AEC (`getUserMedia`'s own echo
+   cancellation, not `NativeAec3` — which never achieved real suppression on this device) correctly
+   suppresses Teya's own voice well enough that real interrupts fire reliably with zero false
+   positives, demonstrated across multiple real conversation turns including a 26-second
+   uninterrupted story. Currently behind four kill-switches (all default `false`) pending Phase 5's
+   broader real-world validation before becoming the shipped default. Full phased implementation:
+   `thoughts/shared/plans/2026-07-11-webview-chromium-aec-barge-in.md`.
    Full status + experiment trail: **`docs/experiments.md`**.
 3. **Wake word** — ✅ now works at ~1.5 m (software front-end: `NoiseSuppressor` + 6× gain, threshold
    0.2 / patience 1). Remaining: **train a custom "Hey Teya" model** for further range + commercial use

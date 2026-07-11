@@ -440,14 +440,20 @@ class HarnessService : Service() {
                                 Log.e(TAG, "TTS failed for sentence", e)
                             }
                             if (voicePipeline.isInterrupted()) break // barge-in — stop queuing more speech
-                            // Sentences that streamed via the AEC3-covered streamToSpeaker path
-                            // don't need this gap — barge-in listens continuously during and after
-                            // them (see VoicePipeline.forwardArmedChunk). Sentences that fell back
-                            // to playMp3 have no AEC3 coverage and keep the original gap-gated
-                            // behavior; the kill-switch (VoicePipeline.AEC3_BARGE_IN_ENABLED) forces
-                            // the gap unconditionally when off. Cancelled instantly via
-                            // activeTurnJob the moment barge-in fires either way.
-                            if (!VoicePipeline.AEC3_BARGE_IN_ENABLED || !streamed) {
+                            // Sentences that streamed via an AEC-covered path (NativeAec3's
+                            // streamToSpeaker, or Phase 4's WebView render/capture path) don't need
+                            // this gap — barge-in listens continuously during and after them (see
+                            // VoicePipeline.forwardArmedChunk / forwardWebViewCapturedChunk).
+                            // Sentences that fell back to playMp3 have no AEC coverage at all and
+                            // keep the original gap-gated behavior regardless of any flag. Cancelled
+                            // instantly via activeTurnJob the moment barge-in fires either way.
+                            val gapNeeded = when {
+                                !streamed -> true
+                                VoicePipeline.WEBVIEW_CONTINUOUS_BARGE_IN_ENABLED -> false
+                                VoicePipeline.AEC3_BARGE_IN_ENABLED -> false
+                                else -> true
+                            }
+                            if (gapNeeded) {
                                 Log.d(TAG, "Barge-in: listening gap open (${BARGE_IN_GAP_MS}ms)")
                                 delay(BARGE_IN_GAP_MS)
                                 Log.d(TAG, "Barge-in: listening gap closed")
