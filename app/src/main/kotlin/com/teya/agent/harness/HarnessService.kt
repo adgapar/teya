@@ -301,6 +301,13 @@ class HarnessService : Service() {
         pendingBargeInAudio = voicePipeline.consumeBargeInAudio() // grab before it's reset on next arm
         voicePipeline.interrupt()
         voicePipeline.playInterruptChime() // audible confirmation — wall-mounted, screen not always visible
+        // Reflect the state change here, synchronously with the audio cut, instead of waiting for
+        // activeTurnJob's cancellation to unwind back to runConversation's loop — that unwind
+        // depends on however long the in-flight LLM stream read takes to notice cancellation, which
+        // left the UI observed stuck on "speaking" (no audio) until it did. onBargeIn only ever
+        // fires while runConversation is active (guarded above), and its loop always goes straight
+        // back to listening after an interrupt, so this is never the wrong state to jump to.
+        updateUiState(AgentState.LISTENING)
         activeTurnJob?.cancel()
     }
 
