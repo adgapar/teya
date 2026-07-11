@@ -96,6 +96,14 @@ class VoicePipeline(private val context: Context) {
         // into) — independent flag so Phase 1's bridge-only test isn't entangled with actually
         // rerouting audible playback. Default false, same reasoning as WEBVIEW_AEC_HOST_ENABLED.
         const val WEBVIEW_RENDER_ENABLED = false
+
+        // Phase 3 kill-switch: routes barge-in speech detection's capture-side audio through the
+        // WebView's getUserMedia (Chromium's own echo cancellation — the ~36-41dB confirmed by the
+        // original tone spike) instead of NativeAec3's cleanCaptureChunk, feeding the same
+        // downstream SileroVad pipeline (see forwardWebViewCapturedChunk). Requires
+        // WEBVIEW_AEC_HOST_ENABLED. Still gap-gated like today (no AEC3-style lead-in exemption —
+        // that's Phase 4). Default false, same reasoning as the other WebView flags.
+        const val WEBVIEW_CAPTURE_ENABLED = false
     }
 
     private val wakeWordEngine = WakeWordEngine(
@@ -411,7 +419,11 @@ class VoicePipeline(private val context: Context) {
         // any state aecLock guards, and start()/measureRoundTripLatency() suspend (hop to the main
         // thread), which synchronized{} can't do.
         if (WEBVIEW_AEC_HOST_ENABLED && webViewAecHost == null) {
-            val host = WebViewAecHost(context)
+            // Phase 3's capture callback fires on whatever thread the WebView's JS bridge invokes
+            // it from (see forwardWebViewCapturedChunk's doc comment) — passed unconditionally so
+            // the host always CAN deliver chunks; whether it actually does is gated separately by
+            // WEBVIEW_CAPTURE_ENABLED below (startCapture() is only called when that's on).
+            val host = WebViewAecHost(context, onCaptureChunk = { chunk -> forwardWebViewCapturedChunk(chunk) })
             webViewAecHost = host
             host.start()
             val latencyMs = host.measureRoundTripLatency()
@@ -420,6 +432,9 @@ class VoicePipeline(private val context: Context) {
                 "WebViewAecHost: bridge round-trip latency = " +
                     (latencyMs?.let { "${it}ms" } ?: "no response (overlay permission missing, or host failed to start)")
             )
+            if (WEBVIEW_CAPTURE_ENABLED) {
+                host.startCapture(SAMPLE_RATE)
+            }
         }
     }
 
@@ -430,7 +445,10 @@ class VoicePipeline(private val context: Context) {
             aec3 = null
             wakeWordEngine.setPlatformAecEnabled(true)
         }
-        webViewAecHost?.stop()
+        webViewAecHost?.let { host ->
+            if (WEBVIEW_CAPTURE_ENABLED) host.stopCapture()
+            host.stop()
+        }
         webViewAecHost = null
     }
 
@@ -499,8 +517,16 @@ class VoicePipeline(private val context: Context) {
      * as it did before AEC3-based barge-in existed (gap-gated only). [webViewRenderActive] (Phase 2's
      * WebView render path) gates the same unconditional way [currentMediaPlayer] does — no
      * capture-side echo cancellation is wired for it yet (that's Phase 3).
+     *
+     * When [WEBVIEW_CAPTURE_ENABLED] is on, this function does nothing at all — [WakeWordEngine]'s
+     * raw chunks are a completely different audio stream than the WebView's `getUserMedia` capture,
+     * and interleaving both into one `SileroVad` session (which carries RNN state across calls)
+     * would corrupt it. [forwardWebViewCapturedChunk] is the sole source of barge-in detection in
+     * that mode instead.
      */
     private fun forwardArmedChunk(chunk: ShortArray) {
+        if (WEBVIEW_CAPTURE_ENABLED) return
+
         // Both the self-echo-gate exemption and the lead-in gate below only apply when the
         // feature is on AND a session-scoped AEC3 instance is actually active — otherwise this
         // falls straight through to the old gap-gated behavior (see AEC3_BARGE_IN_ENABLED's
@@ -605,6 +631,93 @@ class VoicePipeline(private val context: Context) {
             vadPeakRawAmplitude = 0
             vadPeakCleanedAmplitude = 0
             logAec3Metrics()
+        }
+    }
+
+    /**
+     * Phase 3 capture path: the [WEBVIEW_CAPTURE_ENABLED] counterpart to [forwardArmedChunk]. Runs
+     * on whatever thread [WebViewAecHost]'s JS bridge invokes its capture callback from — not
+     * [WakeWordEngine]'s capture thread, so this and [forwardArmedChunk] must never run
+     * concurrently against the same `SileroVad`/[vadFrameBuffer]/[bargeInAudioBuffer] state (see
+     * [forwardArmedChunk]'s doc comment on why — enforced by [forwardArmedChunk] itself no-opping
+     * whenever this path is enabled).
+     *
+     * [cleanedChunk] arrives already echo-cancelled by Chromium's `getUserMedia`, so unlike
+     * [forwardArmedChunk] there's no [cleanCaptureChunk] step here. Deliberately mirrors the
+     * *pre-AEC3* gap-gated shape (unconditional gate on any of the three playback-active flags, no
+     * lead-in exemption) — Phase 3 is only "does cleaned audio reach `SileroVad` correctly," not yet
+     * "remove the gap" (that's Phase 4).
+     *
+     * Unlike [forwardArmedChunk] (only ever invoked while armed — [WakeWordEngine] itself gates
+     * that at the call site), this callback fires for the WebView capture's entire session
+     * lifetime, armed or not — [startCapture]/[stopCapture] are tied to the AEC session, not the
+     * per-turn arm/disarm. The `sileroVad == null` check below reproduces that same "only while
+     * armed" gate here instead, so this doesn't pollute [bargeInAudioBuffer] during command capture.
+     */
+    private fun forwardWebViewCapturedChunk(cleanedChunk: ShortArray) {
+        if (sileroVad == null) return // not armed — mirrors WakeWordEngine's own bargeInArmed gate
+        if (currentMediaPlayer != null || currentTrack != null || webViewRenderActive) return
+
+        // Rolling pre-interrupt audio buffer — see bargeInAudioBuffer's doc comment. Same
+        // reasoning as forwardArmedChunk's identical block: runs before the bargeInFired check
+        // below, capped so it never grows past ~3s regardless.
+        synchronized(vadLock) {
+            bargeInAudioBuffer += cleanedChunk
+            if (bargeInAudioBuffer.size > BARGE_IN_AUDIO_BUFFER_MAX_SAMPLES) {
+                bargeInAudioBuffer = bargeInAudioBuffer.copyOfRange(
+                    bargeInAudioBuffer.size - BARGE_IN_AUDIO_BUFFER_MAX_SAMPLES, bargeInAudioBuffer.size
+                )
+            }
+        }
+
+        if (bargeInFired) return // already interrupted this window; wait for disarm
+
+        // Diagnostic: peak of the getUserMedia-cleaned signal, pre-gain — the WebView-capture
+        // equivalent of forwardArmedChunk's cleanedPeak (no rawPeak counterpart here: Chromium's
+        // pre-AEC signal isn't observable from this side, only what it hands back already cleaned).
+        var cleanedPeak = 0
+        for (s in cleanedChunk) {
+            val abs = kotlin.math.abs(s.toInt())
+            if (abs > cleanedPeak) cleanedPeak = abs
+        }
+        if (cleanedPeak > vadPeakCleanedAmplitude) vadPeakCleanedAmplitude = cleanedPeak
+
+        val gained = ShortArray(cleanedChunk.size) { i ->
+            (cleanedChunk[i] * BARGE_IN_GAIN).coerceIn(Short.MIN_VALUE.toFloat(), Short.MAX_VALUE.toFloat()).toInt().toShort()
+        }
+
+        synchronized(vadLock) {
+            val vad = sileroVad ?: return
+            vadFrameBuffer += gained
+
+            var offset = 0
+            while (vadFrameBuffer.size - offset >= SileroVad.FRAME_SIZE) {
+                val frame = vadFrameBuffer.copyOfRange(offset, offset + SileroVad.FRAME_SIZE)
+                offset += SileroVad.FRAME_SIZE
+                val isSpeech = vad.isSpeech(frame)
+                if (vad.lastConfidence > vadPeakConfidence) vadPeakConfidence = vad.lastConfidence
+                if (isSpeech) {
+                    bargeInFired = true
+                    Log.d(
+                        "VoicePipeline",
+                        "Barge-in (WebView capture): speech detected (confidence=${vad.lastConfidence}, " +
+                            "cleanedPeak(pre-gain)=$cleanedPeak)"
+                    )
+                    onBargeIn()
+                    break
+                }
+            }
+            vadFrameBuffer = if (offset > 0) vadFrameBuffer.copyOfRange(offset, vadFrameBuffer.size) else vadFrameBuffer
+        }
+
+        if (++vadChunkCounter % 25 == 0) {
+            Log.d(
+                "VoicePipeline",
+                "Barge-in (WebView capture): peak VAD confidence (last ~2s) = $vadPeakConfidence, " +
+                    "peak CLEANED (pre-gain) amplitude = $vadPeakCleanedAmplitude / 32767"
+            )
+            vadPeakConfidence = 0f
+            vadPeakCleanedAmplitude = 0
         }
     }
 

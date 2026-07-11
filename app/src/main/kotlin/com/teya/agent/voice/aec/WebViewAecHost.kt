@@ -32,17 +32,22 @@ import kotlin.coroutines.resume
  * Phase 1 proved the bidirectional bridge: [measureRoundTripLatency] pushes into the page
  * (Kotlin->JS, via `evaluateJavascript`) and awaits the page pulling back (JS->Kotlin, via the
  * [AecBridge] interface `assets/aec_bridge.html` calls) — confirmed 9ms round trip live (see
- * docs/experiments.md), plenty of headroom for real audio. Phase 2 builds the render path on top of
+ * docs/experiments.md), plenty of headroom for real audio. Phase 2 built the render path on top of
  * that same channel: [pushRenderChunk] streams real TTS PCM into the page's Web Audio scheduler,
  * [awaitRenderPlaybackDone] is the JS-side equivalent of `AudioTrack.playbackHeadPosition`'s
- * drain-loop poll, and [stopPlayback] is this path's `interrupt()` equivalent. Capture (Phase 3)
- * doesn't exist yet.
+ * drain-loop poll, and [stopPlayback] is this path's `interrupt()` equivalent. Phase 3 adds the
+ * capture path: [startCapture] starts `getUserMedia({echoCancellation:true})` in the page — the
+ * ~36-41dB suppression confirmed by the original tone spike — and [onCaptureChunk] (via the
+ * constructor callback) delivers each cleaned chunk back to Kotlin's `SileroVad` pipeline.
  *
  * All WebView calls must happen on the main thread (this is Android's own requirement, not just a
  * style choice) — every public suspend function here hops to [Dispatchers.Main] internally, so
  * callers (VoicePipeline's coroutine-based session lifecycle) don't need to care.
  */
-class WebViewAecHost(private val context: Context) {
+class WebViewAecHost(
+    private val context: Context,
+    private val onCaptureChunk: ((ShortArray) -> Unit)? = null,
+) {
 
     companion object {
         private const val TAG = "WebViewAecHost"
@@ -188,6 +193,23 @@ class WebViewAecHost(private val context: Context) {
         webView?.evaluateJavascript("stopAllPlayback()", null)
     }
 
+    /**
+     * Phase 3 capture path: starts `getUserMedia({echoCancellation:true})` in the page
+     * (`assets/aec_bridge.html`'s `startCapture`) at [sampleRate] — pass 16000 to match
+     * `VoicePipeline`'s `SileroVad`/`WakeWordEngine` sample rate directly, no resampling needed on
+     * either side. Each captured chunk arrives via [onCaptureChunk] (the constructor callback),
+     * decoded from base64 float32 to int16 in [AecBridge.onCaptureChunk] below — matches the same
+     * int16 PCM units `WakeWordEngine`'s raw `AudioRecord` chunks already use.
+     */
+    suspend fun startCapture(sampleRate: Int) = withContext(Dispatchers.Main) {
+        webView?.evaluateJavascript("startCapture($sampleRate)", null)
+    }
+
+    /** Stops capture and releases the mic track. Safe to call even if [startCapture] was never called. */
+    suspend fun stopCapture() = withContext(Dispatchers.Main) {
+        webView?.evaluateJavascript("stopCapture()", null)
+    }
+
     /** Runs [expr] on the main thread and parses its JSON result as a number, or `null` on failure. */
     private suspend fun evalJsNumber(expr: String): Double? {
         val wv = webView ?: return null
@@ -209,6 +231,34 @@ class WebViewAecHost(private val context: Context) {
         @JavascriptInterface
         fun log(message: String) {
             Log.d(TAG, "[js] $message")
+        }
+
+        /**
+         * Phase 3 capture path: one chunk of `getUserMedia`-cleaned mic audio, base64-encoded
+         * float32 (matches [pushRenderChunk]'s encoding, just the reverse direction). Invoked on
+         * whatever thread the WebView's JS engine calls this interface from — not the main thread,
+         * and not [WakeWordEngine]'s capture thread either, so [onCaptureChunk]'s receiver
+         * (`VoicePipeline`) must not assume a specific caller thread here.
+         */
+        @JavascriptInterface
+        fun onCaptureChunk(base64: String) {
+            val onChunk = onCaptureChunk ?: return
+            try {
+                val bytes = Base64.decode(base64, Base64.NO_WRAP)
+                val floats = FloatArray(bytes.size / 4)
+                ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(floats)
+                val shorts = ShortArray(floats.size) { i ->
+                    val v = floats[i] * 32767f
+                    when {
+                        v >= 32767f -> Short.MAX_VALUE
+                        v <= -32768f -> Short.MIN_VALUE
+                        else -> v.toInt().toShort()
+                    }
+                }
+                onChunk(shorts)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to decode capture chunk", e)
+            }
         }
     }
 }

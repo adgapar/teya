@@ -3,11 +3,13 @@
 <head><title>AEC Bridge</title></head>
 <body>
 <!--
-  Phase 1/2 scaffolding (thoughts/shared/plans/2026-07-11-webview-chromium-aec-barge-in.md): proves a
-  persistent, bidirectional Kotlin<->JS bridge over the WindowManager-hosted WebView confirmed
+  Phase 1/2/3 scaffolding (thoughts/shared/plans/2026-07-11-webview-chromium-aec-barge-in.md): proves
+  a persistent, bidirectional Kotlin<->JS bridge over the WindowManager-hosted WebView confirmed
   working in Phase 0 (see WebViewAecHost.kt) — push (Kotlin calls onPing via evaluateJavascript) and
-  pull (this page calls back into Kotlin's AecBridge interface) — plus Phase 2's render path: real
-  TTS PCM chunks scheduled gaplessly through Web Audio instead of Kotlin's AudioTrack.
+  pull (this page calls back into Kotlin's AecBridge interface) — plus Phase 2's render path (real
+  TTS PCM scheduled gaplessly through Web Audio instead of Kotlin's AudioTrack) and Phase 3's capture
+  path (getUserMedia({echoCancellation:true}) — the ~36-41dB-confirmed suppression from the original
+  tone spike — streamed back to Kotlin's SileroVad pipeline).
 -->
 <script>
 function log(msg) {
@@ -78,6 +80,72 @@ function stopAllPlayback() {
   scheduledSources.forEach((s) => { try { s.stop(); } catch (_) {} });
   scheduledSources = [];
   nextStartTime = audioCtx ? audioCtx.currentTime : 0;
+}
+
+// Phase 3 capture path: getUserMedia's echoCancellation cleans Teya's own voice out of the mic
+// signal (this is the whole reason this plan exists — see docs/experiments.md's 36-41dB tone-spike
+// numbers), then each captured chunk is base64-encoded and pushed back to Kotlin via the AecBridge
+// interface (JS->Kotlin pull, same direction as onPing's pong). A muted zero-gain node routes the
+// signal through the graph without audibly looping the mic back out — same pattern as the Phase 0
+// spikes.
+//
+// Buffer size 512 (32ms @ 16kHz, matching SileroVad.FRAME_SIZE exactly) — NOT the Phase 0 spikes'
+// 2048 (~128ms). First live test with 2048 produced zero barge-in detections across two real
+// 350ms gap windows despite repeated speech during them: only ~2-3 chunks could even arrive within
+// a 350ms gate before Phase 4 removes it, and none happened to land while ungated. 512 gives ~10
+// chances instead of ~2-3 — see docs/experiments.md's Phase 3 entry.
+let captureAudioCtx = null;
+let captureStream = null;
+let captureSource = null;
+let captureProcessor = null;
+
+async function startCapture(sampleRate) {
+  try {
+    captureAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate });
+    await captureAudioCtx.resume();
+    captureStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: false,
+        autoGainControl: false,
+        channelCount: 1,
+      },
+    });
+    captureSource = captureAudioCtx.createMediaStreamSource(captureStream);
+    captureProcessor = captureAudioCtx.createScriptProcessor(512, 1, 1);
+    const mute = captureAudioCtx.createGain();
+    mute.gain.value = 0;
+    captureProcessor.onaudioprocess = (e) => {
+      const data = e.inputBuffer.getChannelData(0);
+      const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const b64 = btoa(binary);
+      if (window.AecBridge && window.AecBridge.onCaptureChunk) {
+        window.AecBridge.onCaptureChunk(b64);
+      }
+    };
+    captureSource.connect(captureProcessor);
+    captureProcessor.connect(mute);
+    mute.connect(captureAudioCtx.destination);
+    log("Capture started.");
+  } catch (e) {
+    log(`ERROR starting capture: ${e.message}`);
+  }
+}
+
+// Called by Kotlin (WebViewAecHost.stopCapture) — mirrors stopAllPlayback's teardown care: release
+// the mic track explicitly rather than relying only on the WebView's own destroy() to clean up.
+function stopCapture() {
+  try { captureProcessor && captureProcessor.disconnect(); } catch (_) {}
+  try { captureSource && captureSource.disconnect(); } catch (_) {}
+  try { captureStream && captureStream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+  try { captureAudioCtx && captureAudioCtx.close(); } catch (_) {}
+  captureProcessor = null;
+  captureSource = null;
+  captureStream = null;
+  captureAudioCtx = null;
+  log("Capture stopped.");
 }
 
 window.addEventListener("load", () => log("AEC bridge page loaded."));

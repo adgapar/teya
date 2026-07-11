@@ -222,7 +222,7 @@ real follow-up ("a short fact") producing a 9.76s / 234,240-sample multi-sentenc
 played entirely through Web Audio. User confirmed **no glitches, pops, or added latency** vs. the
 `AudioTrack` path. Both flags reverted to `false` afterward. Full log: `docs/experiments.md`.
 
-### Phase 3 — Capture path: cleaned audio back to Kotlin
+### Phase 3 — Capture path: cleaned audio back to Kotlin — ✅ DONE 2026-07-11
 
 `getUserMedia({echoCancellation:true})` (proven to suppress ~36-41dB in the spike) captures mic
 audio in the same page; bridge the cleaned PCM back to Kotlin at whatever chunk size Phase 1's
@@ -245,6 +245,34 @@ in the same range (~600-12,000/32767) with the same ambient fluctuation pattern;
 own peak/rms fluctuated with real sound the whole time too — neither pipeline degraded, flatlined,
 or errored. **Wake-word detection does not need to pause while barge-in-armed for `AudioRecord`-
 contention reasons.** Full log: `docs/experiments.md`.
+
+**Real capture wiring, result: done.** `assets/aec_bridge.html`'s `startCapture`/`stopCapture` run
+`getUserMedia` and stream cleaned chunks back via a new `AecBridge.onCaptureChunk`; `WebViewAecHost`
+decodes them through a constructor callback; `VoicePipeline.forwardWebViewCapturedChunk` (a new
+sibling of `forwardArmedChunk`, gated by `WEBVIEW_CAPTURE_ENABLED`) feeds the **existing**
+`SileroVad`/`bargeInAudioBuffer`/`consumeBargeInAudio` pipeline completely unchanged, exactly as
+specified above. `forwardArmedChunk` itself now no-ops whenever this path is enabled — feeding two
+unrelated audio streams into one Silero session (which carries RNN state across calls) would
+corrupt it. A gate mirroring `WakeWordEngine`'s own `bargeInArmed` check (`sileroVad == null` →
+return) was needed too, since unlike `forwardArmedChunk` this callback isn't naturally scoped to
+the armed window (`startCapture`/`stopCapture` are tied to the AEC session, not per-turn arm/disarm).
+
+First live test (all three WebView flags on) produced zero barge-in detections despite repeated
+deliberate "stop" interrupts during two real 350ms gap windows. Root cause, found not guessed: the
+capture `ScriptProcessorNode` buffer was 2048 samples (~128ms, copied from the Phase 0/1 spikes) —
+only ~2-3 chunks can arrive within a 350ms gate at that size, and none happened to land while
+ungated. Reduced to 512 samples (32ms, matching `SileroVad.FRAME_SIZE` exactly) for ~10x the
+chances. Re-tested live: a real "stop" interrupt fired correctly
+(`Barge-in (WebView capture): speech detected (confidence=0.89033633, cleanedPeak(pre-gain)=1550)`),
+`HarnessService` correctly abandoned the turn, pre-interrupt audio correctly prepended via the
+unmodified `consumeBargeInAudio` path, and the conversation continued normally afterward. All three
+flags reverted to `false` after testing. Full log: `docs/experiments.md`.
+
+**Note for Phase 4**: Phase 3's gating (`forwardWebViewCapturedChunk` returns immediately whenever
+`currentTrack`/`currentMediaPlayer`/`webViewRenderActive` is set) means self-echo suppression during
+*active* playback has not been tested yet — every successful detection above happened in a gap where
+nothing was playing. Phase 4, which removes this gate, is where that actually gets exercised for the
+first time.
 
 ### Phase 4 — Remove the gap, enable continuous listening
 
