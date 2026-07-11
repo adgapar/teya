@@ -2,7 +2,7 @@
 date: 2026-07-11T00:00:00Z
 topic: "WebView/Chromium AEC integration for continuous barge-in (replacing NativeAec3)"
 tags: [voice, barge-in, aec, webview, chromium, webrtc, voicepipeline, harnessservice]
-status: ready-to-implement
+status: shipped — NativeAec3 dropped, WebView AEC is the sole default (2026-07-11)
 ---
 
 # WebView/Chromium AEC Integration for Barge-In
@@ -326,12 +326,31 @@ against WebView-cleaned audio? Re-run `docs/experiments.md`-style measurement (p
 or reuse `EchoCanceller3`-style metrics conceptually) against real conversational audio, not just a
 tone.
 
-### Phase 6 — Cleanup (only after Phase 5 is solid in practice, not before)
+### Phase 6 — Cleanup — ✅ DONE 2026-07-11
 
 Decide whether to retire `NativeAec3` entirely (JNI module, CMake build, vendored AEC3 source under
 `app/src/main/cpp/third_party/webrtc/`) or keep it as a documented fallback. Don't do this
 prematurely — recall this session's own earlier mistake of nearly abandoning `NativeAec3` before
 the WebView approach was even confirmed working once.
+
+**Decision: retired entirely.** By the time this decision was made, the WebView path had already
+been confirmed live across every phase above (tone spike, background execution, bridge, render,
+capture, and continuous mid-sentence listening with real interrupts and zero false positives) — a
+much stronger evidence base than `NativeAec3` ever produced (~0dB real suppression, never shipped).
+Deleted: `NativeAec3.kt`, `Resampler.kt`, the entire native module (`app/src/main/cpp/` —
+`jni_aec3.cpp`, `webrtc_shim/`, `third_party/webrtc/`), the NDK/CMake build config, all four
+kill-switch flags, and the dev-only spike files (`experiments/`, `aec_experiment.html` and
+siblings). WebView AEC is now unconditional — `VoicePipeline.startAecSession()` always constructs
+it, falling back automatically to gap-gated capture only if it fails to start.
+
+A real regression surfaced during this cleanup, found via live testing rather than assumed:
+deleting `NativeAec3`'s construction block also silently dropped a
+`wakeWordEngine.setPlatformAecEnabled(false)` call it had been running as a side effect on every
+prior test — its actual purpose (keeping this device's unreliable platform `AcousticEchoCanceler`
+from interfering with Chromium's separate `getUserMedia` echo cancellation) had nothing to do with
+AEC3 itself. The first post-cleanup live test produced a genuine self-interrupt false positive that
+hadn't appeared before; restoring the call explicitly in `startAecSession`/`endAecSession` fixed it,
+confirmed by a follow-up live test. Full story: `docs/experiments.md`.
 
 ## What we're explicitly NOT doing (yet)
 
