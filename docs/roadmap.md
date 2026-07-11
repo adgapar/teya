@@ -4,7 +4,9 @@ Living status doc. Design lives in [ARCHITECTURE.md](../ARCHITECTURE.md); the fu
 is [thoughts/shared/research/2026-07-06-project-audit.md](../thoughts/shared/research/2026-07-06-project-audit.md).
 Audit IDs (C1, H2, …) below refer to that file.
 
-_Last updated: 2026-07-11 (continuous mid-sentence barge-in confirmed working live via WebView AEC)._
+_Last updated: 2026-07-11 (continuous mid-sentence barge-in confirmed working live via WebView AEC;
+same day, follow-on session shipped admin-configurable voice tuning + fixed the barge-in UI-stuck
+and STT-swallowed-error bugs — see Backlog and `docs/experiments.md`)._
 
 ## ✅ Done
 
@@ -267,10 +269,14 @@ Open-Meteo), with location from the household profile or native device location.
   (`VoicePipeline`'s Silero `threshold`/`speechDurationMs`/`silenceDurationMs`/`bargeInGain`,
   `HarnessService.bargeInGapMs`, `WakeWordEngine`'s `threshold`/`inputGain`/`patience`) now live in
   `ConfigManager` (same `EncryptedSharedPreferences` store as the Mistral API key) with today's old
-  hardcoded values as defaults, editable from a new "Voice tuning" section in Admin. Read live at
-  each use site (per-arm / per-chunk), not cached at construction, so a save takes effect on the
-  next turn without restarting the service — no broadcast plumbing needed. *Built + compiles;
-  pending a live on-device test of the new Admin section and a save→retune round-trip.*
+  hardcoded values as defaults, editable from a new "Voice tuning" section in Admin, plus a
+  "Set defaults" button (each field also shows its default inline) to recover a mistyped value
+  without hunting down the original number. Read live at each use site (per-arm / per-chunk), not
+  cached at construction, so a save takes effect on the next turn without restarting the service —
+  no broadcast plumbing needed. **Live-tested on-device**: caught and fixed two real layout bugs in
+  the process — the landscape Admin nav rail didn't scroll (a 6th section, "Voice tuning", was
+  clipped off-screen along with "API"), and long field labels overlapped the new default-value hints
+  in the two-column rows. Both fixed; the section now renders correctly and a save round-trip works.
 - Settings **voice picker** (live from `/audio/voices`) + persist choice.
 - **Implement memory / learning about people** — build the deferred half of the household model:
   `Person` rows with `kind=KNOWN` captured by voice ("remember Uncle Bob…"), a `MemoryEntry` table

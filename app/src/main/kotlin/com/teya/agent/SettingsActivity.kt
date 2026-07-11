@@ -59,6 +59,7 @@ import com.teya.agent.household.MemoryManager
 import com.teya.agent.household.MemorySectionBody
 import com.teya.agent.household.Note
 import com.teya.agent.household.PrimaryButton
+import com.teya.agent.household.SecondaryButton
 import com.teya.agent.household.SectionHead
 import com.teya.agent.household.TeyaColors
 import com.teya.agent.household.TeyaField
@@ -207,7 +208,21 @@ private data class VoiceTuning(
     val wakeWordThreshold: String,
     val wakeWordInputGain: String,
     val wakeWordPatience: String,
-)
+) {
+    companion object {
+        /** Mirrors ConfigManager's hardcoded defaults — shown as each field's hint and by "Reset to defaults". */
+        val DEFAULTS = VoiceTuning(
+            vadThreshold = "0.7",
+            vadSpeechDurationMs = "50",
+            vadSilenceDurationMs = "300",
+            bargeInGain = "6.0",
+            bargeInGapMs = "350",
+            wakeWordThreshold = "0.2",
+            wakeWordInputGain = "6.0",
+            wakeWordPatience = "1",
+        )
+    }
+}
 
 @Composable
 private fun AdminScreen(
@@ -335,7 +350,8 @@ private fun LandscapeContent(
     Row(Modifier.fillMaxSize()) {
         // Left: section nav
         Column(
-            Modifier.width(220.dp).fillMaxHeight().padding(start = 22.dp, end = 12.dp, top = 8.dp),
+            Modifier.width(220.dp).fillMaxHeight().verticalScroll(rememberScrollState())
+                .padding(start = 22.dp, end = 12.dp, top = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             AdminSection.entries.forEach { section ->
@@ -405,34 +421,43 @@ private fun ApiSectionBody(apiKey: String, onApiKeyChange: (String) -> Unit) {
 @Composable
 private fun VoiceTuningSectionBody(tuning: VoiceTuning, onChange: (VoiceTuning) -> Unit) {
     val numeric = androidx.compose.ui.text.input.KeyboardType.Decimal
+    val d = VoiceTuning.DEFAULTS
     Column {
         Note("Barge-in and wake-word sensitivity. Rebuild-free — takes effect on the next turn.")
+        Spacer(Modifier.height(10.dp))
+        SecondaryButton("Set defaults") { onChange(d) }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TeyaField(tuning.vadThreshold, { onChange(tuning.copy(vadThreshold = it)) }, "0.7",
-                label = "Barge-in VAD threshold", modifier = Modifier.weight(1f), keyboardType = numeric)
-            TeyaField(tuning.bargeInGain, { onChange(tuning.copy(bargeInGain = it)) }, "6.0",
-                label = "Barge-in mic gain", modifier = Modifier.weight(1f), keyboardType = numeric)
+            TeyaField(tuning.vadThreshold, { onChange(tuning.copy(vadThreshold = it)) }, d.vadThreshold,
+                label = "VAD threshold", optional = "default ${d.vadThreshold}",
+                modifier = Modifier.weight(1f), keyboardType = numeric)
+            TeyaField(tuning.bargeInGain, { onChange(tuning.copy(bargeInGain = it)) }, d.bargeInGain,
+                label = "Barge-in gain", optional = "default ${d.bargeInGain}",
+                modifier = Modifier.weight(1f), keyboardType = numeric)
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TeyaField(tuning.vadSpeechDurationMs, { onChange(tuning.copy(vadSpeechDurationMs = it)) }, "50",
-                label = "VAD speech confirm (ms)", modifier = Modifier.weight(1f), keyboardType = numeric)
-            TeyaField(tuning.vadSilenceDurationMs, { onChange(tuning.copy(vadSilenceDurationMs = it)) }, "300",
-                label = "VAD silence reset (ms)", modifier = Modifier.weight(1f), keyboardType = numeric)
+            TeyaField(tuning.vadSpeechDurationMs, { onChange(tuning.copy(vadSpeechDurationMs = it)) }, d.vadSpeechDurationMs,
+                label = "Speech confirm (ms)", optional = "default ${d.vadSpeechDurationMs}",
+                modifier = Modifier.weight(1f), keyboardType = numeric)
+            TeyaField(tuning.vadSilenceDurationMs, { onChange(tuning.copy(vadSilenceDurationMs = it)) }, d.vadSilenceDurationMs,
+                label = "Silence reset (ms)", optional = "default ${d.vadSilenceDurationMs}",
+                modifier = Modifier.weight(1f), keyboardType = numeric)
         }
         Spacer(Modifier.height(12.dp))
-        TeyaField(tuning.bargeInGapMs, { onChange(tuning.copy(bargeInGapMs = it)) }, "350",
-            label = "Barge-in fallback gap (ms)", keyboardType = numeric)
+        TeyaField(tuning.bargeInGapMs, { onChange(tuning.copy(bargeInGapMs = it)) }, d.bargeInGapMs,
+            label = "Barge-in fallback gap (ms)", optional = "default ${d.bargeInGapMs}", keyboardType = numeric)
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TeyaField(tuning.wakeWordThreshold, { onChange(tuning.copy(wakeWordThreshold = it)) }, "0.2",
-                label = "Wake word threshold", modifier = Modifier.weight(1f), keyboardType = numeric)
-            TeyaField(tuning.wakeWordInputGain, { onChange(tuning.copy(wakeWordInputGain = it)) }, "6.0",
-                label = "Wake word mic gain", modifier = Modifier.weight(1f), keyboardType = numeric)
+            TeyaField(tuning.wakeWordThreshold, { onChange(tuning.copy(wakeWordThreshold = it)) }, d.wakeWordThreshold,
+                label = "Wake threshold", optional = "default ${d.wakeWordThreshold}",
+                modifier = Modifier.weight(1f), keyboardType = numeric)
+            TeyaField(tuning.wakeWordInputGain, { onChange(tuning.copy(wakeWordInputGain = it)) }, d.wakeWordInputGain,
+                label = "Wake gain", optional = "default ${d.wakeWordInputGain}",
+                modifier = Modifier.weight(1f), keyboardType = numeric)
         }
         Spacer(Modifier.height(12.dp))
-        TeyaField(tuning.wakeWordPatience, { onChange(tuning.copy(wakeWordPatience = it)) }, "1",
-            label = "Wake word patience (frames)", keyboardType = numeric)
+        TeyaField(tuning.wakeWordPatience, { onChange(tuning.copy(wakeWordPatience = it)) }, d.wakeWordPatience,
+            label = "Wake word patience (frames)", optional = "default ${d.wakeWordPatience}", keyboardType = numeric)
     }
 }
