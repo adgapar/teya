@@ -82,12 +82,20 @@ continuous listening → drop NativeAec3 → this regression/fix) for how this w
   + fixed via live testing, not assumed — see the row below. Remaining: broader real-world exposure
   over time (different rooms/noise levels/longer sessions) to build more confidence, though the
   live evidence so far is strong.
-- **Open bug, not yet diagnosed:** after a barge-in interrupt, the UI sometimes stays in "speaking"
-  state (text visible, no audio) instead of returning to "listening." Reported 2026-07-11 — may
-  overlap with the `textToSpeech` race condition fixed the same day, not yet re-confirmed live.
-- **Open bug, found but not fixed:** `listenForCommand`'s STT call swallows network errors
-  (`java.net.SocketException: Connection reset` seen live) identically to genuine silence, silently
-  ending the conversation with no retry and no user-facing distinction.
+- **Fixed (2026-07-11):** the "stuck in speaking" UI bug. Diagnosed: the transition back to
+  "listening" only happened once `activeTurnJob`'s cancellation fully unwound back to
+  `runConversation`'s loop, which depends on however long the in-flight LLM stream read takes to
+  notice cancellation — a network stall there left the UI showing "speaking" with no audio for that
+  whole stretch. `HarnessService.onBargeIn()` now calls `updateUiState(LISTENING)` directly,
+  synchronously with the audio cut (`voicePipeline.interrupt()`), instead of waiting on the async
+  unwind. *Built + compiles; pending a live re-test to confirm the stuck state no longer reproduces.*
+- **Fixed (2026-07-11):** `listenForCommand` swallowing STT network errors as silence. Added
+  `SttFailedException` (`voice/VoicePipeline.kt`) thrown specifically when the Voxtral `/audio/transcriptions`
+  call itself fails, distinct from the existing `""` return for genuine no-speech-captured silence.
+  `HarnessService.runConversation` catches it and speaks an apology ("having trouble hearing you
+  right now — check the connection") instead of silently ending the conversation. No automatic
+  retry added (kept scoped to the reported bug — an unbounded retry loop on sustained network
+  failure is its own risk). *Built + compiles; pending a live test with the network cut mid-conversation.*
 - **Shipped, not yet AEC-related but worth tracking here:** audible state cues (`playListeningChime`/
   `playInterruptChime`) for the wall-mounted, screen-not-always-visible device; persona now told to
   keep sentences short even in long-form answers, so gap-gated barge-in gets more chances to fire
