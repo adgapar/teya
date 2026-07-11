@@ -22,23 +22,19 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.resume
 
 /**
- * Phase 1 of the WebView/Chromium AEC plan
- * (thoughts/shared/plans/2026-07-11-webview-chromium-aec-barge-in.md): a persistent, session-scoped
- * WebView host, analogous to [NativeAec3]'s lifecycle (construct once, tear down once), hosted via
- * `WindowManager.addView(TYPE_APPLICATION_OVERLAY)` rather than an Activity — confirmed working
- * with zero Activity ever in the foreground by the Phase 0 spike
- * (`experiments/AecServiceHostedExperimentService`, see docs/experiments.md's 2026-07-11 entries).
+ * A persistent, session-scoped WebView host that gives Teya real Chromium-grade acoustic echo
+ * cancellation for barge-in, hosted via `WindowManager.addView(TYPE_APPLICATION_OVERLAY)` rather
+ * than an Activity — this keeps it running with zero Activity ever in the foreground, matching
+ * `HarnessService`'s own always-on foreground-service lifecycle.
  *
- * Phase 1 proved the bidirectional bridge: [measureRoundTripLatency] pushes into the page
- * (Kotlin->JS, via `evaluateJavascript`) and awaits the page pulling back (JS->Kotlin, via the
- * [AecBridge] interface `assets/aec_bridge.html` calls) — confirmed 9ms round trip live (see
- * docs/experiments.md), plenty of headroom for real audio. Phase 2 built the render path on top of
- * that same channel: [pushRenderChunk] streams real TTS PCM into the page's Web Audio scheduler,
- * [awaitRenderPlaybackDone] is the JS-side equivalent of `AudioTrack.playbackHeadPosition`'s
- * drain-loop poll, and [stopPlayback] is this path's `interrupt()` equivalent. Phase 3 adds the
- * capture path: [startCapture] starts `getUserMedia({echoCancellation:true})` in the page — the
- * ~36-41dB suppression confirmed by the original tone spike — and [onCaptureChunk] (via the
- * constructor callback) delivers each cleaned chunk back to Kotlin's `SileroVad` pipeline.
+ * Owns both halves of the render/capture split: [pushRenderChunk]/[awaitRenderPlaybackDone]/
+ * [stopPlayback] stream TTS PCM into the page's Web Audio scheduler for gapless playback, while
+ * [startCapture]/[stopCapture] run `getUserMedia({echoCancellation:true})` and deliver each cleaned
+ * chunk back via the constructor's `onCaptureChunk` callback. Because both playback and capture
+ * happen inside the same page, Chromium's own echo cancellation has a real reference signal to
+ * cancel against — no explicit render-frame feeding is needed the way a from-scratch AEC would
+ * require. [measureRoundTripLatency] proves the underlying bidirectional bridge (`evaluateJavascript`
+ * push, the [AecBridge] interface for the pull) independent of any real audio.
  *
  * All WebView calls must happen on the main thread (this is Android's own requirement, not just a
  * style choice) — every public suspend function here hops to [Dispatchers.Main] internally, so
@@ -53,10 +49,8 @@ class WebViewAecHost(
         private const val TAG = "WebViewAecHost"
         private const val PING_TIMEOUT_MS = 2000L
         private const val PAGE_LOAD_TIMEOUT_MS = 3000L
-        // Phase 2 render-path polling cadence/timeout — mirrors streamToSpeaker's own
-        // AudioTrack.playbackHeadPosition drain-loop poll (VoicePipeline.AEC3_RENDER_POLL_MS is
-        // 10ms; 20ms here since this poll round-trips through evaluateJavascript instead of reading
-        // a local field, and Phase 1 measured ~9ms one-way overhead for that round trip).
+        // Render-path polling cadence/timeout — this poll round-trips through evaluateJavascript
+        // instead of reading a local field (measured ~9ms one-way overhead for that round trip).
         private const val RENDER_POLL_MS = 20L
         private const val RENDER_DONE_THRESHOLD_MS = 5.0
         private const val RENDER_MAX_WAIT_MS = 15000L
@@ -76,6 +70,13 @@ class WebViewAecHost(
     /** True if this device has granted "draw over other apps" — required to host the overlay. */
     fun canHost(): Boolean = Settings.canDrawOverlays(context)
 
+    /**
+     * True if the overlay WebView is actually up and running this session. Callers use this to
+     * decide whether to use this host at all or fall back to the no-AEC path — [start] never
+     * throws on failure (missing permission, WindowManager error), it just leaves this `false`.
+     */
+    fun isActive(): Boolean = webView != null
+
     /** Adds the overlay WebView and loads the bridge page. Call once per session; idempotent. */
     suspend fun start() = withContext(Dispatchers.Main) {
         if (webView != null) return@withContext
@@ -92,8 +93,7 @@ class WebViewAecHost(
             addJavascriptInterface(AecBridge(), "AecBridge")
             webChromeClient = object : WebChromeClient() {
                 // Local bridge page only (file:///android_asset/...), never a real site — safe to
-                // grant whatever it asks for (mic capture, needed from Phase 3 on) without a
-                // confirmation prompt.
+                // grant whatever it asks for (mic capture) without a confirmation prompt.
                 override fun onPermissionRequest(request: android.webkit.PermissionRequest) {
                     request.grant(request.resources)
                 }
@@ -138,8 +138,7 @@ class WebViewAecHost(
     /**
      * Pushes a ping into the page and awaits it pulling back via [AecBridge.onPong], returning the
      * round-trip latency in ms — or `null` if the host isn't running or the page didn't respond
-     * within [PING_TIMEOUT_MS]. This is Phase 1's whole point: measuring this determines the viable
-     * chunk size/cadence for Phase 2/3's real audio plumbing over the same channel.
+     * within [PING_TIMEOUT_MS].
      */
     suspend fun measureRoundTripLatency(): Long? {
         val wv = webView ?: return null
@@ -156,12 +155,12 @@ class WebViewAecHost(
     }
 
     /**
-     * Phase 2 render path: pushes one streamed TTS PCM chunk (float32, range [-1, 1], as Mistral's
-     * own `streamSpeechPcm` already yields) into the page's Web Audio scheduler
+     * Pushes one streamed TTS PCM chunk (float32, range [-1, 1], as Mistral's own
+     * `streamSpeechPcm` already yields) into the page's Web Audio scheduler
      * (`assets/aec_bridge.html`'s `pushRenderChunk`) as base64 — `evaluateJavascript` takes a JS
      * expression string, so this is the simplest encoding that survives string interpolation
-     * without escaping concerns. No conversion needed on this side: unlike the AudioTrack path,
-     * Web Audio wants float32 directly, not int16.
+     * without escaping concerns. No conversion needed on this side: unlike the AudioTrack
+     * fallback path, Web Audio wants float32 directly, not int16.
      */
     suspend fun pushRenderChunk(floats: FloatArray, sampleRate: Int) = withContext(Dispatchers.Main) {
         val wv = webView ?: return@withContext
@@ -194,12 +193,12 @@ class WebViewAecHost(
     }
 
     /**
-     * Phase 3 capture path: starts `getUserMedia({echoCancellation:true})` in the page
-     * (`assets/aec_bridge.html`'s `startCapture`) at [sampleRate] — pass 16000 to match
-     * `VoicePipeline`'s `SileroVad`/`WakeWordEngine` sample rate directly, no resampling needed on
-     * either side. Each captured chunk arrives via [onCaptureChunk] (the constructor callback),
-     * decoded from base64 float32 to int16 in [AecBridge.onCaptureChunk] below — matches the same
-     * int16 PCM units `WakeWordEngine`'s raw `AudioRecord` chunks already use.
+     * Starts `getUserMedia({echoCancellation:true})` in the page (`assets/aec_bridge.html`'s
+     * `startCapture`) at [sampleRate] — pass 16000 to match `VoicePipeline`'s
+     * `SileroVad`/`WakeWordEngine` sample rate directly, no resampling needed on either side. Each
+     * captured chunk arrives via [onCaptureChunk] (the constructor callback), decoded from base64
+     * float32 to int16 in [AecBridge.onCaptureChunk] below — matches the same int16 PCM units
+     * `WakeWordEngine`'s raw `AudioRecord` chunks already use.
      */
     suspend fun startCapture(sampleRate: Int) = withContext(Dispatchers.Main) {
         webView?.evaluateJavascript("startCapture($sampleRate)", null)
@@ -234,10 +233,10 @@ class WebViewAecHost(
         }
 
         /**
-         * Phase 3 capture path: one chunk of `getUserMedia`-cleaned mic audio, base64-encoded
-         * float32 (matches [pushRenderChunk]'s encoding, just the reverse direction). Invoked on
-         * whatever thread the WebView's JS engine calls this interface from — not the main thread,
-         * and not [WakeWordEngine]'s capture thread either, so [onCaptureChunk]'s receiver
+         * One chunk of `getUserMedia`-cleaned mic audio, base64-encoded float32 (matches
+         * [pushRenderChunk]'s encoding, just the reverse direction). Invoked on whatever thread the
+         * WebView's JS engine calls this interface from — not the main thread, and not
+         * `WakeWordEngine`'s capture thread either, so [onCaptureChunk]'s receiver
          * (`VoicePipeline`) must not assume a specific caller thread here.
          */
         @JavascriptInterface

@@ -3,13 +3,11 @@
 <head><title>AEC Bridge</title></head>
 <body>
 <!--
-  Phase 1/2/3 scaffolding (thoughts/shared/plans/2026-07-11-webview-chromium-aec-barge-in.md): proves
-  a persistent, bidirectional Kotlin<->JS bridge over the WindowManager-hosted WebView confirmed
-  working in Phase 0 (see WebViewAecHost.kt) — push (Kotlin calls onPing via evaluateJavascript) and
-  pull (this page calls back into Kotlin's AecBridge interface) — plus Phase 2's render path (real
-  TTS PCM scheduled gaplessly through Web Audio instead of Kotlin's AudioTrack) and Phase 3's capture
-  path (getUserMedia({echoCancellation:true}) — the ~36-41dB-confirmed suppression from the original
-  tone spike — streamed back to Kotlin's SileroVad pipeline).
+  Persistent, bidirectional Kotlin<->JS bridge for Teya's WebView-hosted echo cancellation (see
+  WebViewAecHost.kt): push (Kotlin calls onPing via evaluateJavascript) and pull (this page calls
+  back into Kotlin's AecBridge interface) — plus the render path (real TTS PCM scheduled gaplessly
+  through Web Audio instead of Kotlin's AudioTrack) and the capture path
+  (getUserMedia({echoCancellation:true}) streamed back to Kotlin's SileroVad pipeline).
 -->
 <script>
 function log(msg) {
@@ -25,12 +23,12 @@ function onPing(id) {
   }
 }
 
-// Phase 2 render path: mirrors streamToSpeaker's own streaming AudioTrack.write loop, just via Web
-// Audio instead. audioCtx is created once at the TTS sample rate (24kHz) on the first chunk, so no
+// Render path: mirrors the AudioTrack fallback's own streaming write loop, just via Web Audio
+// instead. audioCtx is created once at the TTS sample rate (24kHz) on the first chunk, so no
 // resampling is needed on either side. Chunks are scheduled back-to-back via nextStartTime (clamped
 // to audioCtx.currentTime so a slow-arriving chunk doesn't produce a negative/past start time,
-// which AudioBufferSourceNode.start() throws on) — this is the gap-avoidance every streaming-audio
-// player needs, the same class of problem streamToSpeaker's own buffer/underrun handling solves.
+// which AudioBufferSourceNode.start() throws on) — the gap-avoidance any streaming-audio player
+// needs.
 let audioCtx = null;
 let nextStartTime = 0;
 let scheduledSources = [];
@@ -52,7 +50,7 @@ function base64ToFloat32Array(b64) {
 
 // Called by Kotlin (WebViewAecHost.pushRenderChunk) once per streamed TTS chunk — schedules it
 // immediately after whatever's already queued, never audibly overlapping or gapping as long as
-// Kotlin keeps up with the network stream (same assumption streamToSpeaker's AudioTrack path makes).
+// Kotlin keeps up with the network stream.
 function pushRenderChunk(b64, sampleRate) {
   const ctx = ensureAudioCtx(sampleRate);
   const floats = base64ToFloat32Array(b64);
@@ -68,32 +66,28 @@ function pushRenderChunk(b64, sampleRate) {
 }
 
 // Polled by Kotlin (WebViewAecHost.awaitRenderPlaybackDone) — the JS-side equivalent of
-// streamToSpeaker's AudioTrack.playbackHeadPosition drain-loop poll.
+// AudioTrack.playbackHeadPosition drain-loop polling.
 function getPlaybackRemainingMs() {
   if (!audioCtx) return 0;
   return Math.max(0, (nextStartTime - audioCtx.currentTime) * 1000);
 }
 
-// Called by Kotlin (WebViewAecHost.stopPlayback) on interrupt — mirrors currentTrack.pause()+flush()
-// for the AudioTrack path. Stops every still-playing/pending scheduled source immediately.
+// Called by Kotlin (WebViewAecHost.stopPlayback) on interrupt — mirrors AudioTrack's
+// pause()+flush(). Stops every still-playing/pending scheduled source immediately.
 function stopAllPlayback() {
   scheduledSources.forEach((s) => { try { s.stop(); } catch (_) {} });
   scheduledSources = [];
   nextStartTime = audioCtx ? audioCtx.currentTime : 0;
 }
 
-// Phase 3 capture path: getUserMedia's echoCancellation cleans Teya's own voice out of the mic
-// signal (this is the whole reason this plan exists — see docs/experiments.md's 36-41dB tone-spike
-// numbers), then each captured chunk is base64-encoded and pushed back to Kotlin via the AecBridge
-// interface (JS->Kotlin pull, same direction as onPing's pong). A muted zero-gain node routes the
-// signal through the graph without audibly looping the mic back out — same pattern as the Phase 0
-// spikes.
+// Capture path: getUserMedia's echoCancellation cleans Teya's own voice out of the mic signal,
+// then each captured chunk is base64-encoded and pushed back to Kotlin via the AecBridge interface
+// (JS->Kotlin pull, same direction as onPing's pong). A muted zero-gain node routes the signal
+// through the graph without audibly looping the mic back out.
 //
-// Buffer size 512 (32ms @ 16kHz, matching SileroVad.FRAME_SIZE exactly) — NOT the Phase 0 spikes'
-// 2048 (~128ms). First live test with 2048 produced zero barge-in detections across two real
-// 350ms gap windows despite repeated speech during them: only ~2-3 chunks could even arrive within
-// a 350ms gate before Phase 4 removes it, and none happened to land while ungated. 512 gives ~10
-// chances instead of ~2-3 — see docs/experiments.md's Phase 3 entry.
+// Buffer size 512 (32ms @ 16kHz, matching SileroVad.FRAME_SIZE exactly) — a larger 2048-sample
+// (~128ms) buffer left too few chunks able to land within a single gap-gated listening window
+// (only ~2-3 chances vs. ~10 at 512 samples), causing real interrupts to go undetected.
 let captureAudioCtx = null;
 let captureStream = null;
 let captureSource = null;

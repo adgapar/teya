@@ -60,18 +60,12 @@ class HarnessService : Service() {
         private const val TAG = "HarnessService"
         private const val FOLLOWUP_LISTEN_MS = 8000  // wait this long for a follow-up before ending
         // Deliberate pause after each sentence — see runConversation's speaker loop. Only applied
-        // when that specific sentence fell back to playMp3 (no AEC3 coverage) or when
-        // VoicePipeline.AEC3_BARGE_IN_ENABLED is off; sentences that streamed via the AEC3-covered
-        // streamToSpeaker path skip it entirely (barge-in listens continuously).
-        //
-        // This is currently the ONLY window where the mic is listened to at all (AEC3 mid-sentence
-        // barge-in is disabled — see VoicePipeline.AEC3_BARGE_IN_ENABLED's doc comment and
-        // thoughts/shared/research/2026-07-10-aec3-delay-estimator-diagnostic.md), so it's paid on
-        // every sentence in a multi-sentence response. Was 900ms — cut to 350ms since that felt like
-        // real dead air on longer responses; still leaves ~300ms for speech onset plus Silero's
-        // speechDurationMs=50 confirm (see VoicePipeline.setBargeInArmed). Narrows the catch window
-        // (you need to start talking closer to the exact end of a sentence) in exchange for a much
-        // less sluggish conversation — a deliberate trade, not a free win.
+        // when that sentence fell back to playMp3, or the WebView AEC host isn't active this
+        // session (see VoicePipeline.isContinuousBargeInActive); sentences streamed through the
+        // WebView AEC path skip it entirely since barge-in listens continuously through them.
+        // 350ms leaves ~300ms for speech onset plus Silero's speechDurationMs=50 confirm (see
+        // VoicePipeline.setBargeInArmed) — narrow enough to feel responsive, wide enough to catch
+        // a real interrupt starting right at the end of a sentence.
         private const val BARGE_IN_GAP_MS = 350L
         private const val MAX_HISTORY = 10           // bounded conversation history sent to the model
         private const val MAX_TOOL_ROUNDS = 4        // cap tool→result→model loops per user turn
@@ -319,9 +313,9 @@ class HarnessService : Service() {
     private suspend fun runConversation() {
         val history = mutableListOf<ChatMessage>()
         try {
-            // AEC3's session-wide render feed — independent of setBargeInArmed's per-turn
+            // The WebView AEC host is session-scoped — independent of setBargeInArmed's per-turn
             // arm/disarm below, which continues to govern only sileroVad. See
-            // VoicePipeline.startAecSession()'s doc comment for why this is session-scoped.
+            // VoicePipeline.startAecSession()'s doc comment for why.
             voicePipeline.startAecSession()
             updateUiState(AgentState.SPEAKING)
             Log.d(TAG, "Prompting...")
@@ -440,19 +434,13 @@ class HarnessService : Service() {
                                 Log.e(TAG, "TTS failed for sentence", e)
                             }
                             if (voicePipeline.isInterrupted()) break // barge-in — stop queuing more speech
-                            // Sentences that streamed via an AEC-covered path (NativeAec3's
-                            // streamToSpeaker, or Phase 4's WebView render/capture path) don't need
-                            // this gap — barge-in listens continuously during and after them (see
-                            // VoicePipeline.forwardArmedChunk / forwardWebViewCapturedChunk).
-                            // Sentences that fell back to playMp3 have no AEC coverage at all and
-                            // keep the original gap-gated behavior regardless of any flag. Cancelled
-                            // instantly via activeTurnJob the moment barge-in fires either way.
-                            val gapNeeded = when {
-                                !streamed -> true
-                                VoicePipeline.WEBVIEW_CONTINUOUS_BARGE_IN_ENABLED -> false
-                                VoicePipeline.AEC3_BARGE_IN_ENABLED -> false
-                                else -> true
-                            }
+                            // Sentences streamed through the WebView AEC path don't need this gap —
+                            // barge-in listens continuously during and after them (see
+                            // VoicePipeline.forwardWebViewCapturedChunk). Sentences that fell back to
+                            // playMp3, or ran while the WebView host wasn't active this session, keep
+                            // the gap-gated behavior. Cancelled instantly via activeTurnJob the moment
+                            // barge-in fires either way.
+                            val gapNeeded = !streamed || !voicePipeline.isContinuousBargeInActive()
                             if (gapNeeded) {
                                 Log.d(TAG, "Barge-in: listening gap open (${BARGE_IN_GAP_MS}ms)")
                                 delay(BARGE_IN_GAP_MS)

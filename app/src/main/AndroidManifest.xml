@@ -8,15 +8,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- Needed for WebView's getUserMedia({echoCancellation:true}) to select a communication
-         audio device (Chromium's own audio_manager_android.cc requires this) — see
-         docs/experiments.md's WebView AEC spike; also relevant to VoicePipeline's own past
-         MODE_IN_COMMUNICATION attempts (streamToSpeaker's doc comment). -->
+    <!-- Needed for the WebView AEC's getUserMedia({echoCancellation:true}) to select a
+         communication audio device (Chromium's own audio_manager_android.cc requires this). -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <!-- Spike-only (see AecServiceHostedExperimentService): tests whether a WebView can be added
-         via WindowManager.addView(TYPE_APPLICATION_OVERLAY) from a Service with zero Activity ever
-         in the foreground — the harder production shape this app's real barge-in AEC integration
-         needs. Not yet used by any shipped feature. -->
+    <!-- Lets WebViewAecHost add its overlay WebView via WindowManager.addView(TYPE_APPLICATION_OVERLAY)
+         from HarnessService with no Activity ever in the foreground. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
@@ -41,6 +37,8 @@
 
     <application
         android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.Teya">
@@ -71,34 +69,6 @@
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:theme="@style/Theme.Teya" />
-
-        <!-- Standalone spike, not part of the app flow — see docs/experiments.md. exported=true
-             only so `adb shell am start` can launch it directly for testing (Android 16 refuses
-             non-exported activities even from adb shell) — no sensitive functionality, gated by
-             RECORD_AUDIO. Launch via:
-             adb shell am start -n com.teya.agent/.experiments.AecWebExperimentActivity -->
-        <activity
-            android:name=".experiments.AecWebExperimentActivity"
-            android:exported="true"
-            android:screenOrientation="portrait"
-            android:theme="@style/Theme.Teya" />
-
-        <!-- Phase 0 spike for thoughts/shared/plans/2026-07-11-webview-chromium-aec-barge-in.md —
-             same exported=true/portrait/testing rationale as AecWebExperimentActivity above. Launch via:
-             adb shell am start -n com.teya.agent/.experiments.AecBackgroundExperimentActivity -->
-        <activity
-            android:name=".experiments.AecBackgroundExperimentActivity"
-            android:exported="true"
-            android:screenOrientation="portrait"
-            android:theme="@style/Theme.Teya" />
-
-        <!-- Phase 1 prerequisite spike — tests headless WebView hosting via WindowManager overlay
-             from a Service, zero Activity involved. exported=true only so `adb shell am
-             start-service` can launch it directly for testing. Launch via:
-             adb shell am start-service -n com.teya.agent/.experiments.AecServiceHostedExperimentService -->
-        <service
-            android:name=".experiments.AecServiceHostedExperimentService"
-            android:exported="true" />
 
         <service
             android:name=".harness.HarnessService"

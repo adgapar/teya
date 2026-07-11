@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App icon adaptive-icon background — near-black, warm-tinted to suit the hearth foreground. -->
+    <color name="ic_launcher_background">#0A0908</color>
+</resources>
