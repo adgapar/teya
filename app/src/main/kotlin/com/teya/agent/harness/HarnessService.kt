@@ -29,6 +29,7 @@ import com.teya.agent.shopping.ShoppingListManager
 import com.teya.agent.telephony.TelephonyActuator
 import com.teya.agent.timers.TimerManager
 import com.teya.agent.ui.face.AgentState
+import com.teya.agent.voice.SttFailedException
 import com.teya.agent.voice.VoicePipeline
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -339,8 +340,21 @@ class HarnessService : Service() {
                 sendDebug(user = "…", agent = "")
                 Log.d(TAG, "Listening for command...")
                 val prefixAudio = pendingBargeInAudio.also { pendingBargeInAudio = null } ?: ShortArray(0)
-                val text = voicePipeline.listenForCommand(FOLLOWUP_LISTEN_MS, sttContextBias(), prefixAudio)
-                voicePipeline.resumeWakeWord()
+                val text = try {
+                    voicePipeline.listenForCommand(FOLLOWUP_LISTEN_MS, sttContextBias(), prefixAudio)
+                } catch (e: SttFailedException) {
+                    // Distinct from blank (genuine silence) — tell the user instead of just going
+                    // quiet, which used to be indistinguishable from her simply not hearing anything.
+                    Log.e(TAG, "STT failed mid-conversation", e)
+                    null
+                } finally {
+                    voicePipeline.resumeWakeWord()
+                }
+                if (text == null) {
+                    updateUiState(AgentState.SPEAKING)
+                    voicePipeline.textToSpeech("Sorry, I'm having trouble hearing you right now — check the connection.")
+                    break
+                }
                 if (text.isBlank()) {
                     Log.d(TAG, "No follow-up heard — ending conversation")
                     break

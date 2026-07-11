@@ -29,6 +29,15 @@ import java.nio.ByteOrder
 import kotlin.coroutines.resume
 import kotlin.math.sqrt
 
+/**
+ * Thrown by [VoicePipeline.listenForCommand] when the Voxtral STT call itself fails (network/API
+ * error) — kept distinct from a plain "" return, which means genuine silence (no speech captured).
+ * Without this, a dropped connection mid-conversation looked identical to the user simply not
+ * saying anything, so [com.teya.agent.harness.HarnessService] would end the conversation with no
+ * explanation. See [VoicePipeline.listenForCommand]'s doc comment.
+ */
+class SttFailedException(cause: Throwable) : Exception("STT request failed", cause)
+
 class VoicePipeline(private val context: Context) {
 
     companion object {
@@ -514,7 +523,11 @@ class VoicePipeline(private val context: Context) {
      * Records a spoken command using simple energy-based VAD (stops after a short trailing
      * silence, or gives up after [maxInitialSilenceMs] if no speech starts), then transcribes it
      * via Voxtral. The caller must pause the wake-word recorder first ([pauseWakeWord]) to avoid
-     * microphone contention. Returns "" on any failure or silence.
+     * microphone contention. Returns "" on genuine silence (no speech captured); throws
+     * [SttFailedException] if the STT call itself fails (network/API error) — the two used to be
+     * indistinguishable, silently ending the conversation on a dropped connection with no
+     * explanation to the user (see [SttFailedException]'s doc comment). Callers should catch it
+     * and give the user a spoken reason instead of just going quiet.
      *
      * [prefixAudio] — pass [consumeBargeInAudio]'s result here right after a barge-in interrupt —
      * is prepended to whatever this call captures live, so speech already underway when the user
@@ -531,15 +544,15 @@ class VoicePipeline(private val context: Context) {
                 Log.e("VoicePipeline", "MistralClient not set, cannot transcribe")
                 return@withContext ""
             }
+            val wavFile = recordWithVad(maxInitialSilenceMs, prefixAudio) ?: run {
+                Log.d("VoicePipeline", "No command audio captured")
+                return@withContext ""
+            }
             try {
-                val wavFile = recordWithVad(maxInitialSilenceMs, prefixAudio) ?: run {
-                    Log.d("VoicePipeline", "No command audio captured")
-                    return@withContext ""
-                }
                 client.transcribe(wavFile, contextBias)
             } catch (e: Exception) {
-                Log.e("VoicePipeline", "Error during STT", e)
-                ""
+                Log.e("VoicePipeline", "STT request failed", e)
+                throw SttFailedException(e)
             }
         }
 
