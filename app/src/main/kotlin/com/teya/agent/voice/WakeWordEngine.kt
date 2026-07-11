@@ -114,6 +114,14 @@ class WakeWordEngine(
     private var echoCanceler: AcousticEchoCanceler? = null
     @Volatile private var isRunning = false
 
+    // Phase 3 diagnostic (WebView AEC capture-concurrency investigation, see
+    // thoughts/shared/plans/2026-07-11-webview-chromium-aec-barge-in.md): raw mic peak amplitude,
+    // independent of wake-word scoring — the wake-word model itself is too weak/inconsistent on
+    // this device (see THRESHOLD's doc comment) to reliably tell "AudioRecord conflict" apart from
+    // "model just didn't score this utterance," so this measures the input signal directly instead.
+    private var wwChunkCounter = 0
+    private var wwPeakRawAmplitude = 0
+
     // Desired platform-AEC state, applied fresh by enableAudioEffects() on every mic restart
     // (start() re-creates the audio session — and its effects — each time listenForCommand pauses
     // and resumes wake-word listening, which happens repeatedly within a single conversation).
@@ -281,6 +289,14 @@ class WakeWordEngine(
                         // WebSocket send), while `chunk` itself gets overwritten next iteration.
                         if (bargeInArmed) onArmedAudioChunk(chunk.copyOf())
                         processChunk(chunk)
+
+                        var peak = 0
+                        for (s in chunk) { val a = kotlin.math.abs(s.toInt()); if (a > peak) peak = a }
+                        if (peak > wwPeakRawAmplitude) wwPeakRawAmplitude = peak
+                        if (++wwChunkCounter % 25 == 0) {
+                            Log.d(TAG, "peak RAW amplitude (last ~2s) = $wwPeakRawAmplitude / 32767")
+                            wwPeakRawAmplitude = 0
+                        }
                     }
                 }
             } catch (e: Exception) {

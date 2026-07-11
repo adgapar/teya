@@ -22,7 +22,11 @@ import android.webkit.WebView
  * only proved the Activity-hosted case. Real integration needs a WebView owned by `HarnessService` —
  * a plain Service, with NO Activity ever in the foreground. This tests whether that's even possible:
  * adds a 1x1 invisible WebView via `WindowManager.addView(TYPE_APPLICATION_OVERLAY)` from a Service,
- * with no Activity ever started, and runs the same continuous getUserMedia capture test.
+ * with no Activity ever started, and runs a continuous getUserMedia capture test (loads
+ * `aec_capture_only_experiment.html` — deliberately silent, unlike the earlier
+ * `aec_background_experiment.html`, whose quiet tone was a real confound for Phase 3's wake-word
+ * concurrency test: any audible sound near the mic affects wake-word scoring independent of any
+ * true `AudioRecord`-level conflict).
  *
  * Requires the user to grant "draw over other apps" once (Settings.canDrawOverlays) — this spike
  * redirects to that settings screen itself if not yet granted; check logcat after granting and
@@ -91,7 +95,7 @@ class AecServiceHostedExperimentService : Service() {
         try {
             wm.addView(wv, params)
             Log.d(TAG, "Overlay WebView added, no Activity involved. Loading experiment page.")
-            wv.loadUrl("file:///android_asset/aec_background_experiment.html")
+            wv.loadUrl("file:///android_asset/aec_capture_only_experiment.html")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add overlay WebView", e)
             stopSelf()

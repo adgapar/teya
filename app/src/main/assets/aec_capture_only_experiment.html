@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head><title>AEC Capture-Only Experiment</title></head>
+<body>
+<!--
+  Phase 3 spike (thoughts/shared/plans/2026-07-11-webview-chromium-aec-barge-in.md): tests whether
+  getUserMedia conflicts with WakeWordEngine's own concurrent AudioRecord. Deliberately plays NO
+  audio (unlike aec_background_experiment.html's quiet tone) — that tone was a real confound for
+  this specific test, since any audible sound near the mic affects wake-word scoring independent of
+  any true AudioRecord-level conflict. This page only captures, so a live A/B (getUserMedia off vs.
+  on) isolates the AudioRecord question cleanly.
+-->
+<script>
+const SAMPLE_RATE = 16000;
+
+function log(msg) {
+  if (window.Android && window.Android.log) window.Android.log(msg);
+  console.log(msg);
+}
+
+async function main() {
+  log("Capture-only experiment starting.");
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+  await audioCtx.resume();
+  log(`audioCtx.state=${audioCtx.state} sampleRate=${audioCtx.sampleRate}`);
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: false,
+      autoGainControl: false,
+      channelCount: 1,
+    },
+  });
+
+  const track = stream.getAudioTracks()[0];
+  if (track) {
+    log(`track: label="${track.label}" readyState=${track.readyState} muted=${track.muted} enabled=${track.enabled}`);
+  } else {
+    log("WARNING: no audio track in the returned stream");
+  }
+
+  const source = audioCtx.createMediaStreamSource(stream);
+  const processor = audioCtx.createScriptProcessor(2048, 1, 1);
+  const mute = audioCtx.createGain();
+  mute.gain.value = 0; // route through the graph without audibly looping the mic back out
+
+  let peak = 0;
+  let sumSquares = 0;
+  let sampleCount = 0;
+  let totalSamples = 0;
+  processor.onaudioprocess = (e) => {
+    const data = e.inputBuffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      const v = Math.abs(data[i]);
+      if (v > peak) peak = v;
+      sumSquares += data[i] * data[i];
+      sampleCount++;
+    }
+  };
+  source.connect(processor);
+  processor.connect(mute);
+  mute.connect(audioCtx.destination);
+
+  let tick = 0;
+  setInterval(() => {
+    tick++;
+    const rms = sampleCount > 0 ? Math.sqrt(sumSquares / sampleCount) : 0;
+    log(`t=${tick}s audioCtx.state=${audioCtx.state} track.readyState=${track ? track.readyState : "n/a"} `
+      + `samplesThisTick=${sampleCount} totalSamples=${totalSamples + sampleCount} peak=${peak.toFixed(5)} rms=${rms.toFixed(5)}`);
+    totalSamples += sampleCount;
+    sampleCount = 0;
+    sumSquares = 0;
+    peak = 0;
+  }, 1000);
+}
+
+window.addEventListener("load", () => {
+  setTimeout(main, 500);
+});
+</script>
+</body>
+</html>

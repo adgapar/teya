@@ -231,12 +231,20 @@ latency measurement supports. Feed it into the **existing** `SileroVad` pipeline
 — reuse `bargeInAudioBuffer`/`consumeBargeInAudio` as-is, since that logic is about *what happens
 after* cleaned audio exists, independent of which AEC produced it.
 
-**Open question to resolve here, not assume**: does `getUserMedia` on this device conflict with
-`WakeWordEngine`'s own concurrent `AudioRecord` (the documented "Android can't reliably open a
+**Open question — resolved 2026-07-11, not assumed**: does `getUserMedia` on this device conflict
+with `WakeWordEngine`'s own concurrent `AudioRecord` (the documented "Android can't reliably open a
 second concurrent `AudioRecord`" constraint that already shapes this codebase — see
-`WakeWordEngine.kt`'s own doc comment)? If WebView's mic session and `WakeWordEngine`'s mic session
-can't coexist, wake-word detection may need to pause while barge-in-armed (may already effectively
-be true today, but confirm explicitly rather than assume).
+`WakeWordEngine.kt`'s own doc comment)? Tested directly: ran `AecServiceHostedExperimentService`'s
+`getUserMedia` capture (via a new silent `aec_capture_only_experiment.html` — the earlier
+`aec_background_experiment.html`'s quiet tone was a real confound for this specific test) alongside
+the live `HarnessService`'s normal idle `WakeWordEngine` loop, comparing a new raw-peak-amplitude
+diagnostic added to `WakeWordEngine`'s capture loop (independent of wake-word scoring, which is too
+model-weak/inconsistent on this device to isolate a real conflict from an ordinary miss) against a
+no-`getUserMedia` baseline. **Result: no conflict.** Baseline and concurrent raw peak amplitude were
+in the same range (~600-12,000/32767) with the same ambient fluctuation pattern; `getUserMedia`'s
+own peak/rms fluctuated with real sound the whole time too — neither pipeline degraded, flatlined,
+or errored. **Wake-word detection does not need to pause while barge-in-armed for `AudioRecord`-
+contention reasons.** Full log: `docs/experiments.md`.
 
 ### Phase 4 — Remove the gap, enable continuous listening
 
