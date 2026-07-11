@@ -63,10 +63,10 @@ class HarnessService : Service() {
         // when that sentence fell back to playMp3, or the WebView AEC host isn't active this
         // session (see VoicePipeline.isContinuousBargeInActive); sentences streamed through the
         // WebView AEC path skip it entirely since barge-in listens continuously through them.
-        // 350ms leaves ~300ms for speech onset plus Silero's speechDurationMs=50 confirm (see
-        // VoicePipeline.setBargeInArmed) — narrow enough to feel responsive, wide enough to catch
-        // a real interrupt starting right at the end of a sentence.
-        private const val BARGE_IN_GAP_MS = 350L
+        // Default 350ms leaves ~300ms for speech onset plus Silero's speechDurationMs=50 confirm
+        // (see VoicePipeline.setBargeInArmed) — narrow enough to feel responsive, wide enough to
+        // catch a real interrupt starting right at the end of a sentence. Configurable via Admin's
+        // "Voice tuning" section — see ConfigManager.bargeInGapMs.
         private const val MAX_HISTORY = 10           // bounded conversation history sent to the model
         private const val MAX_TOOL_ROUNDS = 4        // cap tool→result→model loops per user turn
         private const val DREAM_REQUEST_CODE = 7     // PendingIntent id for the nightly dream alarm
@@ -92,6 +92,7 @@ class HarnessService : Service() {
     private lateinit var shoppingList: ShoppingListManager
     private lateinit var householdManager: HouseholdManager
     private lateinit var memoryManager: MemoryManager
+    private lateinit var configManager: ConfigManager
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -100,7 +101,7 @@ class HarnessService : Service() {
         Log.d(TAG, "onCreate")
         createNotificationChannel()
         
-        val configManager = ConfigManager(this)
+        configManager = ConfigManager(this)
         allowlistManager = ContactAllowlistManager(this)
         telephonyActuator = TelephonyActuator(this, allowlistManager)
         voicePipeline = VoicePipeline(this)
@@ -442,8 +443,9 @@ class HarnessService : Service() {
                             // barge-in fires either way.
                             val gapNeeded = !streamed || !voicePipeline.isContinuousBargeInActive()
                             if (gapNeeded) {
-                                Log.d(TAG, "Barge-in: listening gap open (${BARGE_IN_GAP_MS}ms)")
-                                delay(BARGE_IN_GAP_MS)
+                                val gapMs = configManager.bargeInGapMs
+                                Log.d(TAG, "Barge-in: listening gap open (${gapMs}ms)")
+                                delay(gapMs)
                                 Log.d(TAG, "Barge-in: listening gap closed")
                             }
                             if (voicePipeline.isInterrupted()) break

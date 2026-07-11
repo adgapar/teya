@@ -105,6 +105,16 @@ class SettingsActivity : ComponentActivity() {
                 initialLanguages = config.languages,
                 initialHomeConfirmed = config.homeConfirmed,
                 initialApiKey = config.mistralApiKey ?: "",
+                initialTuning = VoiceTuning(
+                    vadThreshold = config.vadThreshold.toString(),
+                    vadSpeechDurationMs = config.vadSpeechDurationMs.toString(),
+                    vadSilenceDurationMs = config.vadSilenceDurationMs.toString(),
+                    bargeInGain = config.bargeInGain.toString(),
+                    bargeInGapMs = config.bargeInGapMs.toString(),
+                    wakeWordThreshold = config.wakeWordThreshold.toString(),
+                    wakeWordInputGain = config.wakeWordInputGain.toString(),
+                    wakeWordPatience = config.wakeWordPatience.toString(),
+                ),
                 home = home.value,
                 onToggleRotation = ::toggleOrientation,
                 onClose = ::finish,
@@ -130,10 +140,18 @@ class SettingsActivity : ComponentActivity() {
                         ).show()
                     }
                 },
-                onSave = { members, langs, homeConfirmed, apiKey ->
+                onSave = { members, langs, homeConfirmed, apiKey, tuning ->
                     config.mistralApiKey = apiKey.trim()
                     config.languages = langs
                     config.homeConfirmed = homeConfirmed
+                    tuning.vadThreshold.toFloatOrNull()?.let { config.vadThreshold = it }
+                    tuning.vadSpeechDurationMs.toIntOrNull()?.let { config.vadSpeechDurationMs = it }
+                    tuning.vadSilenceDurationMs.toIntOrNull()?.let { config.vadSilenceDurationMs = it }
+                    tuning.bargeInGain.toFloatOrNull()?.let { config.bargeInGain = it }
+                    tuning.bargeInGapMs.toLongOrNull()?.let { config.bargeInGapMs = it }
+                    tuning.wakeWordThreshold.toFloatOrNull()?.let { config.wakeWordThreshold = it }
+                    tuning.wakeWordInputGain.toFloatOrNull()?.let { config.wakeWordInputGain = it }
+                    tuning.wakeWordPatience.toIntOrNull()?.let { config.wakeWordPatience = it }
                     lifecycleScope.launch {
                         household.saveHousehold(members)
                         finish()
@@ -171,8 +189,25 @@ class SettingsActivity : ComponentActivity() {
 }
 
 private enum class AdminSection(val title: String) {
-    HOUSEHOLD("Household"), MEMORY("Memory"), LANGUAGES("Languages"), HOME("Home location"), API("API")
+    HOUSEHOLD("Household"), MEMORY("Memory"), LANGUAGES("Languages"), HOME("Home location"),
+    VOICE_TUNING("Voice tuning"), API("API")
 }
+
+/**
+ * Working copies of the barge-in/wake-word tuning knobs (see ConfigManager), kept as strings so
+ * the text fields can hold an in-progress edit; parsed back to numbers on Save (an unparseable
+ * value is silently dropped, keeping the previously stored one — see SettingsActivity.onSave).
+ */
+private data class VoiceTuning(
+    val vadThreshold: String,
+    val vadSpeechDurationMs: String,
+    val vadSilenceDurationMs: String,
+    val bargeInGain: String,
+    val bargeInGapMs: String,
+    val wakeWordThreshold: String,
+    val wakeWordInputGain: String,
+    val wakeWordPatience: String,
+)
 
 @Composable
 private fun AdminScreen(
@@ -183,12 +218,13 @@ private fun AdminScreen(
     initialLanguages: List<String>,
     initialHomeConfirmed: Boolean,
     initialApiKey: String,
+    initialTuning: VoiceTuning,
     home: LocationProbe.Home,
     onToggleRotation: () -> Unit,
     onClose: () -> Unit,
     onDeleteMemory: (Int) -> Unit,
     onRunDream: () -> Unit,
-    onSave: (List<Member>, List<String>, Boolean, String) -> Unit,
+    onSave: (List<Member>, List<String>, Boolean, String, VoiceTuning) -> Unit,
 ) {
     Box(Modifier.fillMaxSize().background(TeyaColors.Page)) {
         Column(Modifier.fillMaxSize().systemBarsPadding()) {
@@ -206,6 +242,7 @@ private fun AdminScreen(
             val langs = remember { mutableStateListOf<String>().apply { addAll(initialLanguages) } }
             var apiKey by remember { mutableStateOf(initialApiKey) }
             var homeConfirmed by remember { mutableStateOf(initialHomeConfirmed) }
+            var tuning by remember { mutableStateOf(initialTuning) }
 
             val onMembersChange: (List<Member>) -> Unit = { members.clear(); members.addAll(it) }
             val onToggleLang: (String) -> Unit = { l -> if (l in langs) langs.remove(l) else langs.add(l) }
@@ -215,18 +252,18 @@ private fun AdminScreen(
             Box(Modifier.weight(1f)) {
                 if (portrait) {
                     PortraitContent(members, onMembersChange, langs, onToggleLang, home, homeConfirmed,
-                        { homeConfirmed = it }, apiKey, { apiKey = it }, memoriesLoaded, lastDreamText,
-                        dreamLog, onRunDream, onDeleteMemory)
+                        { homeConfirmed = it }, apiKey, { apiKey = it }, tuning, { tuning = it },
+                        memoriesLoaded, lastDreamText, dreamLog, onRunDream, onDeleteMemory)
                 } else {
                     LandscapeContent(members, onMembersChange, langs, onToggleLang, home, homeConfirmed,
-                        { homeConfirmed = it }, apiKey, { apiKey = it }, memoriesLoaded, lastDreamText,
-                        dreamLog, onRunDream, onDeleteMemory)
+                        { homeConfirmed = it }, apiKey, { apiKey = it }, tuning, { tuning = it },
+                        memoriesLoaded, lastDreamText, dreamLog, onRunDream, onDeleteMemory)
                 }
             }
 
             Box(Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(top = 12.dp, bottom = 20.dp)) {
                 PrimaryButton("Save changes", modifier = Modifier.fillMaxWidth()) {
-                    onSave(members.toList(), langs.toList(), homeConfirmed, apiKey)
+                    onSave(members.toList(), langs.toList(), homeConfirmed, apiKey, tuning)
                 }
             }
         }
@@ -268,6 +305,7 @@ private fun PortraitContent(
     langs: List<String>, onToggleLang: (String) -> Unit,
     home: LocationProbe.Home, homeConfirmed: Boolean, onHomeConfirmedChange: (Boolean) -> Unit,
     apiKey: String, onApiKeyChange: (String) -> Unit,
+    tuning: VoiceTuning, onTuningChange: (VoiceTuning) -> Unit,
     memories: List<MemoryEntry>?, lastDreamText: String?, dreamLog: List<String>, onRunDream: () -> Unit, onDeleteMemory: (Int) -> Unit,
 ) {
     Column(
@@ -279,6 +317,7 @@ private fun PortraitContent(
         SectionBlock(AdminSection.HOME) {
             HomeConfirmCard(home.city, home.coords, homeConfirmed, onHomeConfirmedChange)
         }
+        SectionBlock(AdminSection.VOICE_TUNING) { VoiceTuningSectionBody(tuning, onTuningChange) }
         SectionBlock(AdminSection.API) { ApiSectionBody(apiKey, onApiKeyChange) }
     }
 }
@@ -289,6 +328,7 @@ private fun LandscapeContent(
     langs: List<String>, onToggleLang: (String) -> Unit,
     home: LocationProbe.Home, homeConfirmed: Boolean, onHomeConfirmedChange: (Boolean) -> Unit,
     apiKey: String, onApiKeyChange: (String) -> Unit,
+    tuning: VoiceTuning, onTuningChange: (VoiceTuning) -> Unit,
     memories: List<MemoryEntry>?, lastDreamText: String?, dreamLog: List<String>, onRunDream: () -> Unit, onDeleteMemory: (Int) -> Unit,
 ) {
     var selected by remember { mutableStateOf(AdminSection.HOUSEHOLD) }
@@ -314,6 +354,7 @@ private fun LandscapeContent(
                 AdminSection.MEMORY -> MemorySectionBody(memories, members, lastDreamText, dreamLog, onRunDream, onDeleteMemory)
                 AdminSection.LANGUAGES -> LanguagePicker(langs.toSet(), onToggleLang)
                 AdminSection.HOME -> HomeConfirmCard(home.city, home.coords, homeConfirmed, onHomeConfirmedChange)
+                AdminSection.VOICE_TUNING -> VoiceTuningSectionBody(tuning, onTuningChange)
                 AdminSection.API -> ApiSectionBody(apiKey, onApiKeyChange)
             }
         }
@@ -359,4 +400,39 @@ private fun HouseholdSectionBody(members: List<Member>, onMembersChange: (List<M
 @Composable
 private fun ApiSectionBody(apiKey: String, onApiKeyChange: (String) -> Unit) {
     TeyaField(apiKey, onApiKeyChange, "sk-…", label = "Mistral API key", isPassword = true)
+}
+
+@Composable
+private fun VoiceTuningSectionBody(tuning: VoiceTuning, onChange: (VoiceTuning) -> Unit) {
+    val numeric = androidx.compose.ui.text.input.KeyboardType.Decimal
+    Column {
+        Note("Barge-in and wake-word sensitivity. Rebuild-free — takes effect on the next turn.")
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            TeyaField(tuning.vadThreshold, { onChange(tuning.copy(vadThreshold = it)) }, "0.7",
+                label = "Barge-in VAD threshold", modifier = Modifier.weight(1f), keyboardType = numeric)
+            TeyaField(tuning.bargeInGain, { onChange(tuning.copy(bargeInGain = it)) }, "6.0",
+                label = "Barge-in mic gain", modifier = Modifier.weight(1f), keyboardType = numeric)
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            TeyaField(tuning.vadSpeechDurationMs, { onChange(tuning.copy(vadSpeechDurationMs = it)) }, "50",
+                label = "VAD speech confirm (ms)", modifier = Modifier.weight(1f), keyboardType = numeric)
+            TeyaField(tuning.vadSilenceDurationMs, { onChange(tuning.copy(vadSilenceDurationMs = it)) }, "300",
+                label = "VAD silence reset (ms)", modifier = Modifier.weight(1f), keyboardType = numeric)
+        }
+        Spacer(Modifier.height(12.dp))
+        TeyaField(tuning.bargeInGapMs, { onChange(tuning.copy(bargeInGapMs = it)) }, "350",
+            label = "Barge-in fallback gap (ms)", keyboardType = numeric)
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            TeyaField(tuning.wakeWordThreshold, { onChange(tuning.copy(wakeWordThreshold = it)) }, "0.2",
+                label = "Wake word threshold", modifier = Modifier.weight(1f), keyboardType = numeric)
+            TeyaField(tuning.wakeWordInputGain, { onChange(tuning.copy(wakeWordInputGain = it)) }, "6.0",
+                label = "Wake word mic gain", modifier = Modifier.weight(1f), keyboardType = numeric)
+        }
+        Spacer(Modifier.height(12.dp))
+        TeyaField(tuning.wakeWordPatience, { onChange(tuning.copy(wakeWordPatience = it)) }, "1",
+            label = "Wake word patience (frames)", keyboardType = numeric)
+    }
 }

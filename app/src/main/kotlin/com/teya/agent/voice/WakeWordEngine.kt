@@ -9,6 +9,7 @@ import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
 import android.util.Log
+import com.teya.agent.harness.ConfigManager
 import org.tensorflow.lite.Interpreter
 import java.io.FileInputStream
 import java.nio.ByteBuffer
@@ -67,20 +68,21 @@ class WakeWordEngine(
         private const val WAKE_EMBEDDINGS = 16    // embeddings the classifier consumes
         private const val WAKE_INPUT = WAKE_EMBEDDINGS * EMB_DIM // 1536
 
-        private const val THRESHOLD = 0.2f        // pre-trained hey_jarvis scores this setup weakly
-                                                  // (~0.1-0.43, inconsistent); ambient peaks ~0.01-0.1.
-                                                  // A custom "Hey Teya" model is the durable fix.
-
-        private const val PATIENCE = 1            // frames over threshold before firing; 1 is safe here
-                                                  // (ambient peaks ~0.03, threshold 0.2 — huge margin)
-        private const val INPUT_GAIN = 6.0f       // software boost before the mel model — AGC isn't
-                                                  // available on this device, so we lift the quiet
-                                                  // far-field signal here (NoiseSuppressor cleans first)
+        // THRESHOLD, PATIENCE, INPUT_GAIN moved to ConfigManager (Admin's "Voice tuning" section) —
+        // read live below via `config` so retuning doesn't need a rebuild+install cycle. Defaults:
+        // threshold 0.2f (pre-trained hey_jarvis scores this setup weakly, ~0.1-0.43, inconsistent;
+        // ambient peaks ~0.01-0.1 — a custom "Hey Teya" model is the durable fix), patience 1 (safe
+        // here — ambient peaks ~0.03, threshold 0.2 — huge margin), input gain 6.0f (software boost
+        // before the mel model — AGC isn't available on this device, NoiseSuppressor cleans first).
         private const val COOLDOWN_CHUNKS = 25    // ~2 s suppression after a detection
 
         private const val MEL_BUFFER_MAX = 970    // ~10 s of mel frames
         private const val EMB_BUFFER_MAX = 120    // ~10 s of embeddings
     }
+
+    // Read live (not cached) at each use site so Admin's "Voice tuning" section takes effect
+    // without restarting the service.
+    private val config = ConfigManager(context)
 
     private var melspec: Interpreter? = null
     private var embedding: Interpreter? = null
@@ -313,9 +315,10 @@ class WakeWordEngine(
         val melOut = this.melOut ?: return
 
         // 1) Melspectrogram. Feed raw int16 sample values as float32 (NOT normalized to ±1).
+        val inputGain = config.wakeWordInputGain
         melIn.rewind()
         for (i in 0 until CHUNK) {
-            melIn.putFloat((chunk[i] * INPUT_GAIN).coerceIn(-32768f, 32767f))
+            melIn.putFloat((chunk[i] * inputGain).coerceIn(-32768f, 32767f))
         }
         melIn.rewind()
         melOut.rewind()
@@ -377,8 +380,8 @@ class WakeWordEngine(
         }
         if (cooldown > 0) cooldown--
 
-        positiveStreak = if (prob >= THRESHOLD) positiveStreak + 1 else 0
-        if (positiveStreak >= PATIENCE && cooldown == 0) {
+        positiveStreak = if (prob >= config.wakeWordThreshold) positiveStreak + 1 else 0
+        if (positiveStreak >= config.wakeWordPatience && cooldown == 0) {
             Log.d(TAG, "Wake word detected! score=$prob")
             positiveStreak = 0
             cooldown = COOLDOWN_CHUNKS

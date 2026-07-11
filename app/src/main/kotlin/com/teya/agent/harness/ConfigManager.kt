@@ -67,4 +67,49 @@ class ConfigManager(context: Context) {
     fun isConfigured(): Boolean {
         return !mistralApiKey.isNullOrBlank()
     }
+
+    // --- Voice tuning (barge-in VAD + wake word) ---
+    // Exposed via Admin's "Voice tuning" section so retuning (e.g. for a different device's
+    // chipset/mic) doesn't require a rebuild+install cycle. Defaults match the values these knobs
+    // were hardcoded to before this section existed.
+
+    /** Silero VAD speech-probability threshold (0-1) for barge-in to treat a frame as speech. */
+    var vadThreshold: Float
+        get() = prefs.getFloat("vad_threshold", 0.7f)
+        set(value) = prefs.edit().putFloat("vad_threshold", value).apply()
+
+    /** Consecutive speech-ms required before barge-in's VAD fires (debounces one-frame spikes). */
+    var vadSpeechDurationMs: Int
+        get() = prefs.getInt("vad_speech_duration_ms", 50)
+        set(value) = prefs.edit().putInt("vad_speech_duration_ms", value).apply()
+
+    /** Trailing silence-ms before barge-in's VAD resets to non-speech. */
+    var vadSilenceDurationMs: Int
+        get() = prefs.getInt("vad_silence_duration_ms", 300)
+        set(value) = prefs.edit().putInt("vad_silence_duration_ms", value).apply()
+
+    /** Software mic gain applied to barge-in audio before VAD scoring (device has no hardware AGC). */
+    var bargeInGain: Float
+        get() = prefs.getFloat("barge_in_gain", 6.0f)
+        set(value) = prefs.edit().putFloat("barge_in_gain", value).apply()
+
+    /** Pause (ms) after each spoken sentence on the gap-gated barge-in fallback, to catch an interrupt. */
+    var bargeInGapMs: Long
+        get() = prefs.getLong("barge_in_gap_ms", 350L)
+        set(value) = prefs.edit().putLong("barge_in_gap_ms", value).apply()
+
+    /** Wake-word detection probability threshold (0-1) — lower fires more easily but risks false positives. */
+    var wakeWordThreshold: Float
+        get() = prefs.getFloat("wake_word_threshold", 0.2f)
+        set(value) = prefs.edit().putFloat("wake_word_threshold", value).apply()
+
+    /** Software mic gain applied before the wake-word model (device has no hardware AGC). */
+    var wakeWordInputGain: Float
+        get() = prefs.getFloat("wake_word_input_gain", 6.0f)
+        set(value) = prefs.edit().putFloat("wake_word_input_gain", value).apply()
+
+    /** Consecutive over-threshold frames required before the wake word fires. */
+    var wakeWordPatience: Int
+        get() = prefs.getInt("wake_word_patience", 1)
+        set(value) = prefs.edit().putInt("wake_word_patience", value).apply()
 }

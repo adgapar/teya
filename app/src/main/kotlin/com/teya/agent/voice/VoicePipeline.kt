@@ -11,6 +11,7 @@ import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.util.Log
 import com.teya.agent.brain.MistralClient
+import com.teya.agent.harness.ConfigManager
 import com.teya.agent.voice.aec.WebViewAecHost
 import com.teya.agent.voice.vad.SileroVad
 import io.ktor.utils.io.jvm.javaio.*
@@ -45,8 +46,11 @@ class VoicePipeline(private val context: Context) {
         private const val BARGE_IN_AUDIO_BUFFER_MAX_SAMPLES = SAMPLE_RATE * 3 // ~3s cap — see bargeInAudioBuffer's doc comment
         private const val MAX_RECORDING_MS = 10000                        // hard cap on a single command
         private const val TTS_SAMPLE_RATE = 24000                         // Voxtral PCM output rate
-        private const val BARGE_IN_GAIN = 6.0f  // matches WakeWordEngine.INPUT_GAIN — no hardware AGC
     }
+
+    // Read live (not cached) at each use site below so Admin's "Voice tuning" section takes
+    // effect on the next arm/chunk without restarting the service.
+    private val config = ConfigManager(context)
 
     private val wakeWordEngine = WakeWordEngine(
         context,
@@ -263,7 +267,12 @@ class VoicePipeline(private val context: Context) {
                     // gated out entirely on the fallback path, or suppressed by Chromium's echo
                     // cancellation on the WebView path). speechDurationMs is kept short since the
                     // gap-gated fallback's listening window is brief.
-                    sileroVad = SileroVad(context, threshold = 0.7f, speechDurationMs = 50, silenceDurationMs = 300)
+                    sileroVad = SileroVad(
+                        context,
+                        threshold = config.vadThreshold,
+                        speechDurationMs = config.vadSpeechDurationMs,
+                        silenceDurationMs = config.vadSilenceDurationMs,
+                    )
                     wakeWordEngine.bargeInArmed = true
                     Log.d("VoicePipeline", "Barge-in: armed (local Silero VAD)")
                 } catch (e: Exception) {
@@ -375,8 +384,9 @@ class VoicePipeline(private val context: Context) {
 
         if (bargeInFired) return // already interrupted this window; wait for disarm
 
+        val gain = config.bargeInGain
         val gained = ShortArray(chunk.size) { i ->
-            (chunk[i] * BARGE_IN_GAIN).coerceIn(Short.MIN_VALUE.toFloat(), Short.MAX_VALUE.toFloat()).toInt().toShort()
+            (chunk[i] * gain).coerceIn(Short.MIN_VALUE.toFloat(), Short.MAX_VALUE.toFloat()).toInt().toShort()
         }
 
         synchronized(vadLock) {
@@ -460,8 +470,9 @@ class VoicePipeline(private val context: Context) {
         }
         if (cleanedPeak > vadPeakCleanedAmplitude) vadPeakCleanedAmplitude = cleanedPeak
 
+        val gain = config.bargeInGain
         val gained = ShortArray(cleanedChunk.size) { i ->
-            (cleanedChunk[i] * BARGE_IN_GAIN).coerceIn(Short.MIN_VALUE.toFloat(), Short.MAX_VALUE.toFloat()).toInt().toShort()
+            (cleanedChunk[i] * gain).coerceIn(Short.MIN_VALUE.toFloat(), Short.MAX_VALUE.toFloat()).toInt().toShort()
         }
 
         synchronized(vadLock) {

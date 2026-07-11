@@ -153,6 +153,7 @@ fun TeyaField(
     isPassword: Boolean = false,
     label: String? = null,
     optional: String? = null,
+    keyboardType: androidx.compose.ui.text.input.KeyboardType = androidx.compose.ui.text.input.KeyboardType.Text,
 ) {
     Column(modifier) {
         if (label != null) {
@@ -168,6 +169,7 @@ fun TeyaField(
             visualTransformation = if (isPassword)
                 androidx.compose.ui.text.input.PasswordVisualTransformation()
             else androidx.compose.ui.text.input.VisualTransformation.None,
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = TeyaColors.Ink,
                 unfocusedTextColor = TeyaColors.Ink,
