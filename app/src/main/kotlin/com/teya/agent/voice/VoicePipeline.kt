@@ -22,6 +22,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -88,6 +89,13 @@ class VoicePipeline(private val context: Context) {
         // (Phase 2/3) — this only proves the bidirectional bridge scaffolding. Default false: this
         // must not change any shipped behavior until later phases are validated.
         const val WEBVIEW_AEC_HOST_ENABLED = false
+
+        // Phase 2 kill-switch: routes streamToSpeaker's real TTS playback through the WebView's Web
+        // Audio scheduler instead of the local AudioTrack (see streamToSpeakerViaWebView). Only takes
+        // effect when WEBVIEW_AEC_HOST_ENABLED is also true (the host must exist to push chunks
+        // into) — independent flag so Phase 1's bridge-only test isn't entangled with actually
+        // rerouting audible playback. Default false, same reasoning as WEBVIEW_AEC_HOST_ENABLED.
+        const val WEBVIEW_RENDER_ENABLED = false
     }
 
     private val wakeWordEngine = WakeWordEngine(
@@ -164,10 +172,12 @@ class VoicePipeline(private val context: Context) {
     @Volatile private var aec3: NativeAec3? = null
     private val aecLock = Any()
 
-    // Phase 1 scaffolding for the WebView/Chromium AEC replacement (see WEBVIEW_AEC_HOST_ENABLED's
-    // doc comment) — session-scoped like aec3 above, but not yet touched by any concurrent
-    // render/capture thread (no real audio flows through it yet), so unlike aec3 it needs no lock
-    // of its own today. That will change once Phase 2/3 wire real render/capture through it.
+    // Phase 1/2 scaffolding for the WebView/Chromium AEC replacement (see WEBVIEW_AEC_HOST_ENABLED's
+    // doc comment) — session-scoped like aec3 above. Only ever constructed/torn down from the
+    // harness's coroutine thread (startAecSession/endAecSession), and Phase 2's real render calls
+    // (streamToSpeakerViaWebView) also only run from that same conversation's coroutine chain (never
+    // concurrently with a session start/end), so unlike aec3 this doesn't need its own lock yet —
+    // that changes once Phase 3 wires real capture through it from WakeWordEngine's thread.
     private var webViewAecHost: WebViewAecHost? = null
     private var renderResampler = Resampler()
     // Set once — only if still 0L — the first time analyzeRender is actually fed a frame this
@@ -182,6 +192,12 @@ class VoicePipeline(private val context: Context) {
     @Volatile private var currentMediaPlayer: MediaPlayer? = null
     @Volatile private var playbackContinuation: CancellableContinuation<Unit>? = null
     @Volatile private var interruptRequested = false
+    // Phase 2's WebView render path has no AudioTrack of its own for forwardArmedChunk's self-echo
+    // gate (currentTrack/currentMediaPlayer above) to key off — this fills that role instead, read
+    // on WakeWordEngine's capture thread and written from streamToSpeakerViaWebView's IO thread,
+    // hence @Volatile. Phase 3 hasn't wired real capture-side echo cancellation for this path yet,
+    // so it gates unconditionally (like currentMediaPlayer), not AEC3-exempted (like currentTrack).
+    @Volatile private var webViewRenderActive = false
 
     fun setMistralClient(client: MistralClient) {
         this.mistralClient = client
@@ -260,6 +276,16 @@ class VoicePipeline(private val context: Context) {
             currentMediaPlayer?.let { if (it.isPlaying) it.stop() }
         } catch (_: Exception) {}
         currentMediaPlayer = null
+        // Phase 2's WebView render path has no local AudioTrack/MediaPlayer to pause/stop above —
+        // stopPlayback() suspends (hops to the main thread), so it can't run inline on whatever
+        // thread interrupt() itself is called from (WakeWordEngine's capture thread). Fire-and-forget
+        // on its own thread, same pattern as playTone().
+        if (webViewRenderActive) {
+            val host = webViewAecHost
+            if (host != null) {
+                Thread { runBlocking { host.stopPlayback() } }.start()
+            }
+        }
         playbackContinuation?.let { if (it.isActive) it.resume(Unit) }
         playbackContinuation = null
     }
@@ -470,7 +496,9 @@ class VoicePipeline(private val context: Context) {
      * AEC3 keeps converging via [cleanCaptureChunk] regardless, but the result isn't trusted
      * (passed to Silero / allowed to fire [bargeInFired]) until the session-wide lead-in has
      * elapsed. Kill-switch: when [AEC3_BARGE_IN_ENABLED] is `false`, this function behaves exactly
-     * as it did before AEC3-based barge-in existed (gap-gated only).
+     * as it did before AEC3-based barge-in existed (gap-gated only). [webViewRenderActive] (Phase 2's
+     * WebView render path) gates the same unconditional way [currentMediaPlayer] does — no
+     * capture-side echo cancellation is wired for it yet (that's Phase 3).
      */
     private fun forwardArmedChunk(chunk: ShortArray) {
         // Both the self-echo-gate exemption and the lead-in gate below only apply when the
@@ -480,6 +508,7 @@ class VoicePipeline(private val context: Context) {
         val aecActive = AEC3_BARGE_IN_ENABLED && aec3 != null
 
         if (currentMediaPlayer != null) return // mp3 fallback: no AEC3 coverage, always gap-gated
+        if (webViewRenderActive) return // Phase 2 WebView render path: no capture-side echo cancellation wired yet (Phase 3), always gap-gated
         if (currentTrack != null && !aecActive) return // streaming path: gated unless AEC3 is actively cleaning it
 
         // Diagnostic peak is measured on the true raw mic chunk (pre-AEC3, pre-gain) — its purpose
@@ -814,6 +843,61 @@ class VoicePipeline(private val context: Context) {
     }
 
     /**
+     * Dispatches to Phase 2's WebView render path (see [WEBVIEW_RENDER_ENABLED]'s doc comment) when
+     * both its flag and [WEBVIEW_AEC_HOST_ENABLED] are on and a host actually exists this session,
+     * falling back to the always-on [streamToSpeakerViaAudioTrack] otherwise — same
+     * graceful-degrade pattern as every other kill-switch in this class.
+     */
+    private suspend fun streamToSpeaker(client: MistralClient, text: String): Boolean {
+        val host = webViewAecHost
+        return if (WEBVIEW_AEC_HOST_ENABLED && WEBVIEW_RENDER_ENABLED && host != null) {
+            streamToSpeakerViaWebView(client, text, host)
+        } else {
+            streamToSpeakerViaAudioTrack(client, text)
+        }
+    }
+
+    /**
+     * Phase 2 render path: streams the same Voxtral PCM chunks [streamToSpeakerViaAudioTrack] would
+     * write to an AudioTrack into [WebViewAecHost.pushRenderChunk] instead — no int16 conversion
+     * needed here (Web Audio wants float32 directly), and no AEC3 render-feed bookkeeping (Chromium's
+     * own `getUserMedia({echoCancellation:true})` doesn't need an explicit render reference fed to
+     * it the way our own NativeAec3 does — see the plan's architecture overview). [webViewRenderActive]
+     * substitutes for [currentTrack] as [forwardArmedChunk]'s self-echo gate signal, since this path
+     * has no AudioTrack of its own.
+     */
+    private suspend fun streamToSpeakerViaWebView(
+        client: MistralClient,
+        text: String,
+        host: WebViewAecHost,
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            webViewRenderActive = true
+            var totalSamples = 0
+            val got = client.streamSpeechPcm(text) { floats ->
+                if (!interruptRequested) {
+                    host.pushRenderChunk(floats, TTS_SAMPLE_RATE)
+                    totalSamples += floats.size
+                }
+            }
+            if (interruptRequested) return@withContext true // stopped on purpose, not a failure
+            if (!got || totalSamples == 0) return@withContext false
+
+            val finished = host.awaitRenderPlaybackDone()
+            if (!finished) {
+                Log.w("VoicePipeline", "WebView render: playback did not finish within timeout")
+            }
+            Log.d("VoicePipeline", "WebView render: playback finished ($totalSamples samples)")
+            true
+        } catch (e: Exception) {
+            Log.e("VoicePipeline", "WebView render streaming error", e)
+            false
+        } finally {
+            webViewRenderActive = false
+        }
+    }
+
+    /**
      * Streams Voxtral PCM (float32/24kHz/mono) into an AudioTrack as it arrives. Converts each
      * chunk to int16 (universally supported; float32 output isn't) and routes as USAGE_MEDIA.
      * Calls stop() before draining so short clips (e.g. "Yes?") play out.
@@ -830,7 +914,7 @@ class VoicePipeline(private val context: Context) {
      * retrying — a bigger change than a quick fix, and it broke real (audible) TTS twice, which
      * matters more than barge-in.
      */
-    private suspend fun streamToSpeaker(client: MistralClient, text: String): Boolean =
+    private suspend fun streamToSpeakerViaAudioTrack(client: MistralClient, text: String): Boolean =
         withContext(Dispatchers.IO) {
             var track: AudioTrack? = null
             var renderPollerJob: Job? = null

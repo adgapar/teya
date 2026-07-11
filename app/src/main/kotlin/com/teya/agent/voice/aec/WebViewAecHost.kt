@@ -3,6 +3,7 @@ package com.teya.agent.voice.aec
 import android.content.Context
 import android.graphics.PixelFormat
 import android.provider.Settings
+import android.util.Base64
 import android.util.Log
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
@@ -11,9 +12,14 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.coroutines.resume
 
 /**
  * Phase 1 of the WebView/Chromium AEC plan
@@ -23,15 +29,18 @@ import java.util.concurrent.ConcurrentHashMap
  * with zero Activity ever in the foreground by the Phase 0 spike
  * (`experiments/AecServiceHostedExperimentService`, see docs/experiments.md's 2026-07-11 entries).
  *
- * No real render/capture audio flows through here yet (that's Phase 2/3) — this only proves the
- * bidirectional bridge: [measureRoundTripLatency] pushes into the page (Kotlin->JS, via
- * `evaluateJavascript`) and awaits the page pulling back (JS->Kotlin, via the [AecBridge] interface
- * `assets/aec_bridge.html` calls), so later phases know the viable chunk size/cadence for real
- * audio plumbing.
+ * Phase 1 proved the bidirectional bridge: [measureRoundTripLatency] pushes into the page
+ * (Kotlin->JS, via `evaluateJavascript`) and awaits the page pulling back (JS->Kotlin, via the
+ * [AecBridge] interface `assets/aec_bridge.html` calls) — confirmed 9ms round trip live (see
+ * docs/experiments.md), plenty of headroom for real audio. Phase 2 builds the render path on top of
+ * that same channel: [pushRenderChunk] streams real TTS PCM into the page's Web Audio scheduler,
+ * [awaitRenderPlaybackDone] is the JS-side equivalent of `AudioTrack.playbackHeadPosition`'s
+ * drain-loop poll, and [stopPlayback] is this path's `interrupt()` equivalent. Capture (Phase 3)
+ * doesn't exist yet.
  *
  * All WebView calls must happen on the main thread (this is Android's own requirement, not just a
- * style choice) — [start]/[stop]/[measureRoundTripLatency] all hop to [Dispatchers.Main]
- * internally, so callers (VoicePipeline's coroutine-based session lifecycle) don't need to care.
+ * style choice) — every public suspend function here hops to [Dispatchers.Main] internally, so
+ * callers (VoicePipeline's coroutine-based session lifecycle) don't need to care.
  */
 class WebViewAecHost(private val context: Context) {
 
@@ -39,6 +48,13 @@ class WebViewAecHost(private val context: Context) {
         private const val TAG = "WebViewAecHost"
         private const val PING_TIMEOUT_MS = 2000L
         private const val PAGE_LOAD_TIMEOUT_MS = 3000L
+        // Phase 2 render-path polling cadence/timeout — mirrors streamToSpeaker's own
+        // AudioTrack.playbackHeadPosition drain-loop poll (VoicePipeline.AEC3_RENDER_POLL_MS is
+        // 10ms; 20ms here since this poll round-trips through evaluateJavascript instead of reading
+        // a local field, and Phase 1 measured ~9ms one-way overhead for that round trip).
+        private const val RENDER_POLL_MS = 20L
+        private const val RENDER_DONE_THRESHOLD_MS = 5.0
+        private const val RENDER_MAX_WAIT_MS = 15000L
     }
 
     private var webView: WebView? = null
@@ -132,6 +148,56 @@ class WebViewAecHost(private val context: Context) {
         val completed = withTimeoutOrNull(PING_TIMEOUT_MS) { deferred.await(); true }
         pending.remove(id)
         return if (completed == true) System.currentTimeMillis() - sentAt else null
+    }
+
+    /**
+     * Phase 2 render path: pushes one streamed TTS PCM chunk (float32, range [-1, 1], as Mistral's
+     * own `streamSpeechPcm` already yields) into the page's Web Audio scheduler
+     * (`assets/aec_bridge.html`'s `pushRenderChunk`) as base64 — `evaluateJavascript` takes a JS
+     * expression string, so this is the simplest encoding that survives string interpolation
+     * without escaping concerns. No conversion needed on this side: unlike the AudioTrack path,
+     * Web Audio wants float32 directly, not int16.
+     */
+    suspend fun pushRenderChunk(floats: FloatArray, sampleRate: Int) = withContext(Dispatchers.Main) {
+        val wv = webView ?: return@withContext
+        val bytes = ByteArray(floats.size * 4)
+        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().put(floats)
+        val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+        wv.evaluateJavascript("pushRenderChunk('$b64', $sampleRate)", null)
+    }
+
+    /**
+     * Polls the page's scheduled-playback clock (`getPlaybackRemainingMs`) until everything pushed
+     * via [pushRenderChunk] has actually played — the JS-side equivalent of streamToSpeaker's
+     * `AudioTrack.playbackHeadPosition` drain-loop. Returns `false` on timeout (mirrors that
+     * drain-loop's own no-progress bail) rather than hanging forever.
+     */
+    suspend fun awaitRenderPlaybackDone(): Boolean {
+        if (webView == null) return false
+        val deadline = System.currentTimeMillis() + RENDER_MAX_WAIT_MS
+        while (System.currentTimeMillis() < deadline) {
+            val remainingMs = evalJsNumber("getPlaybackRemainingMs()")
+            if (remainingMs == null || remainingMs <= RENDER_DONE_THRESHOLD_MS) return true
+            delay(RENDER_POLL_MS)
+        }
+        return false
+    }
+
+    /** Immediately stops all scheduled/playing render audio — the WebView path's [interrupt] equivalent. */
+    suspend fun stopPlayback() = withContext(Dispatchers.Main) {
+        webView?.evaluateJavascript("stopAllPlayback()", null)
+    }
+
+    /** Runs [expr] on the main thread and parses its JSON result as a number, or `null` on failure. */
+    private suspend fun evalJsNumber(expr: String): Double? {
+        val wv = webView ?: return null
+        return withContext(Dispatchers.Main) {
+            suspendCancellableCoroutine { cont ->
+                wv.evaluateJavascript(expr) { result ->
+                    if (cont.isActive) cont.resume(result?.toDoubleOrNull())
+                }
+            }
+        }
     }
 
     private inner class AecBridge {

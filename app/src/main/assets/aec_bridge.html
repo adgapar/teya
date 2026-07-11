@@ -3,12 +3,11 @@
 <head><title>AEC Bridge</title></head>
 <body>
 <!--
-  Phase 1 scaffolding (thoughts/shared/plans/2026-07-11-webview-chromium-aec-barge-in.md): proves a
+  Phase 1/2 scaffolding (thoughts/shared/plans/2026-07-11-webview-chromium-aec-barge-in.md): proves a
   persistent, bidirectional Kotlin<->JS bridge over the WindowManager-hosted WebView confirmed
-  working in Phase 0 (see WebViewAecHost.kt). No real audio here yet — just push (Kotlin calls
-  onPing via evaluateJavascript) and pull (this page calls back into Kotlin's AecBridge interface),
-  so WebViewAecHost can measure round-trip latency before Phase 2/3 build real render/capture
-  plumbing on top of this same channel.
+  working in Phase 0 (see WebViewAecHost.kt) — push (Kotlin calls onPing via evaluateJavascript) and
+  pull (this page calls back into Kotlin's AecBridge interface) — plus Phase 2's render path: real
+  TTS PCM chunks scheduled gaplessly through Web Audio instead of Kotlin's AudioTrack.
 -->
 <script>
 function log(msg) {
@@ -22,6 +21,63 @@ function onPing(id) {
   if (window.AecBridge && window.AecBridge.onPong) {
     window.AecBridge.onPong(id);
   }
+}
+
+// Phase 2 render path: mirrors streamToSpeaker's own streaming AudioTrack.write loop, just via Web
+// Audio instead. audioCtx is created once at the TTS sample rate (24kHz) on the first chunk, so no
+// resampling is needed on either side. Chunks are scheduled back-to-back via nextStartTime (clamped
+// to audioCtx.currentTime so a slow-arriving chunk doesn't produce a negative/past start time,
+// which AudioBufferSourceNode.start() throws on) — this is the gap-avoidance every streaming-audio
+// player needs, the same class of problem streamToSpeaker's own buffer/underrun handling solves.
+let audioCtx = null;
+let nextStartTime = 0;
+let scheduledSources = [];
+
+function ensureAudioCtx(sampleRate) {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate });
+    nextStartTime = audioCtx.currentTime;
+  }
+  return audioCtx;
+}
+
+function base64ToFloat32Array(b64) {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Float32Array(bytes.buffer);
+}
+
+// Called by Kotlin (WebViewAecHost.pushRenderChunk) once per streamed TTS chunk — schedules it
+// immediately after whatever's already queued, never audibly overlapping or gapping as long as
+// Kotlin keeps up with the network stream (same assumption streamToSpeaker's AudioTrack path makes).
+function pushRenderChunk(b64, sampleRate) {
+  const ctx = ensureAudioCtx(sampleRate);
+  const floats = base64ToFloat32Array(b64);
+  const buffer = ctx.createBuffer(1, floats.length, sampleRate);
+  buffer.copyToChannel(floats, 0);
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(ctx.destination);
+  const startAt = Math.max(nextStartTime, ctx.currentTime);
+  source.start(startAt);
+  scheduledSources.push(source);
+  nextStartTime = startAt + buffer.duration;
+}
+
+// Polled by Kotlin (WebViewAecHost.awaitRenderPlaybackDone) — the JS-side equivalent of
+// streamToSpeaker's AudioTrack.playbackHeadPosition drain-loop poll.
+function getPlaybackRemainingMs() {
+  if (!audioCtx) return 0;
+  return Math.max(0, (nextStartTime - audioCtx.currentTime) * 1000);
+}
+
+// Called by Kotlin (WebViewAecHost.stopPlayback) on interrupt — mirrors currentTrack.pause()+flush()
+// for the AudioTrack path. Stops every still-playing/pending scheduled source immediately.
+function stopAllPlayback() {
+  scheduledSources.forEach((s) => { try { s.stop(); } catch (_) {} });
+  scheduledSources = [];
+  nextStartTime = audioCtx ? audioCtx.currentTime : 0;
 }
 
 window.addEventListener("load", () => log("AEC bridge page loaded."));

@@ -185,7 +185,7 @@ excerpts: `docs/experiments.md`.
 9ms leaves generous headroom for Phase 2/3's real audio chunk cadence (at 16kHz, even a 10ms frame
 is far above this latency floor) — no reason to widen chunk size for bridge-latency reasons alone.
 
-### Phase 2 — Render path: TTS audio into the WebView
+### Phase 2 — Render path: TTS audio into the WebView — ✅ DONE 2026-07-11
 
 Replace (or run alongside, behind a flag) `streamToSpeaker`'s `AudioTrack` writes with pushing the
 same PCM chunks (currently 24kHz float32 from `client.streamSpeechPcm`) into the WebView page via
@@ -198,6 +198,29 @@ Kotlin can know when a sentence has actually finished playing — e.g. schedule 
 
 **Test in isolation**: does TTS still sound correct (no glitches, no added latency perceptible vs.
 today) with render going through this path, before touching capture at all.
+
+**Result: done.** `streamToSpeaker` is now a small dispatcher choosing between the original
+(renamed) `streamToSpeakerViaAudioTrack` and a new `streamToSpeakerViaWebView`, gated by a
+`WEBVIEW_RENDER_ENABLED` kill-switch (default `false`, requires `WEBVIEW_AEC_HOST_ENABLED` too).
+The WebView path pushes each PCM chunk via `WebViewAecHost.pushRenderChunk` — no int16 conversion
+needed (Web Audio wants float32 directly) and no explicit AEC3-style render-feed bookkeeping
+(Chromium's own `getUserMedia` doesn't need one). `assets/aec_bridge.html`'s scheduler uses a
+`nextStartTime` clock (clamped to `audioCtx.currentTime`) instead of `onended` bridging — simpler,
+and matches the plan's "poll the drain position" framing more directly:
+`getPlaybackRemainingMs()` is polled from `WebViewAecHost.awaitRenderPlaybackDone()` the same way
+`streamToSpeakerViaAudioTrack` polls `playbackHeadPosition`.
+
+One real gap found and closed before testing, not after: this path has no `AudioTrack`/
+`MediaPlayer` for `forwardArmedChunk`'s self-echo gate or `interrupt()` to key off, so a new
+`webViewRenderActive` flag fills that role — gates unconditionally (no capture-side echo
+cancellation exists yet, that's Phase 3) and `interrupt()` now also calls
+`WebViewAecHost.stopPlayback()` (which calls the page's `stopAllPlayback()`) to actually cut the
+audio, not just flip a flag with no effect.
+
+Live-tested with both flags on: a short "Yes?" prompt (user confirmed hearing it clearly) and a
+real follow-up ("a short fact") producing a 9.76s / 234,240-sample multi-sentence response, both
+played entirely through Web Audio. User confirmed **no glitches, pops, or added latency** vs. the
+`AudioTrack` path. Both flags reverted to `false` afterward. Full log: `docs/experiments.md`.
 
 ### Phase 3 — Capture path: cleaned audio back to Kotlin
 
