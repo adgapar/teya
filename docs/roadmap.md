@@ -263,13 +263,14 @@ Open-Meteo), with location from the household profile or native device location.
   also flagged here, was removed entirely on 2026-07-11 — see `docs/experiments.md`). Harmless
   today — this device's actual page size is 4 KB and Teya is sideloaded, never Play-distributed —
   but worth cleaning up eventually if either dependency ships an aligned build (noted 2026-07-10).
-- **Admin-configurable barge-in/wake-word tuning** — expose the currently-hardcoded tuning knobs
-  (`VoicePipeline`'s Silero `threshold`/`speechDurationMs`/`silenceDurationMs`/`BARGE_IN_GAIN`,
-  `HarnessService.BARGE_IN_GAP_MS`, `WakeWordEngine`'s `THRESHOLD`/`INPUT_GAIN`/`PATIENCE`) through
-  `SettingsActivity`, backed by `ConfigManager` (same `EncryptedSharedPreferences` store as the
-  Mistral API key) with today's hardcoded values as defaults. Would let future tuning passes (e.g.
-  Phase 5 of the WebView AEC work, or retuning wake word for a different device) happen from the
-  admin screen instead of a rebuild+install cycle each time (noted 2026-07-11).
+- ✅ **Admin-configurable barge-in/wake-word tuning** (2026-07-11) — the 8 previously-hardcoded knobs
+  (`VoicePipeline`'s Silero `threshold`/`speechDurationMs`/`silenceDurationMs`/`bargeInGain`,
+  `HarnessService.bargeInGapMs`, `WakeWordEngine`'s `threshold`/`inputGain`/`patience`) now live in
+  `ConfigManager` (same `EncryptedSharedPreferences` store as the Mistral API key) with today's old
+  hardcoded values as defaults, editable from a new "Voice tuning" section in Admin. Read live at
+  each use site (per-arm / per-chunk), not cached at construction, so a save takes effect on the
+  next turn without restarting the service — no broadcast plumbing needed. *Built + compiles;
+  pending a live on-device test of the new Admin section and a save→retune round-trip.*
 - Settings **voice picker** (live from `/audio/voices`) + persist choice.
 - **Implement memory / learning about people** — build the deferred half of the household model:
   `Person` rows with `kind=KNOWN` captured by voice ("remember Uncle Bob…"), a `MemoryEntry` table
