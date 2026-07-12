@@ -193,6 +193,16 @@ class WebViewAecHost(
     }
 
     /**
+     * Sets the linear gain applied to every render chunk from here on (`assets/aec_bridge.html`'s
+     * `setRenderGain`) — the WebView path's equivalent of [VoicePipeline.attachLoudnessEnhancer] on
+     * the AudioTrack fallback. Plain Web Audio GainNode, not a limiter, so callers should convert
+     * from a dB value modest enough not to clip (see ConfigManager.ttsVolumeBoostDb).
+     */
+    suspend fun setRenderGain(linearGain: Double) = withContext(Dispatchers.Main) {
+        webView?.evaluateJavascript("setRenderGain($linearGain)", null)
+    }
+
+    /**
      * Starts `getUserMedia({echoCancellation:true})` in the page (`assets/aec_bridge.html`'s
      * `startCapture`) at [sampleRate] — pass 16000 to match `VoicePipeline`'s
      * `SileroVad`/`WakeWordEngine` sample rate directly, no resampling needed on either side. Each

@@ -32,13 +32,27 @@ function onPing(id) {
 let audioCtx = null;
 let nextStartTime = 0;
 let scheduledSources = [];
+let renderGainNode = null;
+let renderGain = 1.0; // linear factor set by setRenderGain — 1.0 (0dB) until Kotlin says otherwise
 
 function ensureAudioCtx(sampleRate) {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate });
     nextStartTime = audioCtx.currentTime;
+    renderGainNode = audioCtx.createGain();
+    renderGainNode.gain.value = renderGain;
+    renderGainNode.connect(audioCtx.destination);
   }
   return audioCtx;
+}
+
+// Called by Kotlin (WebViewAecHost.setRenderGain) once per session, mirroring the LoudnessEnhancer
+// boost applied on the AudioTrack fallback path (VoicePipeline.attachLoudnessEnhancer) — this is a
+// plain linear gain, not a limiter, so a large boost can clip; Kotlin converts from the same
+// ConfigManager.ttsVolumeBoostDb the fallback path uses, so both paths get the same boost in dB.
+function setRenderGain(linearGain) {
+  renderGain = linearGain;
+  if (renderGainNode) renderGainNode.gain.value = linearGain;
 }
 
 function base64ToFloat32Array(b64) {
@@ -58,7 +72,7 @@ function pushRenderChunk(b64, sampleRate) {
   buffer.copyToChannel(floats, 0);
   const source = ctx.createBufferSource();
   source.buffer = buffer;
-  source.connect(ctx.destination);
+  source.connect(renderGainNode);
   const startAt = Math.max(nextStartTime, ctx.currentTime);
   source.start(startAt);
   scheduledSources.push(source);
