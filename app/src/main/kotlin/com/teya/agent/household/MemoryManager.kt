@@ -244,19 +244,19 @@ data class DreamSummary(val scanned: Int, val cooled: Int, val pruned: Int, val 
 }
 
 /** float32-LE round-trip for storing an embedding vector in a Room BLOB column. */
-private fun FloatArray.toBytes(): ByteArray {
+internal fun FloatArray.toBytes(): ByteArray {
     val buf = ByteBuffer.allocate(size * 4).order(ByteOrder.LITTLE_ENDIAN)
     forEach { buf.putFloat(it) }
     return buf.array()
 }
 
-private fun ByteArray.toFloatArray(): FloatArray {
+internal fun ByteArray.toFloatArray(): FloatArray {
     val buf = ByteBuffer.wrap(this).order(ByteOrder.LITTLE_ENDIAN)
     return FloatArray(size / 4) { buf.float }
 }
 
 /** Cosine similarity in [-1, 1]; 0 for a size mismatch or a zero vector. */
-private fun cosine(a: FloatArray, b: FloatArray): Float {
+internal fun cosine(a: FloatArray, b: FloatArray): Float {
     if (a.size != b.size) return 0f
     var dot = 0f; var na = 0f; var nb = 0f
     for (i in a.indices) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i] }

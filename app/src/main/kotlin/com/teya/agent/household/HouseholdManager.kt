@@ -14,6 +14,7 @@ class HouseholdManager(context: Context) {
     private val contacts = ContactsRepository(context)
     private val contactExtraDao = TeyaDatabase.get(context).contactExtraDao()
     private val memoryDao = TeyaDatabase.get(context).memoryDao()
+    private val voiceSampleDao = TeyaDatabase.get(context).voiceSampleDao()
     private val config = ConfigManager(context)
 
     /** The roster: contacts marked as members (they have a [ContactExtra] row), merged with aliases. */
@@ -49,8 +50,12 @@ class HouseholdManager(context: Context) {
         previousKeys.forEach { contacts.delete(it) }
         contactExtraDao.clear()
 
-        // Members removed from the roster: drop their persona memories (no longer meaningful).
-        previousKeys.filter { it !in retainedOldKeys }.forEach { memoryDao.deleteBySubject(it) }
+        // Members removed from the roster: drop their persona memories + enrolled voiceprints (no
+        // longer meaningful).
+        previousKeys.filter { it !in retainedOldKeys }.forEach {
+            memoryDao.deleteBySubject(it)
+            voiceSampleDao.deleteByMember(it)
+        }
 
         // Reinsert; Contacts returns fresh lookupKeys (delete+insert doesn't preserve them).
         val newKeys = contacts.insertMembers(clean)
@@ -59,8 +64,12 @@ class HouseholdManager(context: Context) {
             contactExtraDao.upsert(
                 ContactExtra(lookupKey = newKey, aliases = m.aliases.filter { it.isNotBlank() }.joinToString(","))
             )
-            // Retained member whose key changed → re-point their memories so they survive the re-key.
-            m.lookupKey?.takeIf { it != newKey }?.let { oldKey -> memoryDao.remapSubject(oldKey, newKey) }
+            // Retained member whose key changed → re-point their memories + voiceprints so they
+            // survive the re-key.
+            m.lookupKey?.takeIf { it != newKey }?.let { oldKey ->
+                memoryDao.remapSubject(oldKey, newKey)
+                voiceSampleDao.remapMember(oldKey, newKey)
+            }
         }
     }
 
@@ -107,6 +116,30 @@ class HouseholdManager(context: Context) {
 
         sb.append("- Languages: ").append(languageDirective(langs))
         return sb.toString().trimEnd()
+    }
+
+    /**
+     * Per-speaker voice ID block — a **soft, unconfirmed** signal (unlike [profileContextBlock]'s
+     * authoritative roster), from [SpeakerIdManager] guessing who's talking. Empty when [match] is
+     * null (no enrolled voice cleared the base match threshold) — omitted entirely rather than
+     * guessing wrong. Two tiers, matching [SpeakerMatch.confident]:
+     * - **Confident**: cleared the higher `speakerIdConfidentThreshold` — Teya may actually use the
+     *   name (e.g. greet them), not just resolve it silently.
+     * - **Not confident** (matched the base threshold only): silent-disambiguation-only, same
+     *   caution as before — never stated aloud.
+     */
+    fun speakerContextBlock(match: SpeakerMatch?): String {
+        if (match == null) return ""
+        return if (match.confident) {
+            "Voice match (confident): this turn's speaker is very likely ${match.member.displayName}. " +
+                "You may address or greet them by name if it feels natural — but if anything else in " +
+                "the conversation contradicts this, trust that instead."
+        } else {
+            "Voice match (unconfirmed signal, not authoritative): this turn's speaker sounds " +
+                "most like ${match.member.displayName}. Use this only to silently resolve which " +
+                "person a shared alias refers to (e.g. two people both called \"Dad\") — never " +
+                "state it aloud as fact."
+        }
     }
 
     /**

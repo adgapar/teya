@@ -11,29 +11,45 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.teya.agent.household.Member
 import com.teya.agent.household.TeyaColors
+import com.teya.agent.household.VoiceSample
+import com.teya.agent.safety.TeyaDatabase
+import com.teya.agent.voice.speaker.CamPlusPlusSpeakerEmbedder
+import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
@@ -41,22 +57,30 @@ import java.nio.ByteOrder
 
 private const val SAMPLE_RATE = 16000
 private const val MAX_RECORD_MS = 6000
+private const val WAV_HEADER_BYTES = 44
 
 /**
- * Temporary tool for bootstrapping the WakeWord Trainer's personal_samples/ set: records a short
- * "hey teya" clip on THIS phone (matching the wall device's real mic/acoustics — useful for taking
- * several takes at different distances from the phone) and saves it as a WAV straight to this app's
- * external files dir. No network involved — once done recording, pull the whole folder off with:
+ * Records a short clip on this phone, tagged to a household member — doubles as: (1) a per-member
+ * voiceprint enrollment sample (see `docs/roadmap.md` → Household setup & personalization —
+ * per-speaker voice ID), embedded via [CamPlusPlusSpeakerEmbedder] and stored in Room
+ * (`VoiceSample`); and (2) raw material for a future custom "Hey Teya" wake-word model, still
+ * saved as a WAV to this app's external files dir:
  *   adb pull /sdcard/Android/data/com.teya.agent/files/wake_word_samples ~/Desktop/
- * then use the trainer's own "Manual Sample Import" file picker to select them all.
  *
- * Whole feature is scaffolding for one training pass, not a lasting product surface — delete this
- * file, its AdminSection.TRAINER entry (AdminComposables.kt), and OnboardingCategory.TRAINER
- * (OnboardingParticles.kt) once done.
+ * A member must be selected before recording — enrollment is the panel's primary purpose now,
+ * the wake-word training clips are the byproduct.
  */
 @Composable
-fun WakeWordSamplePanel(modifier: Modifier = Modifier) {
+fun WakeWordSamplePanel(members: List<Member>, modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val voiceSampleDao = remember { TeyaDatabase.get(context).voiceSampleDao() }
+    val embedder = remember { CamPlusPlusSpeakerEmbedder(context) }
+    DisposableEffect(Unit) { onDispose { embedder.close() } }
+
+    val enrollable = remember(members) { members.filter { it.lookupKey != null && it.hasName } }
+    var selected by remember { mutableStateOf<Member?>(null) }
+
     val outputDir = remember {
         File(context.getExternalFilesDir(null), "wake_word_samples").apply { mkdirs() }
     }
@@ -65,22 +89,59 @@ fun WakeWordSamplePanel(modifier: Modifier = Modifier) {
     var savedCount by remember { mutableStateOf(outputDir.listFiles { f -> f.extension == "wav" }?.size ?: 0) }
     var status by remember { mutableStateOf("") }
 
+    var sampleCounts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    suspend fun reloadCounts() {
+        sampleCounts = voiceSampleDao.getAll().groupingBy { it.lookupKey }.eachCount()
+    }
+    LaunchedEffect(Unit) { reloadCounts() }
+
     val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
         PackageManager.PERMISSION_GRANTED
+    val canRecord = hasPermission && selected != null
 
     Column(
         modifier.fillMaxSize().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        AdminEyebrow("WAKE WORD SAMPLES")
-        Spacer(Modifier.height(28.dp))
+        AdminEyebrow("VOICE ID / WAKE WORD SAMPLES")
+        Spacer(Modifier.height(20.dp))
+
+        if (enrollable.isEmpty()) {
+            Text(
+                "Add + save a household member first, then come back here to enroll their voice.",
+                color = TeyaColors.Muted, fontSize = 11.5.sp, textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 260.dp),
+            )
+        } else {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(enrollable) { member ->
+                    val isSelected = selected?.lookupKey == member.lookupKey
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isSelected) TeyaColors.AccentSoft else TeyaColors.Card)
+                            .clickable { selected = member }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                    ) {
+                        Text(
+                            member.displayName,
+                            color = if (isSelected) TeyaColors.Accent else TeyaColors.Ink,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
 
         Box(
             Modifier
                 .size(84.dp)
                 .background(if (recording) TeyaColors.Danger else TeyaColors.Accent, CircleShape)
-                .clickable(enabled = hasPermission) {
+                .clickable(enabled = canRecord) {
                     if (!recording) {
                         recording = true
                         status = "Recording…"
@@ -88,14 +149,33 @@ fun WakeWordSamplePanel(modifier: Modifier = Modifier) {
                     } else {
                         recording = false
                         val wav = recorder.stopAndGetWav()
-                        status = if (wav == null) {
-                            "No audio captured — try again"
+                        val member = selected
+                        if (wav == null || member?.lookupKey == null) {
+                            status = "No audio captured — try again"
                         } else {
                             val take = savedCount + 1
                             val file = File(outputDir, "hey_teya_%02d.wav".format(take))
                             file.writeBytes(wav)
                             savedCount = take
-                            "Saved take $take"
+
+                            val pcm = wavToPcm(wav)
+                            scope.launch {
+                                status = "Processing…"
+                                try {
+                                    val embedding = embedder.embed(pcm)
+                                    voiceSampleDao.insert(
+                                        VoiceSample(
+                                            lookupKey = member.lookupKey,
+                                            embedding = embedding.toVoiceSampleBytes(),
+                                            recordedAt = System.currentTimeMillis(),
+                                        )
+                                    )
+                                    reloadCounts()
+                                    status = "Saved take $take for ${member.displayName}"
+                                } catch (e: Exception) {
+                                    status = "Enrollment failed — clip saved as a wake-word sample only"
+                                }
+                            }
                         }
                     }
                 },
@@ -107,17 +187,60 @@ fun WakeWordSamplePanel(modifier: Modifier = Modifier) {
             )
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(16.dp))
         Text(
             when {
                 !hasPermission -> "Mic permission not granted"
-                status.isNotBlank() -> "$status  ·  $savedCount total on this phone"
-                else -> "Tap to record \"hey teya\", tap again to stop & save"
+                selected == null && enrollable.isNotEmpty() -> "Pick who's recording, then tap to record"
+                status.isNotBlank() -> status
+                else -> "Tap to record, tap again to stop & save"
             },
             color = TeyaColors.Muted, fontSize = 11.5.sp, textAlign = TextAlign.Center,
-            modifier = Modifier.widthIn(max = 260.dp),
+            modifier = Modifier.widthIn(max = 280.dp),
         )
+
+        if (sampleCounts.isNotEmpty()) {
+            Spacer(Modifier.height(24.dp))
+            Text("ENROLLED VOICES", color = TeyaColors.Muted2, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            LazyColumn(Modifier.widthIn(max = 300.dp)) {
+                items(members.filter { it.lookupKey in sampleCounts.keys }) { member ->
+                    val count = sampleCounts[member.lookupKey] ?: 0
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            "${member.displayName} — $count sample${if (count == 1) "" else "s"}",
+                            color = TeyaColors.Ink, fontSize = 12.sp,
+                        )
+                        Text(
+                            "Clear",
+                            color = TeyaColors.Danger, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clickable {
+                                val key = member.lookupKey ?: return@clickable
+                                scope.launch { voiceSampleDao.deleteByMember(key); reloadCounts() }
+                            },
+                        )
+                    }
+                }
+            }
+        }
     }
+}
+
+/** Strips the 44-byte WAV header this panel writes and returns the remaining PCM as samples. */
+private fun wavToPcm(wav: ByteArray): ShortArray {
+    val pcmBytes = wav.copyOfRange(WAV_HEADER_BYTES, wav.size)
+    val buf = ByteBuffer.wrap(pcmBytes).order(ByteOrder.LITTLE_ENDIAN)
+    return ShortArray(pcmBytes.size / 2) { buf.short }
+}
+
+/** float32-LE round-trip, matching MemoryManager's embedding BLOB convention. */
+private fun FloatArray.toVoiceSampleBytes(): ByteArray {
+    val buf = ByteBuffer.allocate(size * 4).order(ByteOrder.LITTLE_ENDIAN)
+    forEach { buf.putFloat(it) }
+    return buf.array()
 }
 
 /**

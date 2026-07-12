@@ -23,6 +23,8 @@ import com.teya.agent.household.HouseholdManager
 import com.teya.agent.household.Languages
 import com.teya.agent.household.Member
 import com.teya.agent.household.MemoryManager
+import com.teya.agent.household.SpeakerIdManager
+import com.teya.agent.household.SpeakerMatch
 import com.teya.agent.persona.AgentTools
 import com.teya.agent.persona.TeyaPersona
 import com.teya.agent.safety.ContactAllowlistManager
@@ -84,6 +86,18 @@ class HarnessService : Service() {
     // runConversation's loop, so whatever the user was already saying when they interrupted
     // carries through into that recording — see VoicePipeline.consumeBargeInAudio's doc comment.
     @Volatile private var pendingBargeInAudio: ShortArray? = null
+    // Set once per turn by onTrigger (wake-word path only — null for a manual tap), resolved by
+    // buildLiveContext via SpeakerIdManager, then cleared at the end of the turn. A soft,
+    // unconfirmed signal — see HouseholdManager.speakerContextBlock.
+    @Volatile private var pendingSpeakerAudio: ShortArray? = null
+    // Set after every listenForCommand call in runConversation's loop (see
+    // VoicePipeline.consumeLastCommandAudio) — real conversational speech, usually a better sample
+    // than the wake-word pre-roll, so buildLiveContext re-checks identification on it every turn
+    // ("recognize during live conversation"), not just once at wake-word time.
+    @Volatile private var pendingCommandAudio: ShortArray? = null
+    // Resolved from pendingSpeakerAudio/pendingCommandAudio (see buildLiveContext) and reused
+    // across a conversation until a better sample updates it; cleared at the end of the turn.
+    @Volatile private var currentTurnSpeaker: SpeakerMatch? = null
 
     private lateinit var voicePipeline: VoicePipeline
     private lateinit var brainClient: BrainClient
@@ -95,6 +109,7 @@ class HarnessService : Service() {
     private lateinit var householdManager: HouseholdManager
     private lateinit var memoryManager: MemoryManager
     private lateinit var configManager: ConfigManager
+    private lateinit var speakerIdManager: SpeakerIdManager
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -112,6 +127,7 @@ class HarnessService : Service() {
         shoppingList = ShoppingListManager(this)
         householdManager = HouseholdManager(this)
         memoryManager = MemoryManager(this)
+        speakerIdManager = SpeakerIdManager(this)
 
         // Reads configManager.mistralApiKey fresh on every request (see MistralClient's
         // apiKeyProvider) rather than capturing it once here — this service runs for its whole
@@ -163,9 +179,9 @@ class HarnessService : Service() {
 
     private fun startAgentLoop() {
         voicePipeline.startListening(
-            onWakeWord = {
+            onWakeWord = { audio ->
                 Log.d(TAG, "Wake word detected!")
-                onTrigger()
+                onTrigger(audio)
             },
             onBargeIn = { onBargeIn() }
         )
@@ -271,12 +287,18 @@ class HarnessService : Service() {
         return next.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
     }
 
-    /** Entry point for a tap or wake-word trigger. Guards against overlapping conversations. */
-    private fun onTrigger() {
+    /**
+     * Entry point for a tap or wake-word trigger. Guards against overlapping conversations.
+     * [speakerAudio] is the ~3s pre-roll window captured right at wake-word-fire time (null for a
+     * manual tap trigger, which has no such audio) — used for per-speaker voice ID (see
+     * [SpeakerIdManager]), a soft signal only, resolved once per turn in [buildLiveContext].
+     */
+    private fun onTrigger(speakerAudio: ShortArray? = null) {
         if (!conversationActive.compareAndSet(false, true)) {
             Log.d(TAG, "Conversation already active — ignoring trigger")
             return
         }
+        pendingSpeakerAudio = speakerAudio
         brainBroken = false // give a fresh attempt the benefit of the doubt — re-gates immediately if still bad
         scope.launch {
             try {
@@ -352,6 +374,10 @@ class HarnessService : Service() {
                 } finally {
                     voicePipeline.resumeWakeWord()
                 }
+                // Per-speaker voice ID's live re-check — real conversational speech just captured
+                // for STT, usually a better sample than the wake-word pre-roll alone. See
+                // buildLiveContext's use of this.
+                pendingCommandAudio = voicePipeline.consumeLastCommandAudio()
                 if (text == null) {
                     updateUiState(AgentState.SPEAKING)
                     voicePipeline.textToSpeech("Sorry, I'm having trouble hearing you right now — check the connection.")
@@ -378,6 +404,9 @@ class HarnessService : Service() {
             voicePipeline.setBargeInArmed(false)
             voicePipeline.resumeWakeWord() // back to idle wake-word listening for the next trigger
             updateUiState(AgentState.IDLE)
+            pendingSpeakerAudio = null
+            pendingCommandAudio = null
+            currentTurnSpeaker = null
         }
     }
 
@@ -842,15 +871,44 @@ class HarnessService : Service() {
         val members = householdManager.members()
         val profile = householdManager.profileContextBlock(members)
         val memory = memoryManager.memoryContextBlock(members)
+        // Per-speaker voice ID: an initial guess from the wake-word pre-roll (fires once, the
+        // first turn of a fresh trigger), then re-checked every turn against the actual command
+        // audio just captured ("recognize during live conversation") — the command audio is
+        // usually a better sample (longer, natural conversational speech, VAD-trimmed) and
+        // overrides the wake-word guess whenever it produces its own match. A soft signal only;
+        // identification failures are swallowed (no speaker line that turn) rather than breaking
+        // the conversation. See pendingSpeakerAudio/pendingCommandAudio/currentTurnSpeaker's doc
+        // comments.
+        val wakeAudio = pendingSpeakerAudio
+        if (wakeAudio != null) {
+            pendingSpeakerAudio = null
+            currentTurnSpeaker = identifySpeaker(wakeAudio, members)
+        }
+        val commandAudio = pendingCommandAudio
+        if (commandAudio != null) {
+            pendingCommandAudio = null
+            identifySpeaker(commandAudio, members)?.let { currentTurnSpeaker = it }
+        }
+        val speaker = householdManager.speakerContextBlock(currentTurnSpeaker)
         val full = buildString {
             append(context)
             if (profile.isNotBlank()) append("\n\n").append(profile)
             if (memory.isNotBlank()) append("\n\n").append(memory)
+            if (speaker.isNotBlank()) append("\n\n").append(speaker)
         }
         // TODO: gate behind BuildConfig.DEBUG — this line logs location + memory (PII).
         Log.d(TAG, "Live context: ${full.replace("\n", " | ")}")
         full
     }
+
+    /** Wraps [SpeakerIdManager.identify], swallowing failures (a soft signal isn't worth breaking the turn over). */
+    private suspend fun identifySpeaker(audio: ShortArray, members: List<Member>): SpeakerMatch? =
+        try {
+            speakerIdManager.identify(audio, members, configManager.speakerIdThreshold, configManager.speakerIdConfidentThreshold)
+        } catch (e: Exception) {
+            Log.e(TAG, "Speaker ID failed", e)
+            null
+        }
 
     /** Most-recent cached fix across providers; instant (no async wait). Null if none / no permission. */
     private fun lastKnownLocation(): Location? = try {

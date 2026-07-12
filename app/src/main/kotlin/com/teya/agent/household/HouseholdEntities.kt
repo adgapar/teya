@@ -51,3 +51,18 @@ data class ContactExtra(
     @PrimaryKey val lookupKey: String,
     val aliases: String = "",   // CSV
 )
+
+/**
+ * One enrolled voiceprint sample for a household member (per-speaker voice ID — see
+ * `docs/roadmap.md` → Household setup & personalization). [embedding] is a 512-float CAM++
+ * voiceprint, float32-LE packed (see [toBytes]/[toFloatArray] in `MemoryManager.kt`). Each
+ * enrollment recording gets its own row rather than one averaged vector per member — matching is
+ * "best similarity across a member's samples", simpler and more robust than incremental averaging.
+ */
+@Entity(tableName = "voice_sample")
+data class VoiceSample(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val lookupKey: String,
+    val embedding: ByteArray,
+    val recordedAt: Long,
+)

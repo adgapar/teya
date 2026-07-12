@@ -9,6 +9,7 @@ import android.media.AudioTrack
 import android.media.MediaDataSource
 import android.media.MediaPlayer
 import android.media.MediaRecorder
+import android.media.audiofx.LoudnessEnhancer
 import android.util.Log
 import com.teya.agent.brain.MistralClient
 import com.teya.agent.harness.ConfigManager
@@ -63,11 +64,11 @@ class VoicePipeline(private val context: Context) {
 
     private val wakeWordEngine = WakeWordEngine(
         context,
-        onDetected = { onWakeWord() },
+        onDetected = { audio -> onWakeWord(audio) },
         onArmedAudioChunk = { chunk -> forwardArmedChunk(chunk) }
     )
 
-    private var wakeWordCallback: (() -> Unit)? = null
+    private var wakeWordCallback: ((ShortArray) -> Unit)? = null
     private var bargeInCallback: (() -> Unit)? = null
     private var wakeWordActive = false
     private var mistralClient: MistralClient? = null
@@ -90,6 +91,8 @@ class VoicePipeline(private val context: Context) {
     // BARGE_IN_AUDIO_BUFFER_MAX_SAMPLES so a long Teya response before any interrupt doesn't grow
     // this unboundedly. See [consumeBargeInAudio].
     private var bargeInAudioBuffer = ShortArray(0)
+    // Raw PCM from the most recent listenForCommand capture — see consumeLastCommandAudio.
+    @Volatile private var lastCommandAudio: ShortArray? = null
     // Guards sileroVad's create/use/close: the capture callbacks below run on their own capture
     // thread while setBargeInArmed(false) runs on the harness's coroutine thread — without this,
     // a disarm's close() can race a concurrent isSpeech() call and crash natively (use-after-free
@@ -233,7 +236,7 @@ class VoicePipeline(private val context: Context) {
      */
     fun isContinuousBargeInActive(): Boolean = webViewAecHost?.isActive() == true
 
-    fun startListening(onWakeWord: () -> Unit, onBargeIn: () -> Unit) {
+    fun startListening(onWakeWord: (audio: ShortArray) -> Unit, onBargeIn: () -> Unit) {
         Log.d("VoicePipeline", "Wake word detection started")
         this.wakeWordCallback = onWakeWord
         this.bargeInCallback = onBargeIn
@@ -241,9 +244,9 @@ class VoicePipeline(private val context: Context) {
         wakeWordEngine.start()
     }
 
-    private fun onWakeWord() {
+    private fun onWakeWord(audio: ShortArray) {
         Log.d("VoicePipeline", "Wake word detected!")
-        wakeWordCallback?.invoke()
+        wakeWordCallback?.invoke(audio)
     }
 
     private fun onBargeIn() {
@@ -314,6 +317,18 @@ class VoicePipeline(private val context: Context) {
     }
 
     /**
+     * Returns and clears the raw PCM captured by the most recent [listenForCommand] call, or null
+     * if none has completed yet (or it was already consumed) — per-speaker voice ID's live
+     * re-check (see [com.teya.agent.household.SpeakerIdManager]) uses this, since real
+     * conversational speech is usually a better sample than the wake-word pre-roll alone.
+     */
+    fun consumeLastCommandAudio(): ShortArray? {
+        val audio = lastCommandAudio
+        lastCommandAudio = null
+        return audio
+    }
+
+    /**
      * Starts the whole-session WebView AEC host. Call once near the top of
      * [com.teya.agent.harness.HarnessService.runConversation] — deliberately independent of
      * [setBargeInArmed]'s per-turn arm/disarm: the WebView (and Chromium's own echo-cancellation
@@ -338,6 +353,7 @@ class VoicePipeline(private val context: Context) {
         host.start()
         if (host.isActive()) {
             host.startCapture(SAMPLE_RATE)
+            host.setRenderGain(dbToLinearGain(config.ttsVolumeBoostDb))
             Log.d("VoicePipeline", "WebView AEC: session started")
         } else {
             Log.w("VoicePipeline", "WebView AEC: failed to start — falling back to gap-gated barge-in with no echo cancellation")
@@ -666,6 +682,14 @@ class VoicePipeline(private val context: Context) {
         val pcmBytes = pcm.toByteArray()
         if (pcmBytes.isEmpty()) return null
 
+        // Stash for per-speaker voice ID's live re-check (see consumeLastCommandAudio) — real
+        // conversational speech captured here is usually a better sample than the wake-word
+        // pre-roll (longer, VAD-trimmed, more natural), so HarnessService re-runs identification
+        // on it every turn rather than relying solely on the one-shot wake-word-time guess.
+        val shorts = ShortArray(pcmBytes.size / 2)
+        ByteBuffer.wrap(pcmBytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(shorts)
+        lastCommandAudio = shorts
+
         val wavFile = File(context.cacheDir, "command.wav")
         writeWav(wavFile, pcmBytes)
         Log.d("VoicePipeline", "Captured ${pcmBytes.size} bytes of PCM")
@@ -800,9 +824,32 @@ class VoicePipeline(private val context: Context) {
      * attempt (mic captured pure digital silence). Not worth retrying without real audio-focus
      * handling — a bigger change than this fallback path warrants.
      */
+    /** dB -> linear amplitude factor, shared by both boost paths (WebView's plain GainNode wants linear). */
+    private fun dbToLinearGain(db: Float): Double = Math.pow(10.0, db / 20.0)
+
+    /**
+     * Extra loudness on top of whatever the device's own (manually controlled — see
+     * ConfigManager.ttsVolumeBoostDb's doc comment) volume is set to, via Android's built-in
+     * loudness-boost effect (limits internally, so it won't clip as harshly as the WebView path's
+     * plain GainNode does at the same dB). Attached per-playback since the session ID is only
+     * known once the AudioTrack/MediaPlayer exists; swallows failure since some
+     * emulators/devices don't support the effect and this is a nice-to-have, not required for
+     * Teya to be heard at all.
+     */
+    private fun attachLoudnessEnhancer(audioSessionId: Int): LoudnessEnhancer? = try {
+        LoudnessEnhancer(audioSessionId).apply {
+            setTargetGain((config.ttsVolumeBoostDb * 100).toInt()) // dB -> millibels
+            enabled = true
+        }
+    } catch (e: Exception) {
+        Log.w("VoicePipeline", "LoudnessEnhancer unavailable, playing at unboosted volume", e)
+        null
+    }
+
     private suspend fun streamToSpeakerViaAudioTrack(client: MistralClient, text: String): Boolean =
         withContext(Dispatchers.IO) {
             var track: AudioTrack? = null
+            var loudnessEnhancer: LoudnessEnhancer? = null
             try {
                 val minBuf = AudioTrack.getMinBufferSize(
                     TTS_SAMPLE_RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT
@@ -828,6 +875,7 @@ class VoicePipeline(private val context: Context) {
                     .build()
                 track = audioTrack
                 currentTrack = audioTrack
+                loudnessEnhancer = attachLoudnessEnhancer(audioTrack.audioSessionId)
                 audioTrack.play()
 
                 var totalFrames = 0
@@ -865,6 +913,7 @@ class VoicePipeline(private val context: Context) {
                 Log.e("VoicePipeline", "AudioTrack streaming error", e)
                 false
             } finally {
+                try { loudnessEnhancer?.release() } catch (_: Exception) {}
                 try { track?.release() } catch (_: Exception) {}
                 currentTrack = null
             }
@@ -883,10 +932,12 @@ class VoicePipeline(private val context: Context) {
                 val mediaPlayer = MediaPlayer()
                 currentMediaPlayer = mediaPlayer
                 playbackContinuation = continuation
+                var loudnessEnhancer: LoudnessEnhancer? = null
                 try {
                     mediaPlayer.setDataSource(ByteArrayMediaDataSource(audio))
                     mediaPlayer.setOnCompletionListener {
                         Log.d("VoicePipeline", "Playback finished")
+                        try { loudnessEnhancer?.release() } catch (_: Exception) {}
                         it.release()
                         currentMediaPlayer = null
                         playbackContinuation = null
@@ -894,6 +945,7 @@ class VoicePipeline(private val context: Context) {
                     }
                     mediaPlayer.setOnErrorListener { mp, what, extra ->
                         Log.e("VoicePipeline", "MediaPlayer Error: $what, $extra")
+                        try { loudnessEnhancer?.release() } catch (_: Exception) {}
                         mp.release()
                         currentMediaPlayer = null
                         playbackContinuation = null
@@ -901,8 +953,10 @@ class VoicePipeline(private val context: Context) {
                         true
                     }
                     mediaPlayer.prepare()
+                    loudnessEnhancer = attachLoudnessEnhancer(mediaPlayer.audioSessionId)
                     mediaPlayer.start()
                     continuation.invokeOnCancellation {
+                        try { loudnessEnhancer?.release() } catch (_: Exception) {}
                         try {
                             mediaPlayer.stop()
                             mediaPlayer.release()
@@ -914,6 +968,7 @@ class VoicePipeline(private val context: Context) {
                     }
                 } catch (e: Exception) {
                     Log.e("VoicePipeline", "Error playing TTS", e)
+                    try { loudnessEnhancer?.release() } catch (_: Exception) {}
                     try { mediaPlayer.release() } catch (_: Exception) {}
                     currentMediaPlayer = null
                     playbackContinuation = null

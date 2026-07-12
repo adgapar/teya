@@ -12,16 +12,19 @@ import com.teya.agent.household.MemoryDao
 import com.teya.agent.household.MemoryEntry
 import com.teya.agent.household.Persona
 import com.teya.agent.household.PersonaDao
+import com.teya.agent.household.VoiceSample
+import com.teya.agent.household.VoiceSampleDao
 
 @Database(
-    entities = [Contact::class, Persona::class, MemoryEntry::class, ContactExtra::class],
-    version = 3,
+    entities = [Contact::class, Persona::class, MemoryEntry::class, ContactExtra::class, VoiceSample::class],
+    version = 4,
 )
 abstract class TeyaDatabase : RoomDatabase() {
     abstract fun contactDao(): ContactDao
     abstract fun personaDao(): PersonaDao
     abstract fun memoryDao(): MemoryDao
     abstract fun contactExtraDao(): ContactExtraDao
+    abstract fun voiceSampleDao(): VoiceSampleDao
 
     companion object {
         @Volatile
@@ -74,11 +77,23 @@ abstract class TeyaDatabase : RoomDatabase() {
             }
         }
 
+        /** v3→v4: add `voice_sample` (per-speaker voice ID enrollment — see `docs/roadmap.md`). */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `voice_sample` " +
+                        "(`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`lookupKey` TEXT NOT NULL, `embedding` BLOB NOT NULL, " +
+                        "`recordedAt` INTEGER NOT NULL)"
+                )
+            }
+        }
+
         /** Single shared instance so every manager opens the same migrated DB (name: "teya-db"). */
         fun get(context: Context): TeyaDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext, TeyaDatabase::class.java, "teya-db"
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
         }
     }
 }

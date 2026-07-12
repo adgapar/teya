@@ -751,6 +751,18 @@ private val TUNE_INFO: Map<String, TuneInfo> = mapOf(
         "Wake patience", "1",
         "Consecutive frames that must stay above the wake threshold before it fires. Raise it to cut down on false positives; lower it for a faster wake.",
     ),
+    "TTS boost" to TuneInfo(
+        "Volume boost", "6.0",
+        "Extra loudness (dB) added on top of the device's own volume when Teya speaks — separate from the volume buttons, which still work normally (turn her down or mute for quiet hours). Raise it if she's hard to hear from across the room; lower it if her voice sounds distorted or too loud.",
+    ),
+    "Voice ID" to TuneInfo(
+        "Voice ID threshold", "0.6",
+        "How similar a captured voice must sound to an enrolled sample (0–1) before Teya silently guesses who's speaking — a soft signal she never states aloud at this level. Lower it if she never guesses even with enrolled voices; raise it if she guesses wrong between two similar-sounding people.",
+    ),
+    "Voice ID (confident)" to TuneInfo(
+        "Voice ID confident threshold", "0.8",
+        "Higher bar (0–1, above the base Voice ID threshold) before Teya's allowed to actually use a voice match — e.g. greet someone by name — instead of only using it silently to break a tie between two people sharing a nickname. Raise it if she greets the wrong person; lower it if she never feels confident enough to greet anyone by name.",
+    ),
 )
 
 @Composable
@@ -931,6 +943,9 @@ private fun TuningGrid(
         F("Gap ms", tuning.bargeInGapMs) { tuning.copy(bargeInGapMs = it) },
         F("Wake gain", tuning.wakeWordInputGain) { tuning.copy(wakeWordInputGain = it) },
         F("Patience", tuning.wakeWordPatience) { tuning.copy(wakeWordPatience = it) },
+        F("TTS boost", tuning.ttsVolumeBoostDb) { tuning.copy(ttsVolumeBoostDb = it) },
+        F("Voice ID", tuning.speakerIdThreshold) { tuning.copy(speakerIdThreshold = it) },
+        F("Voice ID (confident)", tuning.speakerIdConfidentThreshold) { tuning.copy(speakerIdConfidentThreshold = it) },
     )
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         fields.chunked(columns).forEach { row ->

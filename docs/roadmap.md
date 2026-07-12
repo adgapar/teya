@@ -4,10 +4,14 @@ Living status doc. Design lives in [ARCHITECTURE.md](../ARCHITECTURE.md); the fu
 is [thoughts/shared/research/2026-07-06-project-audit.md](../thoughts/shared/research/2026-07-06-project-audit.md).
 Audit IDs (C1, H2, …) below refer to that file.
 
-_Last updated: 2026-07-12 (Admin rebuilt full-bleed and particle-driven — same field as the face and
-onboarding, no more bordered-card dashboard; a `BRAIN_OFF` face state + gate now surfaces a bad/
-expired Mistral API key visually, since TTS itself is what breaks in that case; fixed the API key
-not hot-reloading after an Admin edit. See Backlog for the reset/backup gap this surfaced.)._
+_Last updated: 2026-07-12 (Per-speaker voice ID shipped as a soft signal — see the household
+setup & personalization section — hand-written on-device speaker-embedding matching, verified live
+end-to-end with real household voices; a prebuilt-AAR integration attempt was tried and reverted
+after a real on-device crash, full trail in `docs/experiments.md`. Also: Admin rebuilt full-bleed
+and particle-driven — same field as the face and onboarding, no more bordered-card dashboard; a
+`BRAIN_OFF` face state + gate now surfaces a bad/expired Mistral API key visually, since TTS itself
+is what breaks in that case; fixed the API key not hot-reloading after an Admin edit. See Backlog
+for the reset/backup gap this surfaced.)._
 
 ## ✅ Done
 
@@ -168,9 +172,21 @@ not hot-reloading after an Admin edit. See Backlog for the reset/backup gap this
 - ✅ **Household context (names & members)** — captured and injected into the profile context block
   ("call Dad", "tell Mama"). Also the natural source for the **call allowlist** (C1). *Not yet: bias
   STT toward member names (prompt/vocabulary hint) so unusual names transcribe correctly.*
-- **Per-speaker voice ID / learning (stretch — research)** — recognize *who* is speaking and adapt
-  per person (resolves shared nicknames like "Dad" = two people automatically, instead of asking).
-  Voxtral doesn't expose speaker identity → needs separate diarization/verification. Feasibility TBD.
+- ✅ **Per-speaker voice ID (shipped, soft signal)** — recognizes *who's likely* speaking off a
+  wake-word-time audio window, to help resolve shared nicknames like "Dad" = two people. Voxtral
+  doesn't expose speaker identity, so this runs a separate on-device speaker-embedding model
+  (CAM++, hand-written Kotlin fbank extractor + the already-vendored ONNX Runtime — see
+  `THIRD_PARTY_MODELS.md`), matched by cosine similarity against voiceprints enrolled per household
+  member via Admin's "Voice ID / Wake Word Samples" panel. **Verified live end-to-end**: real
+  household members enrolled, a real wake-word trigger, a real conversation turn — capture → embed
+  → compare → threshold → context injection all confirmed working on-device (full trail:
+  `docs/experiments.md`). Deliberately a **soft, unconfirmed signal** (persona instructed never to
+  state it aloud), not authoritative identity — matches were below the tuning threshold in the
+  first live test (expected; needs more enrollment samples + real threshold tuning, tracked in
+  Admin's Voice tuning section). Real dead end along the way, worth knowing: an initial attempt to
+  vendor k2-fsa/sherpa-onnx's prebuilt AAR (to avoid hand-writing the fbank extractor) crashed the
+  app on every conversation — its bundled ONNX Runtime is binary-incompatible with the one Silero
+  VAD depends on. Reverted; hand-written fbank was the right call.
 - **Conversational onboarding (deferred)** — v1 is a **form** on purpose (STT isn't reliable before
   the language is set — chicken/egg). A later agentic setup (Teya asks, family answers) could layer on.
   Shape (user feedback 2026-07-10): Typeform-style chat, one question per screen advancing turn by

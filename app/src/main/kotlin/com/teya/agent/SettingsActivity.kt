@@ -118,6 +118,9 @@ class SettingsActivity : ComponentActivity() {
             wakeWordThreshold = config.wakeWordThreshold.toString(),
             wakeWordInputGain = config.wakeWordInputGain.toString(),
             wakeWordPatience = config.wakeWordPatience.toString(),
+            ttsVolumeBoostDb = config.ttsVolumeBoostDb.toString(),
+            speakerIdThreshold = config.speakerIdThreshold.toString(),
+            speakerIdConfidentThreshold = config.speakerIdConfidentThreshold.toString(),
         )
 
         setContent {
@@ -168,6 +171,9 @@ class SettingsActivity : ComponentActivity() {
                     tuning.wakeWordThreshold.toFloatOrNull()?.let { config.wakeWordThreshold = it }
                     tuning.wakeWordInputGain.toFloatOrNull()?.let { config.wakeWordInputGain = it }
                     tuning.wakeWordPatience.toIntOrNull()?.let { config.wakeWordPatience = it }
+                    tuning.ttsVolumeBoostDb.toFloatOrNull()?.let { config.ttsVolumeBoostDb = it }
+                    tuning.speakerIdThreshold.toFloatOrNull()?.let { config.speakerIdThreshold = it }
+                    tuning.speakerIdConfidentThreshold.toFloatOrNull()?.let { config.speakerIdConfidentThreshold = it }
                     lifecycleScope.launch {
                         household.saveHousehold(members)
                         finish()
@@ -220,6 +226,9 @@ data class VoiceTuning(
     val wakeWordThreshold: String,
     val wakeWordInputGain: String,
     val wakeWordPatience: String,
+    val ttsVolumeBoostDb: String,
+    val speakerIdThreshold: String,
+    val speakerIdConfidentThreshold: String,
 ) {
     companion object {
         /** Mirrors ConfigManager's hardcoded defaults — shown as each field's hint and by "Reset to defaults". */
@@ -232,6 +241,9 @@ data class VoiceTuning(
             wakeWordThreshold = "0.2",
             wakeWordInputGain = "6.0",
             wakeWordPatience = "1",
+            ttsVolumeBoostDb = "6.0",
+            speakerIdThreshold = "0.6",
+            speakerIdConfidentThreshold = "0.8",
         )
     }
 }
@@ -353,7 +365,7 @@ private fun AdminScreen(
                             overlayGranted = overlayGranted, onGrantOverlay = onGrantOverlay,
                         )
                         AdminSection.API -> ApiPanel(apiKey = apiKey, onChange = { apiKey = it }, lastAuthErrorAt = lastAuthErrorAt)
-                        AdminSection.TRAINER -> WakeWordSamplePanel()
+                        AdminSection.TRAINER -> WakeWordSamplePanel(members = members)
                     }
                 }
             }

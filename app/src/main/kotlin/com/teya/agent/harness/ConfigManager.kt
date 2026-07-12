@@ -113,6 +113,41 @@ class ConfigManager(context: Context) {
         get() = prefs.getInt("wake_word_patience", 1)
         set(value) = prefs.edit().putInt("wake_word_patience", value).apply()
 
+    /**
+     * Extra loudness (dB) applied to Teya's own TTS output via [android.media.audiofx.LoudnessEnhancer]
+     * — a real gain boost beyond 100% device volume, with the effect's built-in limiting to avoid
+     * harsh clipping. Deliberately separate from the device's own volume control (physical
+     * buttons/slider): that stays manual so the household can silence her (kids asleep, etc.)
+     * without this boost fighting it — LoudnessEnhancer amplifies whatever the device volume
+     * already is, it doesn't override it.
+     */
+    var ttsVolumeBoostDb: Float
+        get() = prefs.getFloat("tts_volume_boost_db", 6.0f)
+        set(value) = prefs.edit().putFloat("tts_volume_boost_db", value).apply()
+
+    /**
+     * Cosine-similarity threshold (0-1) for per-speaker voice ID matching a captured wake-word
+     * audio window against an enrolled voiceprint — see `household/SpeakerIdManager.kt`. Starting
+     * point from the Phase 0 spike (`docs/experiments.md`): real-speech same-speaker scored ~0.71
+     * at 3.5s clips, worst different-speaker (closest-pitch pair) ~0.52 — 0.6 sits between them.
+     * Needs live tuning against real household voices and this device's mic, same as every other
+     * knob here.
+     */
+    var speakerIdThreshold: Float
+        get() = prefs.getFloat("speaker_id_threshold", 0.6f)
+        set(value) = prefs.edit().putFloat("speaker_id_threshold", value).apply()
+
+    /**
+     * Higher cosine-similarity bar (0-1) above which Teya is allowed to actually *use* a voice
+     * match — e.g. greet someone by name — rather than only silently disambiguating a shared
+     * alias (see `household/HouseholdManager.speakerContextBlock`). Default is a conservative
+     * placeholder, not yet calibrated from real data: the first live tests (docs/experiments.md)
+     * were too few and too close to the base threshold to trust a specific number here yet.
+     */
+    var speakerIdConfidentThreshold: Float
+        get() = prefs.getFloat("speaker_id_confident_threshold", 0.8f)
+        set(value) = prefs.edit().putFloat("speaker_id_confident_threshold", value).apply()
+
     /** When any Voice tuning knob was last actually changed in Admin; 0 = never. Drives the idle
      *  face's ambient status mote so a retune is visible without opening Admin. */
     var lastTuningChangedAt: Long

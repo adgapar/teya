@@ -85,3 +85,25 @@ interface ContactExtraDao {
     @Query("DELETE FROM contact_extra")
     suspend fun clear()
 }
+
+@Dao
+interface VoiceSampleDao {
+    @Query("SELECT * FROM voice_sample ORDER BY recordedAt")
+    suspend fun getAll(): List<VoiceSample>
+
+    @Query("SELECT * FROM voice_sample WHERE lookupKey = :lookupKey ORDER BY recordedAt")
+    suspend fun byMember(lookupKey: String): List<VoiceSample>
+
+    @Insert
+    suspend fun insert(sample: VoiceSample): Long
+
+    @Query("DELETE FROM voice_sample WHERE id = :id")
+    suspend fun delete(id: Int)
+
+    @Query("DELETE FROM voice_sample WHERE lookupKey = :lookupKey")
+    suspend fun deleteByMember(lookupKey: String)
+
+    /** Re-point every sample about [old] to [new] — when a member's Contacts lookupKey changes. */
+    @Query("UPDATE voice_sample SET lookupKey = :new WHERE lookupKey = :old")
+    suspend fun remapMember(old: String, new: String)
+}

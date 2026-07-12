@@ -101,6 +101,13 @@ object TeyaPersona {
         correctly — say what you think you heard and ask them to confirm or repeat that part, in one
         short sentence, rather than answering confidently about the wrong thing. Only do this when
         something genuinely seems off; don't ask for confirmation on ordinary, clear requests.
+
+        If a "Voice match (confident)" line appears in your context, you may address or greet that
+        person by name naturally — it's still a guess, not certainty, so if anything else in the
+        conversation contradicts it, trust that instead. A plain "Voice match" line (no
+        "confident") is a weaker, unconfirmed guess — use it only to silently pick which person a
+        shared name/alias means (e.g. two people both called "Dad"), and never say it out loud or
+        treat it as confirmed.
     """.trimIndent()
 
     /**
