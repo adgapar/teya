@@ -50,7 +50,7 @@ import java.nio.channels.FileChannel
  */
 class WakeWordEngine(
     private val context: Context,
-    private val onDetected: () -> Unit,
+    private val onDetected: (audio: ShortArray) -> Unit,
     private val onArmedAudioChunk: (ShortArray) -> Unit
 ) {
     companion object {
@@ -78,6 +78,13 @@ class WakeWordEngine(
 
         private const val MEL_BUFFER_MAX = 970    // ~10 s of mel frames
         private const val EMB_BUFFER_MAX = 120    // ~10 s of embeddings
+
+        // Per-speaker voice ID (see voice/speaker/) — a rolling raw-PCM window snapshotted the
+        // instant the wake word fires, so CamPlusPlusSpeakerEmbedder gets audio actually spoken by
+        // whoever triggered Teya, not silence/room noise from before they started talking. ~3s
+        // (not 2s) per the Phase 0 spike (docs/experiments.md): same/different-speaker cosine
+        // margin is meaningfully healthier at 3.5s than at 2s.
+        private const val SPEAKER_CAPTURE_CHUNKS = 38 // 38 * 80ms ≈ 3.04s
     }
 
     // Read live (not cached) at each use site so Admin's "Voice tuning" section takes effect
@@ -102,6 +109,11 @@ class WakeWordEngine(
     private val embBuffer = ArrayDeque<FloatArray>() // each entry: FloatArray(96)
     private var positiveStreak = 0
     private var cooldown = 0
+
+    // Always filled (regardless of arming state) so a wake-word trigger has real pre-roll audio to
+    // hand off for speaker ID — unlike bargeInArmed/onArmedAudioChunk, this isn't gated to a
+    // mid-conversation window, since the wake-word moment itself is what needs the audio.
+    private val speakerCaptureBuffer = ArrayDeque<ShortArray>()
     private var peakScore = 0f       // diagnostic
     private var scoreLogCounter = 0  // diagnostic
 
@@ -204,7 +216,7 @@ class WakeWordEngine(
                 // platformAecDesiredEnabled (not a hardcoded true) since this runs fresh on every
                 // mic restart within a conversation — see platformAecDesiredEnabled's doc comment:
                 // a restart between setPlatformAecEnabled(false) and endAecSession() must not
-                // silently re-enable the effect NativeAec3 is standing in for.
+                // silently re-enable the effect while a WebView AEC session is active.
                 echoCanceler = AcousticEchoCanceler.create(sessionId)?.also { it.setEnabled(platformAecDesiredEnabled) }
                 Log.d(TAG, "AEC available, enabled=${echoCanceler?.enabled}")
             } else {
@@ -217,13 +229,13 @@ class WakeWordEngine(
 
     /**
      * Toggles the platform [AcousticEchoCanceler] at runtime (safe to call anytime after [start] —
-     * it's an effect flag, not something tied to recreating the [AudioRecord] session). While our
-     * own session-scoped `NativeAec3` is active, this device's platform AEC — previously harmless
+     * it's an effect flag, not something tied to recreating the [AudioRecord] session). While a
+     * `WebViewAecHost` barge-in session is active, this device's platform AEC — previously harmless
      * because [onArmedAudioChunk] never ran during playback at all — would otherwise run
      * concurrently with continuous mid-sentence listening and was found to over-suppress the
-     * captured signal to near-silence. `VoicePipeline` disables it for the duration of an AEC3
+     * captured signal to near-silence. `VoicePipeline` disables it for the duration of that
      * session and re-enables it once the session ends, so idle wake-word listening (no playback,
-     * no NativeAec3 running) keeps its original noise/echo cleanup untouched.
+     * no WebView AEC running) keeps its original noise/echo cleanup untouched.
      *
      * Persists [enabled] as [platformAecDesiredEnabled] in addition to applying it to the current
      * effect instance immediately — the mic restarts repeatedly *within* one conversation session
@@ -290,6 +302,8 @@ class WakeWordEngine(
                         // Copy: forwarding hands off to an async consumer (a channel → coroutine →
                         // WebSocket send), while `chunk` itself gets overwritten next iteration.
                         if (bargeInArmed) onArmedAudioChunk(chunk.copyOf())
+                        speakerCaptureBuffer.addLast(chunk.copyOf())
+                        while (speakerCaptureBuffer.size > SPEAKER_CAPTURE_CHUNKS) speakerCaptureBuffer.removeFirst()
                         processChunk(chunk)
 
                         var peak = 0
@@ -385,13 +399,26 @@ class WakeWordEngine(
             Log.d(TAG, "Wake word detected! score=$prob")
             positiveStreak = 0
             cooldown = COOLDOWN_CHUNKS
-            onDetected()
+            onDetected(captureWindow())
         }
+    }
+
+    /** Flattens the rolling pre-roll buffer into one contiguous window for speaker ID. */
+    private fun captureWindow(): ShortArray {
+        val totalSamples = speakerCaptureBuffer.sumOf { it.size }
+        val out = ShortArray(totalSamples)
+        var offset = 0
+        for (chunk in speakerCaptureBuffer) {
+            System.arraycopy(chunk, 0, out, offset, chunk.size)
+            offset += chunk.size
+        }
+        return out
     }
 
     private fun resetBuffers() {
         melBuffer.clear()
         embBuffer.clear()
+        speakerCaptureBuffer.clear()
         positiveStreak = 0
         cooldown = 0
     }

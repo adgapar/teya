@@ -60,19 +60,59 @@ verified against the model's actual ONNX graph (`input`/`state`/`sr` inputs, `ou
 outputs) — a fixed-config version taking Teya's specific need (16kHz, 512-sample frames, one
 detector instance per armed barge-in window) rather than a general-purpose multi-backend library.
 
-## Native echo cancellation: WebRTC AEC3 (vendored source, native build)
+## Per-speaker voice ID: CAM++ (model from upstream, wrapper + fbank extractor are original code)
 
-`app/src/main/cpp/third_party/webrtc/` vendors Google WebRTC's Acoustic Echo Canceller v3 (AEC3) —
-**AEC3 only, not the full Audio Processing Module** (no AGC, no noise suppression, no beamforming) —
-built as a native `.so` via NDK/CMake. See
-`app/src/main/cpp/third_party/webrtc/VENDORING.md` for the pinned commit hash, exact file list, and
-per-target dependency-resolution notes.
+`app/src/main/assets/speaker_embedding.onnx` +
+`app/src/main/kotlin/com/teya/agent/voice/speaker/{Fbank,CamPlusPlusSpeakerEmbedder,SpeakerEmbedder}.kt`
+turn a short recording into a voiceprint vector, so Teya can guess which household member is
+likely speaking (a soft, non-authoritative disambiguation signal — see `docs/roadmap.md` →
+Household setup & personalization).
 
 | Component | Source | License | Commercial use |
 |---|---|---|---|
-| WebRTC AEC3 (`modules/audio_processing/aec3/` + minimal dep slice) | [webrtc.googlesource.com/src](https://webrtc.googlesource.com/src), pinned commit `99de2d09036e61b72e4e6bba3ab09fedc40d18fe` | BSD-3-Clause | ✅ Yes |
-| Abseil (`absl::strings:string_view`, transitively more) | [abseil/abseil-cpp](https://github.com/abseil/abseil-cpp) — a WebRTC build dependency, **not yet vendored** (scoping deferred to a later implementation phase; see `VENDORING.md`) | Apache-2.0 | ✅ Yes |
-| Ooura FFT (`common_audio/third_party/ooura/fft_size_128/`) | Takuya Ooura, [kurims.kyoto-u.ac.jp/~ooura/fft.html](http://www.kurims.kyoto-u.ac.jp/~ooura/fft.html), vendored via the WebRTC mirror | **Its own permissive attribution-request license** (Copyright Takuya Ooura, 1996–2001 — "you may use, copy, modify and distribute this code for any purpose, including commercial use, and without fee. Please refer to this package when you modify this code.") — **not** BSD or Apache, listed separately on purpose | ✅ Yes (with attribution) |
+| `speaker_embedding.onnx` (model weights) | [iic/speech_campplus_sv_en_voxceleb_16k](https://www.modelscope.cn/models/iic/speech_campplus_sv_en_voxceleb_16k) (ModelScope, Alibaba 3D-Speaker) — downloaded via [k2-fsa/sherpa-onnx's speaker-recognition-models release](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-recongition-models) as `3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx`, SHA256 `357a834f702b80161e5b981182c038e18553c1f2ca752ed6cec2052365d4129b` | Apache-2.0 | ✅ Yes (see VoxCeleb note below) |
+| `Fbank.kt` (Kotlin fbank extractor) | Original implementation — see below | N/A (our code) | ✅ Yes |
+| `CamPlusPlusSpeakerEmbedder.kt` / `SpeakerEmbedder.kt` (Kotlin ONNX wrapper + interface) | Original implementation — see below | N/A (our code) | ✅ Yes |
 
-`NativeAec3.kt` (the Kotlin wrapper, not yet written as of this entry) will be our own code, not a
-port of any third-party Android AEC wrapper — same pattern as `SileroVad.kt` above.
+**VoxCeleb training-data caveat**: this checkpoint is trained partly on VoxCeleb, whose raw dataset
+access is gated to non-commercial research by Oxford VGG — separate from the Apache-2.0 license
+3D-Speaker tags the resulting weights with. Whether that access restriction legally flows through
+to derived model weights is unsettled (no clean precedent either way); Apache-2.0 is the best
+signal available from the maintainer, not a legal guarantee. Full trail: `docs/experiments.md` →
+"Problem: per-speaker voice ID".
+
+Runtime: `com.microsoft.onnxruntime:onnxruntime-android:1.22.0` — the same dependency already
+vendored for Silero VAD, not a second runtime. **A prebuilt AAR from k2-fsa/sherpa-onnx was tried
+first** (bundles a ready feature-extraction + embedding API) but was reverted after a live,
+on-device crash: its bundled ONNX Runtime (1.27.0) is binary-incompatible with the one Silero VAD's
+Java bindings are built against (1.22.0), and no sherpa-onnx release has ever bundled exactly
+1.22.0. Full trail: `docs/experiments.md`.
+
+`Fbank.kt` is our own code, implementing Kaldi's published fbank algorithm
+(`feature-window.cc`/`mel-computations.cc`) directly — not a port of any third-party wrapper.
+Config (16kHz, 25ms/10ms framing, povey window, dither=0, preemph=0.97, remove-DC, 80 mel bins
+20Hz-7600Hz, global-mean normalization) was reverse-engineered from sherpa-onnx's
+`FeatureExtractorConfig` defaults and the model's own ONNX metadata (`feature_normalize_type=
+global-mean`), then verified numerically against the real Python `kaldi_native_fbank` library's
+output on an identical synthetic signal (see `app/src/test/kotlin/.../speaker/FbankTest.kt` +
+`app/src/test/resources/fbank_fixture.json`) — this is the one part of the feature with genuine
+hand-written-DSP correctness risk, so it's the one part with a numeric regression test against a
+known-correct reference implementation, not just a compile check.
+
+`CamPlusPlusSpeakerEmbedder.kt` mirrors `SileroVad.kt`'s pattern (asset-loaded ONNX Runtime
+session, verified directly against the model's own ONNX graph: input `x` float32 `[1, T, 80]`,
+output `embedding` float32 `[1, 512]`) behind a small `SpeakerEmbedder` interface, so the concrete
+backend can be swapped later without touching any caller.
+
+## Native echo cancellation: WebRTC AEC3 — abandoned, removed
+
+An earlier phase vendored Google WebRTC's Acoustic Echo Canceller v3 (AEC3) under
+`app/src/main/cpp/third_party/webrtc/` and drove it via a `NativeAec3.kt` JNI wrapper, built as a
+native `.so` via NDK/CMake (pinned commit `99de2d09036e61b72e4e6bba3ab09fedc40d18fe`, BSD-3-Clause,
+plus an Ooura FFT dependency and an unvendored Abseil dependency). Commit `2222c9c` ("Drop
+NativeAec3; WebView AEC becomes the sole default barge-in path") removed all of it — the
+`cpp/` tree, the Kotlin wrapper, and the NDK/CMake build config — after live testing showed
+Chromium's own `getUserMedia({echoCancellation:true})` via `voice/aec/WebViewAecHost.kt` performed
+decisively better. **No native code or vendored WebRTC source remains in the app.** This section is
+kept only as provenance for why that approach was tried and dropped; see `docs/experiments.md` for
+the comparison.
