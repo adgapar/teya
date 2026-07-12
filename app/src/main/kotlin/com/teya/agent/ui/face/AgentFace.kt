@@ -26,8 +26,10 @@ import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.random.Random
 
-/** Broadcast by [com.teya.agent.harness.HarnessService] — names must stay in sync. */
-enum class AgentState { IDLE, LISTENING, THINKING, SPEAKING }
+/** Broadcast by [com.teya.agent.harness.HarnessService] — names must stay in sync. BRAIN_OFF is the
+ *  gated "resting" look when Mistral is rejecting requests (bad API key) — a different formation
+ *  from IDLE, not just a recolor, since TTS is what's broken in that case so she can't say so. */
+enum class AgentState { IDLE, LISTENING, THINKING, SPEAKING, BRAIN_OFF }
 
 /** Background of the whole face — the points glow additively on top of this. */
 val FaceBackground = Color(0xFF060708)
@@ -38,6 +40,7 @@ fun stateColor(state: AgentState): Color = when (state) {
     AgentState.LISTENING -> Color(0xFF45D0E0) // aqua
     AgentState.THINKING -> Color(0xFFA98BFF)  // violet
     AgentState.SPEAKING -> Color(0xFFFFBE4B)  // amber
+    AgentState.BRAIN_OFF -> Color(0xFF9C5650) // dusty red — off, not resting
 }
 
 private const val N = 828          // total points
@@ -112,6 +115,7 @@ private class ParticleField {
         AgentState.LISTENING -> 1600f
         AgentState.THINKING -> 4200f
         AgentState.SPEAKING -> 1500f
+        AgentState.BRAIN_OFF -> 9000f
     }
 
     private fun energyTarget(s: AgentState) = when (s) {
@@ -119,6 +123,7 @@ private class ParticleField {
         AgentState.LISTENING -> 1.0f
         AgentState.THINKING -> 0.82f
         AgentState.SPEAKING -> 1.0f
+        AgentState.BRAIN_OFF -> 0.4f
     }
 
     private fun palette(s: AgentState): FloatArray = when (s) {
@@ -126,6 +131,7 @@ private class ParticleField {
         AgentState.LISTENING -> LISTEN_RGB
         AgentState.THINKING -> THINK_RGB
         AgentState.SPEAKING -> SPEAK_RGB
+        AgentState.BRAIN_OFF -> BRAIN_OFF_RGB
     }
 
     fun step(w: Float, h: Float, dtMs: Float, state: AgentState) {
@@ -270,6 +276,22 @@ private class ParticleField {
                 tS = (rd * 0.0085).toFloat()
                 tA = ((0.14 + 0.55 * env * e) * (1 - abs(line - mid) / mid * 0.45)).toFloat()
             }
+            AgentState.BRAIN_OFF -> {
+                // the sea, sunk and dimmed — not resting, off. Same grid positions as IDLE, but
+                // collapsed low with an uneven per-point flicker instead of a travelling wave, so it
+                // reads as a dead signal rather than a calm one. Brightness deliberately close to
+                // IDLE's own range (not a faint whisper of it) — the shape/color carry "wrong", not
+                // sheer dimness, since a too-subtle difference just reads as "nothing happened".
+                val cIdx = i % COLS
+                val row = i / COLS
+                val gx = cIdx.toDouble() / (COLS - 1) * 2 - 1
+                val d = row.toDouble() / (ROWS - 1)
+                val flicker = 0.45 + 0.55 * sin(t * TAU * 0.6 + ra[i] * TAU * 4)
+                tX = (cx + gx * rd * 1.5 * (0.42 + 0.58 * d)).toFloat()
+                tY = (cy + rd * (0.5 + d * 0.55)).toFloat()
+                tS = (rd * 0.0075 * (0.4 + 0.6 * d)).toFloat()
+                tA = (0.14 + 0.42 * d * flicker).toFloat()
+            }
         }
     }
 
@@ -277,6 +299,7 @@ private class ParticleField {
         private val IDLE_RGB = floatArrayOf(74f, 134f, 200f)
         private val LISTEN_RGB = floatArrayOf(69f, 208f, 224f)
         private val THINK_RGB = floatArrayOf(169f, 139f, 255f)
+        private val BRAIN_OFF_RGB = floatArrayOf(156f, 86f, 80f)
         private val SPEAK_RGB = floatArrayOf(255f, 190f, 75f)
     }
 }

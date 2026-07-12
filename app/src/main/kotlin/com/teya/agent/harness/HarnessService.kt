@@ -112,26 +112,22 @@ class HarnessService : Service() {
         householdManager = HouseholdManager(this)
         memoryManager = MemoryManager(this)
 
-        val apiKey = configManager.mistralApiKey
-        if (!apiKey.isNullOrBlank()) {
-            Log.d(TAG, "Initializing Mistral brain with key")
-            val mistralClient = MistralClient(
-                KtorClientFactory.create(),
-                apiKey,
-                TeyaPersona.systemPrompt,
-                AgentTools.all
-            )
-            brainClient = mistralClient
-            voicePipeline.setMistralClient(mistralClient)
-            scope.launch { mistralClient.warmUp() }  // warm the TLS/connection pool at startup
-        } else {
-            Log.w(TAG, "No API key found, using stub brain")
-            brainClient = object : BrainClient {
-                override suspend fun processText(history: List<ChatMessage>, liveContext: String?): BrainResponse {
-                    return BrainResponse("Please configure your Mistral API key in settings.")
-                }
-            }
-        }
+        // Reads configManager.mistralApiKey fresh on every request (see MistralClient's
+        // apiKeyProvider) rather than capturing it once here — this service runs for its whole
+        // foreground lifetime, so a key added/changed/cleared in Admin takes effect on the very
+        // next request, with no service restart needed. A blank key just 401s like a bad one,
+        // which onMistralAuthError already turns into the same "check your key" BRAIN_OFF gate.
+        Log.d(TAG, "Initializing Mistral brain (key ${if (configManager.mistralApiKey.isNullOrBlank()) "not yet set" else "present"})")
+        val mistralClient = MistralClient(
+            KtorClientFactory.create(),
+            { configManager.mistralApiKey ?: "" },
+            TeyaPersona.systemPrompt,
+            AgentTools.all
+        )
+        mistralClient.onAuthError = ::onMistralAuthError
+        brainClient = mistralClient
+        voicePipeline.setMistralClient(mistralClient)
+        scope.launch { mistralClient.warmUp() }  // warm the TLS/connection pool at startup
 
         scheduleDream()  // nightly memory decay/consolidation (~3 AM, AlarmManager)
     }
@@ -280,6 +276,7 @@ class HarnessService : Service() {
             Log.d(TAG, "Conversation already active — ignoring trigger")
             return
         }
+        brainBroken = false // give a fresh attempt the benefit of the doubt — re-gates immediately if still bad
         scope.launch {
             try {
                 runConversation()
@@ -879,6 +876,33 @@ class HarnessService : Service() {
         while (history.size > MAX_HISTORY) history.removeAt(0)
     }
 
+    private var lastAuthErrorShownAt = 0L
+    // The gate: once Mistral rejects a request as unauthorized, every subsequent "go back to
+    // resting" call shows BRAIN_OFF instead of IDLE (see updateUiState) until a fresh attempt is
+    // made — reset optimistically at the top of each new trigger (onTrigger), not on a timer, so a
+    // fixed key clears it the moment she's asked again, and a still-bad key re-gates immediately.
+    private var brainBroken = false
+
+    /** [MistralClient.onAuthError] callback — a 401 means the key itself is wrong, and since TTS is
+     *  what's broken in that case, she can't speak the problem. Surfaced visually instead: recorded
+     *  for Admin's API section, and gates the idle face to BRAIN_OFF (a genuinely different
+     *  formation, not just IDLE recolored). The caption text is still shown once per debounce window
+     *  (one bad turn can 401 on STT, chat, and TTS all in a row — that's one failure, not three).*/
+    private fun onMistralAuthError() {
+        configManager.lastAuthErrorAt = System.currentTimeMillis()
+        // She can't say this aloud (TTS is what's broken), and it's the only way anyone will know
+        // there's even a way to fix it — so the caption has to name the actual gesture, not just
+        // "check Admin" and assume the reader already knows Admin exists or how to reach it.
+        val note = "Brain's offline — hold the screen to open Admin, then fix the API key."
+        configManager.lastAuthErrorNote = note // persisted: survives a missed/late-registered broadcast
+        brainBroken = true
+        val now = System.currentTimeMillis()
+        if (now - lastAuthErrorShownAt < 10_000L) return
+        lastAuthErrorShownAt = now
+        Log.w(TAG, "Mistral rejected the API key (401) — brain marked off")
+        sendDebug(agent = note)
+    }
+
     private fun sendDebug(user: String? = null, agent: String? = null) {
         val intent = Intent(ACTION_TRANSCRIPT).apply {
             setPackage(packageName)
@@ -888,9 +912,12 @@ class HarnessService : Service() {
         sendBroadcast(intent)
     }
 
+    /** Every "back to resting" transition is gated to BRAIN_OFF while [brainBroken] — the one place
+     *  this needs handling, instead of special-casing every IDLE call site in the conversation loop. */
     private fun updateUiState(state: AgentState) {
+        val effective = if (state == AgentState.IDLE && brainBroken) AgentState.BRAIN_OFF else state
         val intent = Intent("com.teya.agent.STATE_UPDATE").apply {
-            putExtra("state", state.name)
+            putExtra("state", effective.name)
             setPackage(packageName)
         }
         sendBroadcast(intent)

@@ -12,12 +12,17 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.geometry.Offset
@@ -45,6 +50,17 @@ class MainActivity : ComponentActivity() {
     private val _agentState = mutableStateOf(AgentState.IDLE)
     private val _userText = mutableStateOf("")
     private val _agentText = mutableStateOf("")
+
+    // Ambient status motes (idea 3) — read fresh in onResume so a change made in Admin (a dream
+    // run, a retune) shows up on the face without needing an app restart.
+    private val _lastDreamAt = mutableStateOf(0L)
+    private val _lastDreamNote = mutableStateOf("")
+    private val _lastTuningChangedAt = mutableStateOf(0L)
+    // BRAIN_OFF's caption fallback — HarnessService also broadcasts this live, but that broadcast
+    // isn't queued: if this Activity's receiver registers even slightly late (e.g. right after
+    // SetupActivity hands off), the live text is silently missed while the state change survives.
+    // Reading the persisted copy in onResume means the real reason still shows, not a placeholder.
+    private val _lastAuthErrorNote = mutableStateOf("")
 
     private val stateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -98,6 +114,10 @@ class MainActivity : ComponentActivity() {
                     state = _agentState.value,
                     userText = _userText.value,
                     agentText = _agentText.value,
+                    lastDreamAt = _lastDreamAt.value,
+                    lastDreamNote = _lastDreamNote.value,
+                    lastTuningChangedAt = _lastTuningChangedAt.value,
+                    lastAuthErrorNote = _lastAuthErrorNote.value,
                     onOrbClick = {
                         Log.d("MainActivity", "Orb clicked, triggering voice loop")
                         val intent = Intent(this, HarnessService::class.java).apply {
@@ -133,6 +153,14 @@ class MainActivity : ComponentActivity() {
         } else {
             registerReceiver(stateReceiver, filter)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        _lastDreamAt.value = configManager.lastDreamAt
+        _lastDreamNote.value = configManager.lastDreamNote
+        _lastTuningChangedAt.value = configManager.lastTuningChangedAt
+        _lastAuthErrorNote.value = configManager.lastAuthErrorNote
     }
 
     override fun onStop() {
@@ -191,7 +219,11 @@ fun MainScreen(
     userText: String,
     agentText: String,
     onOrbClick: () -> Unit,
-    onOpenAdmin: () -> Unit
+    onOpenAdmin: () -> Unit,
+    lastDreamAt: Long = 0L,
+    lastDreamNote: String = "",
+    lastTuningChangedAt: Long = 0L,
+    lastAuthErrorNote: String = "",
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -206,12 +238,24 @@ fun MainScreen(
         ) {
             AgentFace(state = state)
 
+            // idea 3: ambient status motes — Admin state leaks back into the idle face passively,
+            // tap to reveal (no hover on a touchscreen), auto-hides after a couple seconds.
+            if (state == AgentState.IDLE) {
+                StatusMotes(
+                    lastDreamAt = lastDreamAt,
+                    lastDreamNote = lastDreamNote,
+                    lastTuningChangedAt = lastTuningChangedAt,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+
             // Live transcript, centred over the field (the user's words while listening,
             // Teya's reply while speaking).
             CenteredTranscript(
                 state = state,
                 userText = userText,
                 agentText = agentText,
+                lastAuthErrorNote = lastAuthErrorNote,
                 modifier = Modifier
                     .align(Alignment.Center)
                     .fillMaxWidth()
@@ -226,6 +270,7 @@ private fun CenteredTranscript(
     state: AgentState,
     userText: String,
     agentText: String,
+    lastAuthErrorNote: String = "",
     modifier: Modifier = Modifier
 ) {
     // Pick what to show based on the state, like a voice agent's transcript.
@@ -242,6 +287,10 @@ private fun CenteredTranscript(
         AgentState.IDLE -> {
             if (agentText.isNotBlank()) { role = "Teya"; line = agentText }
             else { role = ""; line = "Say “Hey Teya”" }
+        }
+        AgentState.BRAIN_OFF -> {
+            role = ""
+            line = agentText.ifBlank { lastAuthErrorNote.ifBlank { "Brain's offline — hold the screen to open Admin." } }
         }
     }
 
@@ -291,4 +340,68 @@ private fun CenteredTranscript(
             )
         }
     }
+}
+
+/** Idea 3 — the two dots that can appear on the idle face: a dream having run, tuning having
+ *  changed. Each only renders when its underlying event has actually happened (no placeholder
+ *  state), positioned clear of the centred transcript. */
+@Composable
+private fun StatusMotes(
+    lastDreamAt: Long,
+    lastDreamNote: String,
+    lastTuningChangedAt: Long,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier) {
+        if (lastDreamAt > 0L) {
+            val label = "Last dream: ${relativeMoteTime(lastDreamAt)}" +
+                if (lastDreamNote.isNotBlank()) " — $lastDreamNote" else ""
+            StatusMote(
+                color = Color(0xFFFFBE4B),
+                label = label,
+                modifier = Modifier.align(Alignment.TopStart).padding(start = 28.dp, top = 40.dp),
+            )
+        }
+        if (lastTuningChangedAt > 0L) {
+            StatusMote(
+                color = Color(0xFF45D0E0),
+                label = "Voice tuning changed ${relativeMoteTime(lastTuningChangedAt)}",
+                modifier = Modifier.align(Alignment.TopEnd).padding(end = 28.dp, top = 40.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusMote(color: Color, label: String, modifier: Modifier = Modifier) {
+    var revealed by remember { mutableStateOf(false) }
+    LaunchedEffect(revealed) {
+        if (revealed) { delay(2200); revealed = false }
+    }
+    Box(modifier) {
+        Box(
+            Modifier
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(color)
+                .clickable { revealed = true }
+        )
+        if (revealed) {
+            Box(
+                Modifier
+                    .offset(y = 14.dp)
+                    .widthIn(max = 200.dp)
+                    .background(Color(0xFF0B1012).copy(alpha = 0.95f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 9.dp, vertical = 6.dp)
+            ) {
+                Text(label, color = Color.White.copy(alpha = 0.9f), fontSize = 10.sp, lineHeight = 13.sp)
+            }
+        }
+    }
+}
+
+/** "today" / "1d ago" / "3d ago" — used only by the status motes' tap-to-reveal label. */
+private fun relativeMoteTime(millis: Long): String {
+    val days = (System.currentTimeMillis() - millis) / 86_400_000L
+    return when { days <= 0L -> "today"; days == 1L -> "1d ago"; else -> "${days}d ago" }
 }

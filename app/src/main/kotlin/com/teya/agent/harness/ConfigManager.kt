@@ -112,4 +112,27 @@ class ConfigManager(context: Context) {
     var wakeWordPatience: Int
         get() = prefs.getInt("wake_word_patience", 1)
         set(value) = prefs.edit().putInt("wake_word_patience", value).apply()
+
+    /** When any Voice tuning knob was last actually changed in Admin; 0 = never. Drives the idle
+     *  face's ambient status mote so a retune is visible without opening Admin. */
+    var lastTuningChangedAt: Long
+        get() = prefs.getLong("last_tuning_changed_at", 0L)
+        set(value) = prefs.edit().putLong("last_tuning_changed_at", value).apply()
+
+    /** When Mistral last rejected a request as unauthorized (bad/expired API key); 0 = never. Both
+     *  STT and TTS fail silently in this case (TTS itself is broken, so she can't voice the error),
+     *  so this is surfaced visually instead — on the idle face and in Admin's API section. */
+    var lastAuthErrorAt: Long
+        get() = prefs.getLong("last_auth_error_at", 0L)
+        set(value) = prefs.edit().putLong("last_auth_error_at", value).apply()
+
+    /** The actual caption shown for the last auth error. Persisted (not just broadcast) because the
+     *  live "com.teya.agent.STATE_UPDATE"/TRANSCRIPT_UPDATE broadcasts aren't queued — if
+     *  MainActivity's receiver registers even slightly after HarnessService sends them (e.g. right
+     *  after SetupActivity hands off), the specific message is silently dropped and only the state
+     *  change survives. Read as the BRAIN_OFF caption's fallback so a missed broadcast still shows
+     *  the real reason, not a generic placeholder. */
+    var lastAuthErrorNote: String
+        get() = prefs.getString("last_auth_error_note", "") ?: ""
+        set(value) = prefs.edit().putString("last_auth_error_note", value).apply()
 }

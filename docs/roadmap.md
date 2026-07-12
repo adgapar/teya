@@ -4,9 +4,10 @@ Living status doc. Design lives in [ARCHITECTURE.md](../ARCHITECTURE.md); the fu
 is [thoughts/shared/research/2026-07-06-project-audit.md](../thoughts/shared/research/2026-07-06-project-audit.md).
 Audit IDs (C1, H2, …) below refer to that file.
 
-_Last updated: 2026-07-11 (continuous mid-sentence barge-in confirmed working live via WebView AEC;
-same day, follow-on session shipped admin-configurable voice tuning + fixed the barge-in UI-stuck
-and STT-swallowed-error bugs — see Backlog and `docs/experiments.md`)._
+_Last updated: 2026-07-12 (Admin rebuilt full-bleed and particle-driven — same field as the face and
+onboarding, no more bordered-card dashboard; a `BRAIN_OFF` face state + gate now surfaces a bad/
+expired Mistral API key visually, since TTS itself is what breaks in that case; fixed the API key
+not hot-reloading after an Admin edit. See Backlog for the reset/backup gap this surfaced.)._
 
 ## ✅ Done
 
@@ -277,6 +278,24 @@ Open-Meteo), with location from the household profile or native device location.
   the process — the landscape Admin nav rail didn't scroll (a 6th section, "Voice tuning", was
   clipped off-screen along with "API"), and long field labels overlapped the new default-value hints
   in the two-column rows. Both fixed; the section now renders correctly and a save round-trip works.
+- **Reset + backup/export** (noted 2026-07-12) — there's currently no reliable way to recover
+  household/memory/config if the app is deleted by accident, and no "factory reset" action either
+  (deliberately not built yet — a destructive reset shouldn't exist before a real backup does).
+  Checked the actual state: `android:allowBackup="true"` is set with no custom rules, but that's not
+  the safety net it looks like — (1) the encrypted prefs (API key, voice tuning, dream log, the
+  auth-error tracking) are `EncryptedSharedPreferences`, whose decryption key lives in the Android
+  Keystore and does **not** travel with Auto Backup, so even a successful restore comes back as
+  undecryptable ciphertext; (2) the Room DB (`teya-db`: aliases, memory) is plain SQLite and
+  technically backup-eligible, but Android's restore flow mostly fires during a fresh device/app
+  setup, not an ordinary delete-then-reinstall on an already-set-up phone, so it likely won't fire
+  in the actual accident scenario; (3) raw conversation transcripts are never persisted at all, by
+  design (`HarnessService` keeps `history` in memory for the live turn only; `captureEpisodic`
+  distills it into one short Memory note, then discards it) — nothing to lose there beyond what's
+  already in Memory. Household members themselves (name/email/phone/birthday) are the one part
+  that's already safe, since they live in native Contacts and sync via the device's Google account.
+  Real fix: a proper **export** (household + memory + config to a file the user controls, e.g. via
+  Android's share sheet) that doesn't depend on Keystore-tied encryption or Auto Backup's flaky
+  restore timing — build that before any destructive Reset button.
 - Settings **voice picker** (live from `/audio/voices`) + persist choice.
 - **Implement memory / learning about people** — build the deferred half of the household model:
   `Person` rows with `kind=KNOWN` captured by voice ("remember Uncle Bob…"), a `MemoryEntry` table

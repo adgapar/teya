@@ -25,14 +25,27 @@ import java.nio.ByteOrder
 
 class MistralClient(
     private val httpClient: HttpClient,
-    private val apiKey: String,
+    private val apiKeyProvider: () -> String,
     private val systemPrompt: String,
     tools: List<ToolSpec>
 ) : BrainClient {
 
     private val baseUrl = "https://api.mistral.ai/v1"
     private val json = Json { ignoreUnknownKeys = true }
-    private val cleanApiKey = apiKey.replace(Regex("[^\\x20-\\x7E]"), "").trim()
+    // Read fresh on every request, not captured once at construction — HarnessService lives for the
+    // whole foreground-service lifetime, so a key changed in Admin must take effect on the very next
+    // request without needing the service (and this client) to be recreated.
+    private val cleanApiKey: String
+        get() = apiKeyProvider().replace(Regex("[^\\x20-\\x7E]"), "").trim()
+
+    /** Set by [com.teya.agent.harness.HarnessService] — fired whenever any request comes back 401,
+     *  so the UI can surface "your API key is wrong" instead of just going quietly silent (TTS
+     *  itself is what's broken in this case, so she can't speak the problem — this has to be shown). */
+    var onAuthError: (() -> Unit)? = null
+
+    private fun reportIfAuthError(status: HttpStatusCode) {
+        if (status == HttpStatusCode.Unauthorized) onAuthError?.invoke()
+    }
     // Deliberately the small model, not the largest available — cheap and quick, matching a
     // home-appliance voice loop's latency needs over maximal reasoning power (see README).
     private val chatModel = "mistral-small-latest"
@@ -85,6 +98,7 @@ class MistralClient(
         if (httpResponse.status != HttpStatusCode.OK) {
             val errorBody = httpResponse.bodyAsText()
             Log.e("MistralClient", "STT Error: ${httpResponse.status} - ${errorBody}")
+            reportIfAuthError(httpResponse.status)
             return ""
         }
 
@@ -155,6 +169,7 @@ class MistralClient(
         if (httpResponse.status != HttpStatusCode.OK) {
             val errorBody = httpResponse.bodyAsText()
             Log.e("MistralClient", "LLM Error: ${httpResponse.status} - ${errorBody}")
+            reportIfAuthError(httpResponse.status)
             return BrainResponse("I'm sorry, I'm having trouble connecting to my brain.")
         }
 
@@ -252,6 +267,7 @@ class MistralClient(
             }.execute { response ->
                 if (response.status != HttpStatusCode.OK) {
                     Log.e("MistralClient", "LLM stream error: ${response.status} - ${response.bodyAsText()}")
+                    reportIfAuthError(response.status)
                     errored = true
                     return@execute
                 }
@@ -324,6 +340,7 @@ class MistralClient(
         }
         if (response.status != HttpStatusCode.OK) {
             Log.e("MistralClient", "TTS Error: ${response.status} - ${response.bodyAsText()}")
+            reportIfAuthError(response.status)
             logAvailableVoices()
             return null
         }
@@ -360,6 +377,7 @@ class MistralClient(
             }.execute { response ->
                 if (response.status != HttpStatusCode.OK) {
                     Log.e("MistralClient", "TTS stream error: ${response.status} - ${response.bodyAsText()}")
+                    reportIfAuthError(response.status)
                     logAvailableVoices()
                     return@execute
                 }
