@@ -2,7 +2,7 @@
 date: 2026-07-12T00:00:00Z
 topic: "Integrate the trained hey_teya microWakeWord model into the Android wake-word engine"
 tags: [voice, wake-word, microwakeword, tflite, jni, ndk, cmake, wakewordengine, third-party-models]
-status: "completed — hey_teya validated live on-device (5/5 detections, incl. ~1.5m); shipped behind ConfigManager.useMicroWakeWord, default off pending more validation sessions before cutover"
+status: "completed — hey_teya validated live on-device (5/5 detections, incl. ~1.5m) and fully cut over; openWakeWord/hey_jarvis removed entirely"
 ---
 
 # Plan: Integrate the trained `hey_teya` microWakeWord model into the Android app
@@ -156,11 +156,15 @@ cleanup of dead AEC3 test files first, then vendoring, NDK/CMake plumbing, the
 `WakeWordDetector` interface + `MicroWakeWordDetector`, asset bundling, doc updates, and finally
 a live on-device validation session.
 
-**One deliberate deviation from the plan's recommendation**: kept both engines behind
-`ConfigManager.useMicroWakeWord` (default off) rather than replacing `hey_jarvis` outright — the
-plan itself flagged this as an acceptable alternative ("keep both paths behind a config toggle
-during validation"), chosen live with the user given this is the app's first native module and a
-genuinely stateful TFLite model, worth more real-world sessions before committing.
+**Initially kept both engines behind `ConfigManager.useMicroWakeWord`** (default off) rather than
+replacing `hey_jarvis` outright — the plan itself flagged this as an acceptable alternative ("keep
+both paths behind a config toggle during validation"), chosen live with the user given this is the
+app's first native module and a genuinely stateful TFLite model. **Superseded the same day**: after
+live use showed `hey_teya` clearly outperforming `hey_jarvis`, the user asked to cut over
+immediately rather than wait for more sessions — openWakeWord was removed entirely (assets,
+`WakeWordDetector` interface collapsed back to a single class, `useMicroWakeWord` toggle deleted,
+shared tuning knobs repurposed for `hey_teya`'s calibration). See the final two rows of
+`docs/experiments.md`'s wake-word trail.
 
 **Two things found and fixed that the plan didn't anticipate**:
 - `ResamplerTest.kt`/`NativeAec3SmokeTest.kt`/`NativeAec3EchoCancellationTest.kt` were dead test
@@ -178,5 +182,5 @@ lifecycle means swiping the app from recents does *not* apply a config toggle (n
 far-field attempts, no observed ambient false-accepts in the session. Full trail:
 `docs/experiments.md` → "Problem: wake word".
 
-**Left for a later session**: more validation sessions (different rooms/times/speakers) before
-deciding the actual cutover away from `hey_jarvis_v0.1` / openWakeWord.
+**Left for a later session**: further real-world validation (different rooms/times/speakers) of
+`hey_teya` as the sole engine, now that there's no fallback to openWakeWord if it underperforms.
