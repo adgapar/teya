@@ -4,7 +4,15 @@ Living status doc. Design lives in [ARCHITECTURE.md](../ARCHITECTURE.md); the fu
 is [thoughts/shared/research/2026-07-06-project-audit.md](../thoughts/shared/research/2026-07-06-project-audit.md).
 Audit IDs (C1, H2, …) below refer to that file.
 
-_Last updated: 2026-07-12 (Per-speaker voice ID shipped as a soft signal — see the household
+_Last updated: 2026-07-12 (**Wake word cut over to our own model**: trained `hey_teya` via
+microWakeWord, vendored TFLite Micro's native "microfrontend" feature extractor (the app's first
+NDK/CMake module), validated live on-device (5/5 detections, incl. ~1.5m far-field, no false
+accepts), then removed openWakeWord/`hey_jarvis` entirely once real usage confirmed `hey_teya`
+performs better — the CC-BY-NC-SA commercial-use blocker this whole effort started from is now
+fully resolved. Full trail: `docs/experiments.md` → "Problem: wake word",
+`thoughts/shared/plans/2026-07-12-microwakeword-android-integration.md`.
+
+Also this date: Per-speaker voice ID shipped as a soft signal — see the household
 setup & personalization section — hand-written on-device speaker-embedding matching, verified live
 end-to-end with real household voices; a prebuilt-AAR integration attempt was tried and reverted
 after a real on-device crash, full trail in `docs/experiments.md`. Also: Admin rebuilt full-bleed
@@ -61,10 +69,20 @@ for the reset/backup gap this surfaced.)._
   **Verified live on-device** (migration, Contacts round-trip, both orientations). Ported from the
   design-locked plan `thoughts/shared/plans/2026-07-08-household-onboarding.md`.
 - HTTP timeouts (C5), connection warmup, VAD tuning.
-- **Wake word working at ~1.5 m** (openWakeWord `hey_jarvis`). Fixed the near-field-only problem
-  with a software audio front-end: `VOICE_RECOGNITION` source + `NoiseSuppressor` + **6× software gain**
-  (device has no hardware AGC), threshold 0.2, patience 1. Ambient floor ~0.03 vs detections ~0.26–0.34.
-  Further range / commercial use still needs a custom "Hey Teya" model + likely a mic array.
+- **Wake word: our own "hey_teya" model, commercial-use blocker resolved.** Trained via the Mac
+  microWakeWord-Trainer-AppleSilicon app (personal recordings + Piper-TTS synthetic positives +
+  standard negative datasets; unrestricted license, 99.85% recall / ~0.93 false-accepts/hour on
+  ambient validation). Required vendoring TFLite Micro's native "microfrontend" feature extractor
+  (`app/src/main/cpp/microfrontend/` — the app's first NDK/CMake module) since it's a fixed-point
+  DSP step not expressible as a portable TFLite graph; the model itself is a genuinely stateful
+  streaming TFLite model (TFLite resource-variable conv state). **Verified live on real hardware**:
+  5/5 detections, scores 0.70–0.98 including ~1.5m far-field attempts, no observed false accepts.
+  Replaced openWakeWord/`hey_jarvis` (CC-BY-NC-SA, non-commercial) **entirely** the same session,
+  once real usage confirmed `hey_teya` performs better. Tuning knobs (`wakeWordThreshold`/
+  `wakeWordPatience`, now defaulting to `hey_teya`'s calibrated 0.53/3) live in Admin's Voice
+  tuning section. Full trail: `docs/experiments.md` → "Problem: wake word". Remaining: more
+  validation sessions (different rooms/times/speakers); true whole-room likely still needs a mic
+  array.
 - **Voice face redesign — one field of points that morphs per state** (`AgentFace`): ~830 points
   reassemble into a form per mode — idle **sea** (rolling perspective grid), listening **inhale
   rings** (drawn inward), thinking **swirl** (orbiting), speaking **waveform ribbon** (banded dots,
@@ -151,10 +169,10 @@ for the reset/backup gap this surfaced.)._
    sentences) remains as the automatic fallback if the WebView host fails to start. Full phased
    history: `thoughts/shared/plans/2026-07-11-webview-chromium-aec-barge-in.md`.
    Full status + experiment trail: **`docs/experiments.md`**.
-3. **Wake word** — ✅ now works at ~1.5 m (software front-end: `NoiseSuppressor` + 6× gain, threshold
-   0.2 / patience 1). Remaining: **train a custom "Hey Teya" model** for further range + commercial use
-   (`hey_jarvis` is dev-only / non-commercial — see `THIRD_PARTY_MODELS.md`); true whole-room likely
-   also needs a mic array. Tuning knobs live in `WakeWordEngine` (`THRESHOLD`, `INPUT_GAIN`, `PATIENCE`).
+3. **Wake word** — ✅ done: our own commercial-use-clear "hey_teya" model shipped and validated live
+   (5/5 detections incl. ~1.5m far-field), openWakeWord/`hey_jarvis` removed entirely. Remaining:
+   more validation sessions across different rooms/times/speakers; true whole-room likely still
+   needs a mic array. Tuning knobs live in Admin's Voice tuning section (`ConfigManager`).
 4. **Security pass** — no plaintext key fallback (**C4**), `allowBackup=false` (**H1**), gate PII logs behind `BuildConfig.DEBUG` (**H2**).
 5. **Resource leaks** — close TFLite interpreters + `HttpClient` in `onDestroy` (**H3/H4**).
 
