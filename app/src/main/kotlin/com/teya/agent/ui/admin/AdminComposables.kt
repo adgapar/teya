@@ -805,7 +805,7 @@ fun VoiceTuningPanel(
 
             TactileVoiceRibbon(
                 gain = tuning.bargeInGain.toFloatOrNull() ?: 6f,
-                sensitivity = tuning.wakeWordThreshold.toFloatOrNull() ?: 0.2f,
+                sensitivity = tuning.wakeWordThreshold.toFloatOrNull() ?: 0.53f,
                 onChange = { gain, sens ->
                     onChange(tuning.copy(bargeInGain = "%.1f".format(gain), wakeWordThreshold = "%.2f".format(sens)))
                 },

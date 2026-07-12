@@ -44,7 +44,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.teya.agent.harness.ConfigManager
 import com.teya.agent.household.Member
 import com.teya.agent.household.TeyaColors
 import com.teya.agent.household.VoiceSample
@@ -64,8 +63,9 @@ private const val WAV_HEADER_BYTES = 44
  * Records a short clip on this phone, tagged to a household member — doubles as: (1) a per-member
  * voiceprint enrollment sample (see `docs/roadmap.md` → Household setup & personalization —
  * per-speaker voice ID), embedded via [CamPlusPlusSpeakerEmbedder] and stored in Room
- * (`VoiceSample`); and (2) raw material for a future custom "Hey Teya" wake-word model, still
- * saved as a WAV to this app's external files dir:
+ * (`VoiceSample`); and (2) raw material for retraining/improving the shipping "hey_teya"
+ * microWakeWord model (see `WakeWordEngine`, `THIRD_PARTY_MODELS.md`), still saved as a WAV to
+ * this app's external files dir:
  *   adb pull /sdcard/Android/data/com.teya.agent/files/wake_word_samples ~/Desktop/
  *
  * A member must be selected before recording — enrollment is the panel's primary purpose now,
@@ -75,8 +75,6 @@ private const val WAV_HEADER_BYTES = 44
 fun WakeWordSamplePanel(members: List<Member>, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val config = remember { ConfigManager(context) }
-    var useMicroWakeWord by remember { mutableStateOf(config.useMicroWakeWord) }
     val voiceSampleDao = remember { TeyaDatabase.get(context).voiceSampleDao() }
     val embedder = remember { CamPlusPlusSpeakerEmbedder(context) }
     DisposableEffect(Unit) { onDispose { embedder.close() } }
@@ -109,38 +107,6 @@ fun WakeWordSamplePanel(members: List<Member>, modifier: Modifier = Modifier) {
     ) {
         AdminEyebrow("VOICE ID / WAKE WORD SAMPLES")
         Spacer(Modifier.height(20.dp))
-
-        AdminEyebrow("WAKE-WORD ENGINE (dev A/B toggle)")
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(false to "openWakeWord", true to "hey_teya (micro)").forEach { (isMicro, label) ->
-                val isSelected = useMicroWakeWord == isMicro
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(if (isSelected) TeyaColors.AccentSoft else TeyaColors.Card)
-                        .clickable {
-                            useMicroWakeWord = isMicro
-                            config.useMicroWakeWord = isMicro
-                        }
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                ) {
-                    Text(
-                        label,
-                        color = if (isSelected) TeyaColors.Accent else TeyaColors.Ink,
-                        fontSize = 12.sp,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Restart the app to apply — WakeWordEngine picks the engine once at startup.",
-            color = TeyaColors.Muted2, fontSize = 10.sp, textAlign = TextAlign.Center,
-        )
-
-        Spacer(Modifier.height(24.dp))
 
         if (enrollable.isEmpty()) {
             Text(

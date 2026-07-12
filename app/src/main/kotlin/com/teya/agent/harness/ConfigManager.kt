@@ -98,9 +98,9 @@ class ConfigManager(context: Context) {
         get() = prefs.getLong("barge_in_gap_ms", 350L)
         set(value) = prefs.edit().putLong("barge_in_gap_ms", value).apply()
 
-    /** Wake-word detection probability threshold (0-1) — lower fires more easily but risks false positives. */
+    /** hey_teya (microWakeWord) classifier probability cutoff (0-1) — from hey_teya.json's calibration. */
     var wakeWordThreshold: Float
-        get() = prefs.getFloat("wake_word_threshold", 0.2f)
+        get() = prefs.getFloat("wake_word_threshold", 0.53f)
         set(value) = prefs.edit().putFloat("wake_word_threshold", value).apply()
 
     /** Software mic gain applied before the wake-word model (device has no hardware AGC). */
@@ -108,30 +108,10 @@ class ConfigManager(context: Context) {
         get() = prefs.getFloat("wake_word_input_gain", 6.0f)
         set(value) = prefs.edit().putFloat("wake_word_input_gain", value).apply()
 
-    /** Consecutive over-threshold frames required before the wake word fires. */
+    /** Consecutive over-threshold classifier frames required before the wake word fires (hey_teya.json's sliding_window_size). */
     var wakeWordPatience: Int
-        get() = prefs.getInt("wake_word_patience", 1)
+        get() = prefs.getInt("wake_word_patience", 3)
         set(value) = prefs.edit().putInt("wake_word_patience", value).apply()
-
-    /**
-     * Selects the wake-word detector: our custom microWakeWord "hey_teya" model (native
-     * microfrontend + TFLite) instead of the default openWakeWord 3-model chain. See
-     * WakeWordEngine's WakeWordDetector implementations. Dev-only A/B toggle while validating
-     * hey_teya on-device — see thoughts/shared/plans/2026-07-12-microwakeword-android-integration.md.
-     */
-    var useMicroWakeWord: Boolean
-        get() = prefs.getBoolean("use_micro_wake_word", false)
-        set(value) = prefs.edit().putBoolean("use_micro_wake_word", value).apply()
-
-    /** microWakeWord classifier probability cutoff — from hey_teya.json's calibration, not tunable UI yet. */
-    var microWakeWordCutoff: Float
-        get() = prefs.getFloat("micro_wake_word_cutoff", 0.53f)
-        set(value) = prefs.edit().putFloat("micro_wake_word_cutoff", value).apply()
-
-    /** Consecutive over-cutoff classifier frames required before microWakeWord fires (hey_teya.json's sliding_window_size). */
-    var microWakeWordSlidingWindow: Int
-        get() = prefs.getInt("micro_wake_word_sliding_window", 3)
-        set(value) = prefs.edit().putInt("micro_wake_word_sliding_window", value).apply()
 
     /**
      * Extra loudness (dB) applied to Teya's own TTS output via [android.media.audiofx.LoudnessEnhancer]
