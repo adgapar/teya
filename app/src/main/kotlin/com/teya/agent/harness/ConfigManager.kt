@@ -114,6 +114,26 @@ class ConfigManager(context: Context) {
         set(value) = prefs.edit().putInt("wake_word_patience", value).apply()
 
     /**
+     * Selects the wake-word detector: our custom microWakeWord "hey_teya" model (native
+     * microfrontend + TFLite) instead of the default openWakeWord 3-model chain. See
+     * WakeWordEngine's WakeWordDetector implementations. Dev-only A/B toggle while validating
+     * hey_teya on-device — see thoughts/shared/plans/2026-07-12-microwakeword-android-integration.md.
+     */
+    var useMicroWakeWord: Boolean
+        get() = prefs.getBoolean("use_micro_wake_word", false)
+        set(value) = prefs.edit().putBoolean("use_micro_wake_word", value).apply()
+
+    /** microWakeWord classifier probability cutoff — from hey_teya.json's calibration, not tunable UI yet. */
+    var microWakeWordCutoff: Float
+        get() = prefs.getFloat("micro_wake_word_cutoff", 0.53f)
+        set(value) = prefs.edit().putFloat("micro_wake_word_cutoff", value).apply()
+
+    /** Consecutive over-cutoff classifier frames required before microWakeWord fires (hey_teya.json's sliding_window_size). */
+    var microWakeWordSlidingWindow: Int
+        get() = prefs.getInt("micro_wake_word_sliding_window", 3)
+        set(value) = prefs.edit().putInt("micro_wake_word_sliding_window", value).apply()
+
+    /**
      * Extra loudness (dB) applied to Teya's own TTS output via [android.media.audiofx.LoudnessEnhancer]
      * — a real gain boost beyond 100% device volume, with the effect's built-in limiting to avoid
      * harsh clipping. Deliberately separate from the device's own volume control (physical
