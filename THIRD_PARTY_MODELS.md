@@ -104,6 +104,33 @@ session, verified directly against the model's own ONNX graph: input `x` float32
 output `embedding` float32 `[1, 512]`) behind a small `SpeakerEmbedder` interface, so the concrete
 backend can be swapped later without touching any caller.
 
+## Wake-word feature extraction: TFLite Micro "microfrontend" (vendored native C, JNI wrapper is adapted third-party code)
+
+`app/src/main/cpp/microfrontend/` vendors the native audio feature extractor our custom
+**"hey teya"** wake-word model (trained via Google's microWakeWord pipeline) requires at inference
+time: a fixed-point mel-filterbank feature extractor, implemented as native C in TensorFlow Lite
+Micro, not expressible as a portable TFLite graph (no custom-op interpreter path exists for it on
+Android/Kotlin). This is the first native (`app/src/main/cpp/`) module in the app.
+
+| Component | Source | License | Commercial use |
+|---|---|---|---|
+| `tflite-micro/` (microfrontend lib, `tensorflow/lite/experimental/microfrontend/lib/`) | [tensorflow/tflite-micro](https://github.com/tensorflow/tflite-micro), commit `2747abd5c82a95fb1624106a946fc671c31f16e8` | Apache-2.0 | ✅ Yes |
+| `kissfft/` (FFT dependency, compiled internally by `kiss_fft_int16.cc`) | [mborgerding/kissfft](https://github.com/mborgerding/kissfft), tag `131.2.0` (commit `7bce4153c6bc8aba2db0e889e576f9d00505cbe1`) | BSD-3-Clause | ✅ Yes |
+| `MicroFrontendWrapper.cpp`/`.h`, `MicroFrontend_jni.cpp` (JNI wrapper) | Adapted from [home-assistant/android#6312](https://github.com/home-assistant/android/pull/6312)'s Apache-2.0-licensed equivalents, targeting `com.teya.agent.voice.MicroFrontend` | Apache-2.0 | ✅ Yes |
+
+Both pinned commits match home-assistant/android's own `microfrontend/src/main/cpp/CMakeLists.txt`
+pins exactly (their module — shipped, working prior art — solves the same JNI-wrapping problem;
+also credited there: [brownard/Ava](https://github.com/brownard/Ava) as independent prior art).
+Unlike HA's build-time `FetchContent` fetch, this project vendors the actual pinned source into the
+repo tree (matching the WebRTC AEC3 precedent below) since the build is `--offline`. Full
+provenance, exact file list, and what's deliberately not vendored (`*_io.*` host-tool files, kissfft's
+N-dimensional/C++-template/KFC variants, etc.): `app/src/main/cpp/microfrontend/VENDORING.md`.
+
+Both licenses are permissive with no non-commercial/share-alike restriction — unlike the
+CC-BY-NC-SA `hey_jarvis_v0.1.tflite` classifier this module exists to replace (see the
+"Commercial-use blocker" section above). No CMakeLists.txt/Gradle NDK plumbing or Kotlin wrapper
+exists yet — this entry covers vendored native source only; those are separate, later steps.
+
 ## Native echo cancellation: WebRTC AEC3 — abandoned, removed
 
 An earlier phase vendored Google WebRTC's Acoustic Echo Canceller v3 (AEC3) under
