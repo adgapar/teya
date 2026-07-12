@@ -1,15 +1,22 @@
 # Third-Party Models
 
-The wake-word detector (`app/src/main/assets/`) uses **openWakeWord** — a 3-model chain.
-All models are from the [openWakeWord](https://github.com/dscripka/openWakeWord) release `v0.5.1`.
+The wake-word detector (`app/src/main/assets/`, `WakeWordEngine.kt`) supports two interchangeable
+pipelines, selected at runtime by `ConfigManager.useMicroWakeWord` (default off — **openWakeWord**
+is still the shipping default while `hey_teya` is validated on-device):
+
+- **openWakeWord** — a 3-model chain, all from the
+  [openWakeWord](https://github.com/dscripka/openWakeWord) release `v0.5.1`.
+- **microWakeWord** — our own `hey_teya` model (see below) plus the vendored TFLite Micro
+  "microfrontend" native feature extractor (see "Wake-word feature extraction" further down).
 
 | File | Purpose | License | Commercial use |
 |---|---|---|---|
 | `melspectrogram.tflite` | raw audio → mel spectrogram | Apache-2.0 | ✅ Yes |
 | `embedding_model.tflite` | mel window → 96-dim embedding (Google `speech_embedding`) | Apache-2.0 | ✅ Yes |
 | `hey_jarvis_v0.1.tflite` | embeddings → P(wake word) | **CC BY-NC-SA 4.0** | ❌ **No** |
+| `hey_teya.tflite` / `hey_teya.json` | microfrontend features → P(wake word) — our own model, see below | Ours (unrestricted) | ✅ Yes |
 
-## ⚠️ Commercial-use blocker
+## ⚠️ Commercial-use blocker (openWakeWord path only)
 
 The pre-trained **`hey_jarvis_v0.1`** classifier is licensed **CC BY-NC-SA 4.0
 (Attribution–NonCommercial–ShareAlike)** — it may **not** be used in a commercial product.
@@ -17,14 +24,23 @@ This is the same constraint that ruled out Porcupine.
 
 **The two backbone models (melspectrogram, embedding) are Apache-2.0 and are fine to ship.**
 
-### How to make this shippable
+### How this is being solved: our own microWakeWord model
 
-Train our own wake-word classifier using openWakeWord's
-[training pipeline](https://github.com/dscripka/openWakeWord#training-new-models) (synthetic
-data via Piper TTS; runs in Colab). The output is a `[1,1536] → [1,1]` TFLite model — the exact
-same tensor slot as `hey_jarvis_v0.1`. **Swapping it in is a one-line asset change
-(`MODEL_WAKE` in `WakeWordEngine.kt`) — no other code changes.** Until then, `hey_jarvis_v0.1`
-is fine for development only.
+`hey_teya.tflite` (63.5KB, int8) was trained via the Mac
+[microWakeWord-Trainer-AppleSilicon](https://github.com/TaterTotterson/microWakeWord-Trainer-AppleSilicon)
+app on ~9 personal recordings (captured through `WakeWordSamplePanel.kt`'s temporary Admin panel)
+plus ~50k Piper-TTS-synthesized positives and standard negative datasets
+(AudioSet/FMA/WHAM/CHiME/dinner_party/no_speech/speech) — fully our own data and training run, so
+there's no upstream license to inherit (unlike `hey_jarvis_v0.1`). Calibrated to
+`probability_cutoff=0.53`, `sliding_window_size=3` (see `hey_teya.json`), **99.85% recall, ~0.93
+false accepts/hour** on ambient validation.
+
+Unlike swapping openWakeWord's own classifier (a same-tensor-slot drop-in), microWakeWord is an
+architecturally different pipeline — it needs the native microfrontend feature extractor (below)
+rather than openWakeWord's melspectrogram/embedding models. Both pipelines currently ship
+side-by-side behind `ConfigManager.useMicroWakeWord`, pending on-device validation of `hey_teya`
+against the existing far-field baseline (see `docs/experiments.md`) before cutting over fully and
+dropping the CC-BY-NC-SA `hey_jarvis_v0.1` asset.
 
 ## Pipeline reference
 
