@@ -26,8 +26,9 @@ Key files:
 - `voice/aec/WebViewAecHost.kt` — session-scoped WebView hosting Chromium's own `getUserMedia({echoCancellation:true})`
   for barge-in's real AEC. Hosted via `WindowManager.addView(TYPE_APPLICATION_OVERLAY)`, not an Activity, so it
   runs with `HarnessService` regardless of what's on screen. Bridge page: `assets/aec_bridge.html`.
-- `voice/WakeWordEngine.kt` — openWakeWord 3-model chain (assets: melspectrogram/embedding/hey_jarvis tflite);
-  `NoiseSuppressor` + software `INPUT_GAIN`, `THRESHOLD`, `PATIENCE`.
+- `voice/WakeWordEngine.kt` — microWakeWord: our own `hey_teya.tflite` classifier fed by
+  `voice/MicroFrontend.kt` (JNI wrapper around the vendored native `app/src/main/cpp/microfrontend/`
+  feature extractor); `NoiseSuppressor` + software input gain/threshold/patience (`ConfigManager`).
 - `safety/` — Room contact allowlist (call safety). `telephony/` — dialer/actuator (call feature).
 - `MainActivity` (orb + dev overlay), `SetupActivity` (LAUNCHER; API-key entry), `SettingsActivity`.
 
@@ -51,8 +52,14 @@ Key files:
 - **Ktor JSON uses `encodeDefaults=false`** → request models must not rely on default field values (they get omitted from the body).
 - Mistral `/audio/speech` returns base64 audio inside JSON (not raw bytes); streaming = SSE `speech.audio.delta` (base64 float32 PCM).
 - Never commit `.env`; `app/build/` is gitignored.
-- Wake word: generic `hey_jarvis` is near/mid-field only + CC-BY-NC (dev-only). Tuning knobs in `WakeWordEngine`
-  (`THRESHOLD`, `INPUT_GAIN`, `PATIENCE`). Durable far-field/commercial fix = custom "Hey Teya" model. Tap-to-talk is the reliable path.
+- Wake word: our own trained microWakeWord model, `hey_teya.tflite` (unrestricted license — see
+  `THIRD_PARTY_MODELS.md`), via a vendored native `app/src/main/cpp/microfrontend/` module — the app's
+  only native/NDK code. Tuning knobs live in `ConfigManager`/Admin's Voice tuning panel
+  (`wakeWordThreshold`/`wakeWordPatience`, defaults 0.53/3 from `hey_teya.json`'s calibration), not
+  hardcoded constants. **Config toggles here need an actual process kill to take effect** —
+  `HarnessService` is a foreground `START_STICKY` service, so swiping the app from recents does not
+  restart it; use `adb shell am force-stop com.teya.agent` then relaunch. Tap-to-talk remains the
+  reliable fallback path.
 - **WebView AEC (barge-in) needs Android 8.0+ (API 26) — this is `minSdk`, not headroom.**
   `WebViewAecHost` hosts its overlay via `TYPE_APPLICATION_OVERLAY` (introduced in API 26), no
   fallback for older devices. Also needs `SYSTEM_ALERT_WINDOW` ("draw over other apps"), which
