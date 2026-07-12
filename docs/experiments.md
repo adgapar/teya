@@ -5,6 +5,31 @@ being tested. `docs/roadmap.md` tracks goals/status at a glance; this tracks the
 investigation trail underneath, so dead ends don't get re-attempted blind. Newest first within each
 problem section.
 
+## Problem: calendar attendees / email invites
+
+Goal-level tracking: `docs/roadmap.md` → Native capabilities → Add order, slice 4b.
+
+**Status:** Shipped and verified live. `add_event` now writes attendees via
+`CalendarContract.Attendees`; on a synced Google calendar this makes Android's own sync adapter send
+a real email invite — no new API needed, `CalendarManager`'s existing hybrid backing (Google if
+present, else local) already picks the right calendar.
+
+| Date | Experiment | Result | Verdict |
+|---|---|---|---|
+| 2026-07-13 | Added a dedicated household Google account (`teya@household-account`) to the device via Settings, so `CalendarManager.findWritableCalendar()` would have a synced calendar to prefer over the local fallback | Account + its calendar (`sync_events=1`) confirmed present via `adb shell content query`/`dumpsys account`; `READ_CALENDAR`/`WRITE_CALENDAR` already granted (blank-slate device) | Cleared the way for real invites — no code change needed for the calendar-selection side |
+| 2026-07-13 | Extended `CalendarManager.addEvent` with `attendeeEmails`, wired `add_event`'s new `attendees`/`exclude_attendees`/`notify_family` args through `HouseholdManager.resolveMember` (the same lookup `remember`/`forget` already use) | First design invited only explicitly-named people; changed to **invite the whole household by default** (every member with an email on file) after discussion — matches how a shared family calendar is actually used, `notify_family=false` opts a personal reminder/chore out | Live-tested: "add a dentist appointment tomorrow at 5pm" with no names given sent real Google Calendar invite emails to both parents' real inboxes, confirmed received |
+| 2026-07-13 | Real side-effect of the first live test: "tomorrow" spoken at 00:54 resolved literally to the next calendar day, not the day the user meant (colloquial "tomorrow" said in the middle of the night, before sleeping, often means the day that just started) | Not a parsing bug — the date math was correct, just misaligned with how people actually use "tomorrow" near midnight. Fixed the created event directly via `adb shell content delete`/`insert` on the calendar provider (soft-delete semantics confirmed: `deleted=1` pending sync, not an immediate row removal) rather than re-testing through voice | Added a persona instruction (`TeyaPersona`, mirrors the existing mishearing-confirmation pattern) to briefly confirm the resolved date late at night instead of assuming — **built, pending a live late-night re-test** |
+| 2026-07-13 | Checked the reverse direction: does inviting `teya@household-account` to an event from an unrelated personal Gmail account make it appear on Teya's calendar too, since `CalendarManager.events()` reads every calendar on the device? | Confirmed as a real mechanism, not yet fully round-tripped: `dumpsys content` showed the device *did* receive a push "tickle" for the account's calendar (pending sync jobs, `is_tickle=true`), but the actual sync job hadn't executed yet after ~90s of polling — deferred by Android's own job scheduler, not stuck or failed (a daily periodic sync is also scheduled as a fallback regardless) | **Mechanism confirmed real** (the invite reaches the device); end-to-end confirmation that it shows up in `get_events`/ambient context is still pending — worth a follow-up check once it's had time to sync |
+
+### Currently testing / next up
+
+- Confirm the external-invite-to-Teya's-calendar path actually completes (pending Android's sync
+  job, not a code issue) and that it then surfaces correctly through `get_events`/the ambient
+  "today's remaining events" context.
+- Live re-test of the late-night date-confirmation persona instruction (added but unverified).
+- Follow-on calendar slices (a) advance voice-reminders and (c) leave-time/distance remain open —
+  see `docs/roadmap.md`.
+
 ## Problem: per-speaker voice ID (recognize who's speaking)
 
 Goal-level tracking: `docs/roadmap.md` → Household setup & personalization → "Per-speaker voice ID /

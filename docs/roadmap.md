@@ -21,6 +21,19 @@ and particle-driven — same field as the face and onboarding, no more bordered-
 is what breaks in that case; fixed the API key not hot-reloading after an Admin edit. See Backlog
 for the reset/backup gap this surfaced.)._
 
+_2026-07-13: **Calendar attendees/email invites shipped** (native capabilities → add order, slice
+4b): `add_event` now invites the whole household by real email by default (`CalendarContract.
+Attendees` on the synced Google calendar), with `notify_family=false` for personal reminders/chores,
+and `attendees`/`exclude_attendees` to override which people specifically. Needed a real
+household Google account (`teya@household-account`) added to the device first — `CalendarManager`'s
+existing hybrid backing picked up the synced calendar automatically once the account was present,
+no code change needed there. **Verified live**: a real event with the invite-everyone default sent
+actual Google Calendar invite emails to both parents' real inboxes. Also confirmed as a mechanism
+(not yet fully round-tripped): inviting `teya@household-account` to an event from any outside Gmail
+lands it on Teya's calendar too, since `CalendarManager.events()` already reads every calendar on
+the device — a free way to add things to Teya's calendar without voice. Full trail:
+`docs/experiments.md` → "Problem: calendar attendees / email invites"._
+
 ## ✅ Done
 
 - Android app + always-on foreground service (`HarnessService`), **particle-field voice face** (`AgentFace`), centred live transcript.
@@ -271,10 +284,14 @@ Open-Meteo), with location from the household profile or native device location.
 4. **`calendar`** (`calendar/CalendarManager.kt`) — hybrid backing (synced Google calendar if
    present → else existing writable/local calendar). ✅ **Slice 1 verified live**: `add_event`
    (title/start/duration/location + `repeat`→RRULE recurrence), `get_events` (Instances expands
-   recurrences), today's remaining events in the ambient context. Follow-on slices:
+   recurrences), today's remaining events in the ambient context. ✅ **Slice (b) attendees/email
+   invites verified live**: `add_event` invites every household member with an email on file by
+   real Google Calendar email, unless `notify_family=false` (personal reminders/chores) or narrowed
+   via `attendees`/`exclude_attendees`. Needed the household's own Google account added to the
+   device (`teya@household-account`) — the existing hybrid backing picked its calendar up
+   automatically. Full trail: `docs/experiments.md`. Remaining follow-on slices:
    **(a) advance voice-reminders** (reuse the timer `AlarmManager`+announce → "football in 30 min");
-   **(b) attendees/email invites** (needs family emails from the onboarding profile; only real on a
-   synced Google calendar); **(c) leave-time / distance** (event location + ambient location).
+   **(c) leave-time / distance** (event location + ambient location).
 5. ✅ **Shopping list** (`shopping/ShoppingListManager.kt`) — Teya-owned, persistent
    (SharedPreferences). `add_to_shopping_list` / `remove` / `read` / `clear`; comma-separated
    multi-item; model groups by aisle at read time. Verified live.

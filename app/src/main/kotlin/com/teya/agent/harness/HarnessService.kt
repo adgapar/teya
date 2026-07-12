@@ -694,12 +694,38 @@ class HarnessService : Service() {
                 val duration = tool.arguments["duration_minutes"]?.toIntOrNull()?.takeIf { it > 0 } ?: 60
                 val location = tool.arguments["location"]?.takeIf { it.isNotBlank() }
                 val rrule = repeatToRrule(tool.arguments["repeat"])
+
+                // Default: invite the whole family (minus any excluded) on shared events; explicit
+                // `attendees` narrows to just those people; `notify_family=false` (personal reminders,
+                // chores) invites nobody.
+                val notifyFamily = tool.arguments["notify_family"]?.toBooleanStrictOrNull() ?: true
+                val explicitNames = splitItems(tool.arguments["attendees"])
+                val excludeNames = splitItems(tool.arguments["exclude_attendees"])
+                val members = if (notifyFamily || explicitNames.isNotEmpty()) householdManager.members() else emptyList()
+
+                val invited: List<Member> = when {
+                    explicitNames.isNotEmpty() -> explicitNames.mapNotNull { householdManager.resolveMember(it, members) }
+                    notifyFamily -> {
+                        val excludedKeys = excludeNames.mapNotNull { householdManager.resolveMember(it, members)?.lookupKey }.toSet()
+                        members.filter { it.lookupKey !in excludedKeys }
+                    }
+                    else -> emptyList()
+                }
+                val invitable = invited.filter { it.email.isNotBlank() }
+                // Only surface a "couldn't invite" note when specific people were named — silently
+                // skipping members with no email during the invite-everyone default is expected
+                // (e.g. kids), not worth mentioning every time.
+                val missingEmail = if (explicitNames.isNotEmpty()) invited.filter { it.email.isBlank() }.map { it.displayName } else emptyList()
+
                 val id = withContext(Dispatchers.IO) {
-                    calendarManager.addEvent(title, startMillis, duration, location, rrule)
+                    calendarManager.addEvent(title, startMillis, duration, location, rrule, invitable.map { it.email })
                 }
                 if (id != null) {
                     "Added \"$title\"" + (if (rrule != null) ", repeating" else "") +
-                        (location?.let { " at $it" } ?: "") + "."
+                        (location?.let { " at $it" } ?: "") +
+                        (if (invitable.isNotEmpty()) ", invited ${invitable.joinToString(", ") { it.displayName }}" else "") +
+                        "." +
+                        (if (missingEmail.isNotEmpty()) " I couldn't invite ${missingEmail.joinToString(", ")} — no email on file." else "")
                 } else {
                     "I couldn't add that to the calendar."
                 }

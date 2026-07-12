@@ -60,7 +60,10 @@ class CalendarManager(private val context: Context) {
 
     /**
      * Create an event. [rrule] non-null makes it recurring (RFC-5545, e.g. "FREQ=WEEKLY"); the
-     * weekday of a weekly rule comes from [startMillis]. Returns the event id, or null on failure.
+     * weekday of a weekly rule comes from [startMillis]. [attendeeEmails] are added as event
+     * attendees — on a synced Google calendar this is what makes Android's own sync adapter send a
+     * real email invite to each address; on the local fallback calendar they're just stored, no
+     * email goes out. Returns the event id, or null on failure.
      */
     fun addEvent(
         title: String,
@@ -68,6 +71,7 @@ class CalendarManager(private val context: Context) {
         durationMinutes: Int,
         location: String?,
         rrule: String?,
+        attendeeEmails: List<String> = emptyList(),
     ): Long? = try {
         val calId = targetCalendarId()
         if (calId < 0) {
@@ -88,7 +92,9 @@ class CalendarManager(private val context: Context) {
                     put(CalendarContract.Events.DTEND, startMillis + durationMinutes * 60_000L)
                 }
             }
-            resolver.insert(CalendarContract.Events.CONTENT_URI, values)?.let { ContentUris.parseId(it) }
+            val eventId = resolver.insert(CalendarContract.Events.CONTENT_URI, values)?.let { ContentUris.parseId(it) }
+            if (eventId != null) addAttendees(eventId, attendeeEmails)
+            eventId
         }
     } catch (e: SecurityException) {
         Log.w(TAG, "Calendar write permission not granted", e)
@@ -96,6 +102,23 @@ class CalendarManager(private val context: Context) {
     } catch (e: Exception) {
         Log.e(TAG, "Failed to add event", e)
         null
+    }
+
+    private fun addAttendees(eventId: Long, emails: List<String>) {
+        emails.forEach { email ->
+            try {
+                val values = ContentValues().apply {
+                    put(CalendarContract.Attendees.EVENT_ID, eventId)
+                    put(CalendarContract.Attendees.ATTENDEE_EMAIL, email)
+                    put(CalendarContract.Attendees.ATTENDEE_RELATIONSHIP, CalendarContract.Attendees.RELATIONSHIP_ATTENDEE)
+                    put(CalendarContract.Attendees.ATTENDEE_TYPE, CalendarContract.Attendees.TYPE_REQUIRED)
+                    put(CalendarContract.Attendees.ATTENDEE_STATUS, CalendarContract.Attendees.ATTENDEE_STATUS_INVITED)
+                }
+                resolver.insert(CalendarContract.Attendees.CONTENT_URI, values)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to add attendee $email", e)
+            }
+        }
     }
 
     /**

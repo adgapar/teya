@@ -146,6 +146,26 @@ object AgentTools {
                     put("description", "Recurrence: one of daily, weekly, monthly, yearly, weekdays. " +
                         "For 'every Tuesday' use weekly with a Tuesday start. Omit for a one-off.")
                 }
+                putJsonObject("notify_family") {
+                    put("type", "boolean")
+                    put("description", "Whether this is a shared family event worth telling everyone " +
+                        "about (an appointment, activity, birthday) vs. a personal reminder/chore " +
+                        "nobody else needs to know about ('take out the trash', 'call the plumber'). " +
+                        "Defaults to true. When true, every household member with an email on file " +
+                        "gets a real calendar invite automatically; set false for personal reminders.")
+                }
+                putJsonObject("attendees") {
+                    put("type", "string")
+                    put("description", "Invite ONLY these household members, by name, comma-separated " +
+                        "(e.g. 'Mom, Dad') — overrides the invite-everyone default. Use when the " +
+                        "request names specific people, not the whole family.")
+                }
+                putJsonObject("exclude_attendees") {
+                    put("type", "string")
+                    put("description", "Household members to leave out of the invite-everyone default, " +
+                        "comma-separated — e.g. a surprise party where the person it's for shouldn't " +
+                        "get the invite. Ignored if 'attendees' is set.")
+                }
             }
             putJsonArray("required") { add("title"); add("start") }
         },
