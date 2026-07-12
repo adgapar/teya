@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.teya.agent.harness.ConfigManager
 import com.teya.agent.household.Member
 import com.teya.agent.household.TeyaColors
 import com.teya.agent.household.VoiceSample
@@ -74,6 +75,8 @@ private const val WAV_HEADER_BYTES = 44
 fun WakeWordSamplePanel(members: List<Member>, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val config = remember { ConfigManager(context) }
+    var useMicroWakeWord by remember { mutableStateOf(config.useMicroWakeWord) }
     val voiceSampleDao = remember { TeyaDatabase.get(context).voiceSampleDao() }
     val embedder = remember { CamPlusPlusSpeakerEmbedder(context) }
     DisposableEffect(Unit) { onDispose { embedder.close() } }
@@ -106,6 +109,38 @@ fun WakeWordSamplePanel(members: List<Member>, modifier: Modifier = Modifier) {
     ) {
         AdminEyebrow("VOICE ID / WAKE WORD SAMPLES")
         Spacer(Modifier.height(20.dp))
+
+        AdminEyebrow("WAKE-WORD ENGINE (dev A/B toggle)")
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(false to "openWakeWord", true to "hey_teya (micro)").forEach { (isMicro, label) ->
+                val isSelected = useMicroWakeWord == isMicro
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isSelected) TeyaColors.AccentSoft else TeyaColors.Card)
+                        .clickable {
+                            useMicroWakeWord = isMicro
+                            config.useMicroWakeWord = isMicro
+                        }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                ) {
+                    Text(
+                        label,
+                        color = if (isSelected) TeyaColors.Accent else TeyaColors.Ink,
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Restart the app to apply — WakeWordEngine picks the engine once at startup.",
+            color = TeyaColors.Muted2, fontSize = 10.sp, textAlign = TextAlign.Center,
+        )
+
+        Spacer(Modifier.height(24.dp))
 
         if (enrollable.isEmpty()) {
             Text(
