@@ -66,6 +66,7 @@ import com.teya.agent.ui.admin.LanguagesPanel
 import com.teya.agent.ui.admin.MemoryPanel
 import com.teya.agent.ui.admin.PersonPager
 import com.teya.agent.ui.admin.VoiceTuningPanel
+import com.teya.agent.ui.admin.WakeWordSamplePanel
 import com.teya.agent.ui.face.OnboardingCategory
 import com.teya.agent.ui.face.OnboardingParticles
 import kotlinx.coroutines.delay
@@ -352,6 +353,7 @@ private fun AdminScreen(
                             overlayGranted = overlayGranted, onGrantOverlay = onGrantOverlay,
                         )
                         AdminSection.API -> ApiPanel(apiKey = apiKey, onChange = { apiKey = it }, lastAuthErrorAt = lastAuthErrorAt)
+                        AdminSection.TRAINER -> WakeWordSamplePanel()
                     }
                 }
             }

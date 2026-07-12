@@ -101,6 +101,8 @@ enum class AdminSection(val label: String, val navLabel: String, val category: O
     HOME("Home", "HOME", OnboardingCategory.HOME),
     VOICE("Voice", "VOICE", OnboardingCategory.VOICE),
     API("API", "API", OnboardingCategory.API),
+    // Temporary — remove alongside WakeWordSamplePanel.kt once wake word training is done.
+    TRAINER("Wake Word", "SAMPLE", OnboardingCategory.TRAINER),
 }
 
 // ---- nav (idea 1: the nav's own icons are shaped like each section's formation) ----
@@ -179,6 +181,18 @@ private fun SectionGlyph(section: AdminSection, tint: Color, size: Dp) {
                 val c = Offset(s / 2f, s / 2f)
                 drawCircle(tint, s * 0.07f, center = c)
                 drawCircle(tint, s * 0.4f, center = c, style = stroke)
+            }
+            AdminSection.TRAINER -> {
+                // A simple mic glyph: capsule body + stand.
+                drawRoundRect(
+                    tint, topLeft = Offset(s * 0.36f, s * 0.12f), size = Size(s * 0.28f, s * 0.5f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(s * 0.14f), style = stroke,
+                )
+                drawArc(
+                    tint, startAngle = 0f, sweepAngle = 180f, useCenter = false, style = stroke,
+                    topLeft = Offset(s * 0.2f, s * 0.38f), size = Size(s * 0.6f, s * 0.42f),
+                )
+                drawLine(tint, Offset(s * 0.5f, s * 0.8f), Offset(s * 0.5f, s * 0.92f), strokeWidth = stroke.width)
             }
         }
     }

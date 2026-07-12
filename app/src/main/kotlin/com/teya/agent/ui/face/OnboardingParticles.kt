@@ -38,7 +38,7 @@ import kotlin.random.Random
  *  Admin's Household section), the globe = languages (both). */
 enum class OnboardingCategory(val progress: Float, val energy: Float) {
     INTRO(0f, 0.3f), HOUSEHOLD(0f, 0.5f), LANGUAGES(0.33f, 0.9f), HOME(0.66f, 0.75f), DONE(1f, 0.95f),
-    MEMORY(1f, 0.6f), VOICE(1f, 1.0f), API(0f, 0.3f),
+    MEMORY(1f, 0.6f), VOICE(1f, 1.0f), API(0f, 0.3f), TRAINER(0f, 0.5f),
 }
 
 private const val N = 760
@@ -337,8 +337,9 @@ private class OnboardingField {
                 tA = ((0.14 + 0.55 * env * e) * (1 - abs(line - mid) / mid * 0.45)).toFloat()
                 tHasColor = true; tR = 255f; tG = 190f; tB = 75f
             }
-            OnboardingCategory.API -> {
-                // a small, quiet orbit — one guarded value, not a formation of many
+            OnboardingCategory.API, OnboardingCategory.TRAINER -> {
+                // a small, quiet orbit — one guarded value, not a formation of many. TRAINER
+                // (temporary wake-word sample capture panel) reuses this same formation.
                 val rr = 0.1 + 0.12 * ra[i]
                 val ang = rb[i] * TAU + t * (0.15 + 0.2 * rb[i]) * (if (rc[i] < 0.5f) 1 else -1)
                 tX = (cos(ang) * rr).toFloat(); tY = (sin(ang) * rr * 0.9).toFloat()
