@@ -8,6 +8,7 @@ plugins {
 android {
     namespace = "com.teya.agent"
     compileSdk = 35
+    ndkVersion = "27.3.13750724"
 
     defaultConfig {
         applicationId = "com.teya.agent"
@@ -19,6 +20,19 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+
+        // This is a single wall-mounted device (Samsung A34, MediaTek/arm64) —
+        // no other hardware to support, so build only arm64-v8a.
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
         }
     }
 
