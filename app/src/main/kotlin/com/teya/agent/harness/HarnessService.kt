@@ -20,6 +20,7 @@ import com.teya.agent.R
 import com.teya.agent.brain.*
 import com.teya.agent.calendar.CalendarManager
 import com.teya.agent.household.HouseholdManager
+import com.teya.agent.household.Languages
 import com.teya.agent.household.Member
 import com.teya.agent.household.MemoryManager
 import com.teya.agent.persona.AgentTools
@@ -327,7 +328,11 @@ class HarnessService : Service() {
             Log.d(TAG, "Prompting...")
             voicePipeline.setBargeInArmed(true)
             voicePipeline.consumeInterrupted() // clear any stale flag before this fresh speaking phase — see VoicePipeline.textToSpeech's doc comment on why this can't live inside textToSpeech itself
-            voicePipeline.textToSpeech("Yes?")
+            // Picks one of the household's speakable languages at random each trigger, then a
+            // varied greeting within it — see Languages.greetings' doc comment for why this can't
+            // just ask the LLM to translate "Yes?" on the fly.
+            val greetingLang = householdManager.speakableLanguages().random()
+            voicePipeline.textToSpeech(Languages.greetings(greetingLang).random())
 
             while (true) {
                 voicePipeline.setBargeInArmed(false)

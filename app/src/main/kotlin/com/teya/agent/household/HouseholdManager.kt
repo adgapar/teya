@@ -117,9 +117,20 @@ class HouseholdManager(context: Context) {
      * universal fallback); a message in anything else falls back to English. That speakable-set
      * constraint is what prevents the generate-untts-able-text bug — no need to name languages.
      */
+    /**
+     * The languages Teya can actually voice (household ∩ TTS-capable, plus English as the
+     * universal fallback) — same set [languageDirective] constrains replies to. Exposed so other
+     * callers (e.g. the trigger greeting) can pick a language Teya can speak without duplicating
+     * that derivation.
+     */
+    fun speakableLanguages(): List<String> {
+        val household = languages().ifEmpty { listOf("English") }
+        return (household + "English").distinct().filter { Languages.isVoiced(it) }
+    }
+
     private fun languageDirective(langs: List<String>): String {
         val household = langs.ifEmpty { listOf("English") }
-        val speakable = (household + "English").distinct().filter { Languages.isVoiced(it) }
+        val speakable = speakableLanguages()
         val understandOnly = household.filter { !Languages.isVoiced(it) }
 
         val understandClause = if (understandOnly.isNotEmpty())
