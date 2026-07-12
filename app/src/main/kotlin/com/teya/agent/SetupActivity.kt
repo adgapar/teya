@@ -109,6 +109,8 @@ class SetupActivity : ComponentActivity() {
                 Manifest.permission.READ_CONTACTS,
                 Manifest.permission.WRITE_CONTACTS,
                 Manifest.permission.GET_ACCOUNTS,
+                Manifest.permission.READ_CALENDAR,
+                Manifest.permission.WRITE_CALENDAR,
             )
         )
 

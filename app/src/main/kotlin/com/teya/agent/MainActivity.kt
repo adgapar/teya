@@ -181,6 +181,8 @@ class MainActivity : ComponentActivity() {
             Manifest.permission.READ_CONTACTS,
             Manifest.permission.WRITE_CONTACTS,
             Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.READ_CALENDAR,
+            Manifest.permission.WRITE_CALENDAR,
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
