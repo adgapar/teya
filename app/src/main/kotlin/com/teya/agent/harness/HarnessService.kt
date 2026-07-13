@@ -153,7 +153,8 @@ class HarnessService : Service() {
             KtorClientFactory.create(),
             { configManager.mistralApiKey ?: "" },
             TeyaPersona.systemPrompt,
-            AgentTools.all
+            AgentTools.all,
+            { configManager.ttsVoice }
         )
         mistralClient.onAuthError = ::onMistralAuthError
         brainClient = mistralClient

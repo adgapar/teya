@@ -765,6 +765,51 @@ private val TUNE_INFO: Map<String, TuneInfo> = mapOf(
     ),
 )
 
+/** The TTS voice picker (actor pill row, then that actor's emotion variants) — see
+ *  docs/mistral-voices.md / [com.teya.agent.brain.MistralVoices] for the full 30-voice catalog. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun VoicePicker(voice: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    val current = com.teya.agent.brain.MistralVoices.bySlug(voice)
+    var actor by remember(voice) { mutableStateOf(current.actor) }
+    val actors = com.teya.agent.brain.MistralVoices.ALL.map { it.actor }.distinct()
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier.widthIn(max = 340.dp)) {
+        Text("TTS VOICE", color = TeyaColors.Muted2, fontSize = 9.5.sp, letterSpacing = 1.4.sp, fontFamily = FontFamily.Monospace)
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            actors.forEach { a -> VoiceChip(a, a == actor) { actor = a } }
+        }
+        Spacer(Modifier.height(8.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.Center,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.widthIn(max = 320.dp),
+        ) {
+            com.teya.agent.brain.MistralVoices.ALL.filter { it.actor == actor }.forEach { v ->
+                VoiceChip(v.emotion, v.slug == voice) { onChange(v.slug) }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "${current.locale} · ${current.tags}",
+            color = TeyaColors.Muted2, fontSize = 10.sp, textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun VoiceChip(text: String, on: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .background(if (on) TeyaColors.AccentFill else Color.Transparent, RoundedCornerShape(999.dp))
+            .border(1.dp, if (on) TeyaColors.AccentFill else TeyaColors.Edge, RoundedCornerShape(999.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+    ) {
+        Text(text, color = if (on) TeyaColors.AccentInk else TeyaColors.Muted, fontSize = 12.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+    }
+}
+
 @Composable
 fun VoiceTuningPanel(
     tuning: com.teya.agent.VoiceTuning,
@@ -772,6 +817,8 @@ fun VoiceTuningPanel(
     portrait: Boolean,
     overlayGranted: Boolean,
     onGrantOverlay: () -> Unit,
+    ttsVoice: String,
+    onTtsVoiceChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var info by remember { mutableStateOf<TuneInfo?>(null) }
@@ -783,6 +830,8 @@ fun VoiceTuningPanel(
         ) {
             AdminEyebrow("VOICE TUNING")
             Spacer(Modifier.height(6.dp))
+            VoicePicker(voice = ttsVoice, onChange = onTtsVoiceChange)
+            Spacer(Modifier.height(18.dp))
             if (!overlayGranted) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.widthIn(max = 320.dp)) {
                     Note(

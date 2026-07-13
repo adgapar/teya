@@ -27,7 +27,8 @@ class MistralClient(
     private val httpClient: HttpClient,
     private val apiKeyProvider: () -> String,
     private val systemPrompt: String,
-    tools: List<ToolSpec>
+    tools: List<ToolSpec>,
+    private val ttsVoiceProvider: () -> String = { "fr_marie_happy" }
 ) : BrainClient {
 
     private val baseUrl = "https://api.mistral.ai/v1"
@@ -49,10 +50,10 @@ class MistralClient(
     // Deliberately the small model, not the largest available — cheap and quick, matching a
     // home-appliance voice loop's latency needs over maximal reasoning power (see README).
     private val chatModel = "mistral-small-latest"
-    // "Marie - Happy" (fr_fr, female) — warm, radiant tone (a light French accent over English).
-    // The `voice` field accepts slug or id (both verified). See docs/mistral-voices.md for all 30.
-    // TODO: make this user-configurable in a Settings voice picker.
-    private val ttsVoice = "fr_marie_happy"
+    // Read fresh on every request, same reasoning as cleanApiKey — Admin's voice picker can change
+    // this without restarting the service. See docs/mistral-voices.md for the full catalog.
+    private val ttsVoice: String
+        get() = ttsVoiceProvider()
     // Voxtral Realtime (barge-in) — see detectBargeInSpeech. Delay is the fast end of Mistral's
     // documented 240ms-2400ms range: barge-in latency matters more than transcript accuracy here.
     private val realtimeModel = "voxtral-mini-transcribe-realtime-latest"

@@ -27,6 +27,13 @@ class ConfigManager(context: Context) {
         get() = prefs.getString("mistral_api_key", null)?.trim()
         set(value) = prefs.edit().putString("mistral_api_key", value?.trim()).apply()
 
+    /** TTS voice slug (see docs/mistral-voices.md / [com.teya.agent.brain.MistralVoices]), chosen in
+     *  Admin's Voice section. Read fresh per request by [com.teya.agent.brain.MistralClient]. */
+    var ttsVoice: String
+        get() = prefs.getString("tts_voice", com.teya.agent.brain.MistralVoices.DEFAULT)
+            ?: com.teya.agent.brain.MistralVoices.DEFAULT
+        set(value) = prefs.edit().putString("tts_voice", value).apply()
+
     /**
      * Household languages, as a CSV of canonical English names ("English,Spanish,Russian"), stored
      * in the order the user picked. Household-level (not per-person). Empty when none set yet.

@@ -1,13 +1,16 @@
 # Mistral (Voxtral) TTS Voices
 
-Catalog of the built-in TTS voices, for the TTS `voice` field and a future Settings voice picker.
+Catalog of the built-in TTS voices, for the TTS `voice` field and Admin's voice picker
+(`ui/admin/AdminComposables.kt`'s `VoicePicker`, backed by `brain/MistralVoices.kt`).
 
 - **Source (live):** `GET https://api.mistral.ai/v1/audio/voices?limit=100` (Bearer auth). This is the
-  authoritative list — the Settings picker should fetch it live rather than hardcode this file.
+  authoritative list — `MistralVoices.kt` hardcodes it instead (fixed catalog, no network dependency
+  for Admin); re-sync manually if Mistral adds/changes voices.
 - **TTS request:** `POST /v1/audio/speech` with `{"model":"voxtral-mini-tts-latest","input":"…","voice":"<slug or id>","response_format":"mp3"}`.
 - **`voice` accepts either the `slug` or the `id`** (both verified working). We use the slug for readability.
 - **Total:** 30 voices = 4 "actors" × emotion variants, across en-US, en-GB, fr-FR.
-- **Current app default:** `fr_marie_happy` (Marie – Happy) — set in `MistralClient.ttsVoice`.
+- **Current app default:** `fr_marie_happy` (Marie – Happy) — `MistralVoices.DEFAULT`, used by
+  `ConfigManager.ttsVoice` until changed in Admin's Voice section.
 
 > Note: there is no gender-neutral voice; each actor is male or female. Teya's chosen voice is
 > **Marie – Happy** (fr-FR, "warm, radiant") — a warm French-accented female reading English, which

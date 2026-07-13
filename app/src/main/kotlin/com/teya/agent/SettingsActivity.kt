@@ -132,6 +132,7 @@ class SettingsActivity : ComponentActivity() {
                 initialHomeConfirmed = config.homeConfirmed,
                 initialApiKey = config.mistralApiKey ?: "",
                 initialTuning = initialTuning,
+                initialTtsVoice = config.ttsVoice,
                 home = home.value,
                 overlayGranted = overlayGranted.value,
                 onGrantOverlay = ::requestOverlayPermission,
@@ -158,10 +159,11 @@ class SettingsActivity : ComponentActivity() {
                         ).show()
                     }
                 },
-                onSave = { members, langs, homeConfirmed, apiKey, tuning ->
+                onSave = { members, langs, homeConfirmed, apiKey, tuning, ttsVoice ->
                     config.mistralApiKey = apiKey.trim()
                     config.languages = langs
                     config.homeConfirmed = homeConfirmed
+                    config.ttsVoice = ttsVoice
                     if (tuning != initialTuning) config.lastTuningChangedAt = System.currentTimeMillis()
                     tuning.vadThreshold.toFloatOrNull()?.let { config.vadThreshold = it }
                     tuning.vadSpeechDurationMs.toIntOrNull()?.let { config.vadSpeechDurationMs = it }
@@ -257,6 +259,7 @@ private fun AdminScreen(
     initialHomeConfirmed: Boolean,
     initialApiKey: String,
     initialTuning: VoiceTuning,
+    initialTtsVoice: String,
     home: LocationProbe.Home,
     overlayGranted: Boolean,
     onGrantOverlay: () -> Unit,
@@ -264,7 +267,7 @@ private fun AdminScreen(
     onToggleRotation: () -> Unit,
     onDeleteMemory: (Int) -> Unit,
     onRunDream: () -> Unit,
-    onSave: (List<Member>, List<String>, Boolean, String, VoiceTuning) -> Unit,
+    onSave: (List<Member>, List<String>, Boolean, String, VoiceTuning, String) -> Unit,
 ) {
     // systemBarsPadding lives HERE, on the shared container — not just on the content Column below.
     // Content and the particle field must measure within the same inset-adjusted bounds, or the
@@ -285,6 +288,7 @@ private fun AdminScreen(
         var apiKey by remember { mutableStateOf(initialApiKey) }
         var homeConfirmed by remember { mutableStateOf(initialHomeConfirmed) }
         var tuning by remember { mutableStateOf(initialTuning) }
+        var ttsVoice by remember { mutableStateOf(initialTtsVoice) }
         var section by remember { mutableStateOf(AdminSection.HOUSEHOLD) }
         var personIdx by remember { mutableStateOf(0) }
         var closing by remember { mutableStateOf(false) }
@@ -320,7 +324,7 @@ private fun AdminScreen(
                     // swirl (idea 6): the field settling back down doubles as "wrapping up".
                     AdminIconButton(Icons.Filled.Close, "Save & close") {
                         closing = true
-                        onSave(members.toList(), langs.toList(), homeConfirmed, apiKey, tuning)
+                        onSave(members.toList(), langs.toList(), homeConfirmed, apiKey, tuning, ttsVoice)
                     }
                 }
             }
@@ -363,6 +367,7 @@ private fun AdminScreen(
                         AdminSection.VOICE -> VoiceTuningPanel(
                             tuning = tuning, onChange = { tuning = it }, portrait = portrait,
                             overlayGranted = overlayGranted, onGrantOverlay = onGrantOverlay,
+                            ttsVoice = ttsVoice, onTtsVoiceChange = { ttsVoice = it },
                         )
                         AdminSection.API -> ApiPanel(apiKey = apiKey, onChange = { apiKey = it }, lastAuthErrorAt = lastAuthErrorAt)
                         AdminSection.TRAINER -> WakeWordSamplePanel(members = members)
