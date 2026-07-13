@@ -48,6 +48,17 @@ Key files:
   `adb shell input tap <cx> <cy>` (needs app foreground + unlocked); otherwise **ask the user to tap/speak, then read logs**.
 - Logs: `adb logcat -d -s HarnessService VoicePipeline MistralClient WakeWordEngine` (filter out the big voices JSON).
 
+## Release (sideload distribution, no Play Store)
+- Cut a release: `git tag vX.Y && git push origin vX.Y` → `.github/workflows/release.yml` builds a signed
+  `assembleRelease` and attaches the APK to a GitHub Release. Users sideload it (enable "install unknown apps" once,
+  download the APK on-device, tap to install).
+- Signing config in `app/build.gradle.kts` reads `keystore.properties` (local, gitignored) or env vars (CI secrets:
+  `KEYSTORE_BASE64`/`KEYSTORE_PASSWORD`/`KEY_ALIAS`/`KEY_PASSWORD` on `adgapar/teya`); with neither present, release
+  builds stay unsigned same as before this existed.
+- The actual keystore lives at `~/.teya-signing/teya-release.keystore` on this machine only — **never commit it**.
+  If it's lost, future releases can't be signed the same way and existing installs can't update in place (uninstall/
+  reinstall only). Back it up somewhere durable (password manager, encrypted drive).
+
 ## Gotchas
 - **Ktor JSON uses `encodeDefaults=false`** → request models must not rely on default field values (they get omitted from the body).
 - Mistral `/audio/speech` returns base64 audio inside JSON (not raw bytes); streaming = SSE `speech.audio.delta` (base64 float32 PCM).
