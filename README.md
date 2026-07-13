@@ -2,7 +2,11 @@
 
 > *A family agent for the home — a warm, intelligent presence that listens, understands, remembers, and does. Built on a spare Android phone.*
 
-**Status:** Working prototype (July 2026). A dedicated Android device runs the full voice loop, the animated face, the first native tools, and a household profile that makes Teya contextual (knows the family, their names, and the languages they speak).
+**Status:** Working prototype (July 2026). A dedicated Android device runs the full voice loop —
+including a custom-trained wake word and real mid-sentence interruption — the animated face, a
+growing set of native tools (calendar, timers, shopping list), and a household profile that makes
+Teya contextual (knows the family, their names, the languages they speak, and — as a soft signal —
+who's likely talking).
 
 ### Documents
 
@@ -91,6 +95,9 @@ The face and personality should be **gender neutral** — calm, warm, wise, belo
 
 ## 5. Family Use Cases
 
+*These describe where this is headed. For what's actually built and verified live today, see the
+status table in §7 or the running log in [docs/roadmap.md](./docs/roadmap.md).*
+
 ### Home logistics
 - Shopping list management by voice
 - Calendar coordination across all family members
@@ -178,9 +185,10 @@ short** — for example, languages its speech models don't yet voice.
 |---|---|
 | Animated face | ✅ Built — a particle-field face that morphs per state |
 | Voice loop (STT → LLM + tools → TTS) | ✅ Built, streaming, running on a dedicated device |
-| Household profile / family memory | ✅ Members, aliases, languages, home; deeper per-person memory next |
-| App integrations | Growing — calendar, timers/alarms, shopping list live; calling next |
-| Always-on wake word, plugged in | ✅ Working at ~1.5 m; a custom "Hey Teya" model for range + commercial use is next |
+| Wake word | ✅ Built — our own trained "Hey Teya" model, commercial-use clear, validated live at ~1.5 m |
+| Mid-sentence interruption (barge-in) | ✅ Built — real echo cancellation via a hosted WebView, not just listening in the gaps between sentences |
+| Household profile / family memory | ✅ Members, aliases, languages, home, soft per-speaker voice ID; deeper per-person memory next |
+| App integrations | Growing — calendar (incl. real email invites), timers/alarms, shopping list live; calling next |
 
 A working v1 already runs on a dedicated Android phone — the animated face, the full voice loop, the first native tools, and the household profile — with Mistral as the AI backend. Hardware cost: near zero.
 

@@ -12,7 +12,7 @@ The report talks about "the harness" as one thing. For every build decision, spl
 
 | Layer | What it is | Where it must live | Why |
 |---|---|---|---|
-| **Brain** | LLM inference (Claude / Gemini) | **Cloud, always** | A €50 phone cannot run a frontier model. This is an API call, full stop. |
+| **Brain** | LLM inference + STT + TTS (Mistral) | **Cloud, always** | A €50 phone cannot run a frontier model. This is an API call, full stop. |
 | **Harness** | Agent loop, tool routing, memory, scheduling, integrations | **Our choice** | The one layer with real freedom. We put it on the phone (see §2). |
 | **Actuator** | Telephony, mic/speaker, camera, BLE/WiFi/NFC, notifications, smart-home control | **On the phone, always** | These are Android-local APIs. No cloud server can reach them except by proxying through software running on the device. |
 
@@ -33,7 +33,8 @@ Rationale:
 ### Foreground Service Management (Android 14+)
 To ensure the harness isn't killed by the OS, it runs as a persistent Foreground Service. For Android 14 (API 34) and higher, we declare specific service types:
 - `microphone`: For wake-word detection and STT.
-- `phoneCall`: For managing telephony via the `InCallService`.
+- `phoneCall`: Was for managing telephony via the `InCallService`; no longer needed under the
+  outbound-only revision in §4 (placing a call via `TelecomManager` doesn't require it).
 - `connectedDevice`: For Bluetooth/Matter/USB-OTG actuators.
 - `specialUse`: For the core agent loop (with a detailed explanation for Play Store review).
 
@@ -59,12 +60,12 @@ The decision hinges on one fact: **~70% of the differentiated work is deep platf
 
 | Capability | Android API | Cross-platform support |
 |---|---|---|
-| Place / answer / end calls, be the dialer | `TelecomManager`, `InCallService`, `ConnectionService`, `RoleManager` | None first-class — platform channels required |
+| Place calls (outbound only — §4) | `TelecomManager` / `ACTION_CALL` | None first-class — platform channels required |
 | Read every app's notifications | `NotificationListenerService` | None — native only |
 | Act inside other apps (e.g. WhatsApp) | `AccessibilityService` | None — native only |
 | Always-on background presence | Foreground service + Doze/battery handling | Native lifecycle |
 | BLE / USB-OTG / NFC | Native APIs | Plugins exist but are leaky |
-| Animated face | Compose Canvas, **Rive**, or Lottie | Flutter's only real edge — not worth the rest |
+| Animated face | Compose Canvas, Rive, or Lottie — **Compose Canvas is what shipped** (§5) | Flutter's only real edge — not worth the rest |
 
 And the clincher: **we target one device, Android only.** Cross-platform's entire value proposition (one codebase for iOS + Android) does not apply. Flutter's sole advantage is its renderer for the face; that does not justify wrapping the telephony / notification / accessibility / BLE stack in platform channels. React Native is the weakest fit (poor at both background services and custom rendering) and is ruled out.
 
@@ -74,9 +75,19 @@ And the clincher: **we target one device, Android only.** Cross-platform's entir
 
 ## 4. Decision: the agent is the call *operator*, not a call *participant*
 
+> **Revised 2026-07-13** (see `docs/roadmap.md`): the original plan below made the app the
+> **default dialer** via `InCallService`, so it could also route to speaker and end the call
+> programmatically. That's now dropped in favor of a plainer **outbound-only** design — Teya is a
+> fixed home appliance, not a number anyone dials, so there's no inbound side to justify the
+> default-dialer role, `ANSWER_PHONE_CALLS`, or an `InCallService` at all. Teya just places the
+> call (`TelecomManager.placeCall()` / `ACTION_CALL`, `CALL_PHONE` permission only); the system's
+> own Phone app takes over the live call UI (speaker, hang-up) from there. `TeyaInCallService.kt`
+> still exists in the tree and needs deleting as part of implementing this. The "why a plain
+> cellular call, not VoIP" reasoning below is unaffected by this revision.
+
 This is the telephony design, and getting the framing right is what keeps it simple.
 
-**The use case:** a kid says "call Dad." The app places a normal phone call to Dad. The two of them talk like any ordinary call. The AI initiates and ends the call — it is never *in* the conversation.
+**The use case:** a kid says "call Dad." The app places a normal phone call to Dad. The two of them talk like any ordinary call. The AI initiates the call and then steps aside — it is never *in* the conversation, and (per the revision above) no longer manages it once dialed either.
 
 ### Why this matters
 
@@ -88,13 +99,13 @@ There is a well-known landmine here that we explicitly avoid. If the AI needed t
 
 ### How it's built
 
-Make the app the **default dialer** by implementing an `InCallService`. That single role grants everything needed, all through intended, supported platform APIs:
+Place the call outbound-only, no dialer role needed:
 
-- **Place** — `TelecomManager.placeCall()`
-- **Answer** hands-free — `acceptRingingCall()`
-- **Speakerphone routing** — fully controllable as the `InCallService` (the robust path; ad-hoc `AudioManager` speaker toggling is flaky on newer Android)
-- **End** — `endCall()` / `Call.disconnect()`
-- **The animated face becomes the in-call UI** — ideal for a wall-mounted device
+- **Place** — `TelecomManager.placeCall()` (or `Intent(ACTION_CALL)`), gated by `CALL_PHONE`
+  permission and the allowlist below.
+- **Everything after that is the system's job.** Once placed, the stock Android Phone app owns
+  the live call — speakerphone routing, mute, and hang-up all happen there, not in Teya. Teya's
+  face returns to idle/listening; it has no further role in an active call.
 
 ### The flow
 
@@ -102,10 +113,8 @@ Make the app the **default dialer** by implementing an `InCallService`. That sin
 wake word → "call Dad"
   → agent resolves "Dad" → contact
   → confirms ("Calling Dad…")        [optional; good for kids]
-  → places a normal cellular call
-  → speakerphone on; face becomes the call screen
-  → humans talk
-  → big on-screen End button (or programmatic end) → call ends
+  → places a normal cellular call via TelecomManager
+  → system Phone app takes over (speaker, hang-up); Teya's face returns to idle
 ```
 
 ### Tool Use Protocol
@@ -118,50 +127,63 @@ The Brain (LLM) triggers actions via a structured Tool Use (Function Calling) pr
 
 The agent places calls **only** to entries on an approved family contacts list. A spoken name ("call Dad") is resolved against that allowlist; anything not on it is refused. This *is* the security model for the feature — a child can reach the people they're allowed to and no one else, with no path to dialing arbitrary, premium, or unknown numbers. The allowlist lives on-device alongside the rest of family memory (§5) and is editable only by a parent/admin.
 
-### Two details to design for (both easy)
+### One detail this revision resolves for free
 
-- **Permissions / role.** `CALL_PHONE`, `ANSWER_PHONE_CALLS`, plus the user grants the default-dialer role once at setup. Fine for a dedicated home device.
-- **Hands-free hang-up.** While a call is active, the telephony stack owns the mic, so the wake word likely won't be heard mid-call. **Do not rely on voice to end the call** — show a large, tappable **End** button on the face. (Programmatic end on a timer or tap also works.)
+- **Permissions.** Just `CALL_PHONE` — no `ANSWER_PHONE_CALLS`, no default-dialer role grant at setup.
+- **Hang-up** is no longer Teya's problem: since the system Phone app owns the live call, its own
+  UI already provides the end-call control. (The wake word likely won't be heard mid-call either
+  way, since the telephony stack owns the mic while a call is active — moot now that Teya isn't
+  trying to manage the call.)
 
 ---
 
 ## 5. The v1 stack
 
+*Updated 2026-07-13 to match what's actually running — see `docs/roadmap.md` for the full trail.*
+
 ```
 Kotlin + Jetpack Compose app  (always-on foreground service)
 │
-├─ Face        → Rive/Lottie, driven by an agent-state machine
-├─ Voice in    → on-device wake word (Porcupine / openWakeWord)
-│                → streaming STT (cloud: Deepgram / Google, or on-device)
-├─ Brain       → Claude / Gemini API, tool-use loop   ← the only mandatory cloud piece
-├─ Voice out   → TTS (cloud for quality: ElevenLabs / Google)
-├─ Telephony   → cellular SIM + default-dialer InCallService   (§4)
-├─ Actuators   → NotificationListenerService, AccessibilityService,
-│                BLE, NFC, Matter / Google Home SDK
-└─ Memory      → on-device store (Room / SQLite) first; cloud sync later
+├─ Face        → hand-rolled Compose Canvas particle field (~830 points), driven by an
+│                agent-state machine — not Rive/Lottie in the end
+├─ Voice in    → our own trained wake word ("hey_teya" via microWakeWord, commercial-use clear),
+│                fed by a vendored TFLite Micro "microfrontend" feature extractor (the app's one
+│                native/NDK module) — replaced openWakeWord entirely
+│                → streaming STT (Mistral Voxtral)
+│                → mid-sentence barge-in via a session-scoped WebView hosting Chromium's own
+│                   getUserMedia AEC, with an automatic gap-gated (no-AEC) fallback
+├─ Brain       → Mistral (mistral-small, tool-use loop)   ← the only mandatory cloud piece
+├─ Voice out   → Mistral Voxtral TTS, streamed
+├─ Telephony   → cellular SIM, outbound-only via TelecomManager.placeCall()   (§4, revised)
+├─ Actuators   → calendar, alarms/timers, shopping list shipped; NotificationListenerService,
+│                AccessibilityService, BLE, NFC, Matter / Google Home SDK still ahead
+└─ Memory      → on-device Room DB — household roster, aliases, per-person memory; cloud sync later
 ```
 
 ---
 
 ## 6. Build order (sequenced to de-risk fastest)
 
-1. **Prove it feels alive.** Always-on foreground app + animated face + the core loop: wake word → STT → Claude → TTS. This is the heartbeat; nothing else matters if this doesn't feel right.
-2. **One real action, end to end.** e.g. "add milk to the shopping list" or "message Ana." Proves the action/execution path through the agent loop.
-3. **Telephony.** Default-dialer / `InCallService`, the "call Dad" flow from §4.
-4. **Smart-home actuators.** BLE, Matter / Google Home, notifications, NFC.
+1. ✅ **Prove it feels alive.** Always-on foreground app + animated face + the core loop: wake word → STT → Mistral → TTS. Done, and since extended with a custom wake word and real mid-sentence barge-in.
+2. ✅ **One real action, end to end.** Calendar, timers/alarms, and the shopping list are all live; "call Dad" is next.
+3. **Telephony.** Outbound-only `ACTION_CALL` / `TelecomManager.placeCall()`, revised per §4 — not yet built.
+4. **Smart-home actuators.** BLE, Matter / Google Home, notifications, NFC — not started.
 
-**Schedule the hard parts deliberately:** telephony (the default-dialer role) and accessibility-based control of other apps are the two areas that will consume the most time. Don't treat them as casual.
+**Schedule the hard parts deliberately:** accessibility-based control of other apps is the area
+most likely to consume real time. Telephony turned out easier than originally scoped once outbound-only
+replaced the default-dialer plan (§4) — still, don't treat it as trivial.
 
 ---
 
 ## 7. Open questions / things to watch
 
-- **App integrations (§5 Actuators) are the real cost.** Messaging, lists, and smart home are where most ongoing work lives — telephony got easy, these did not.
-- **AccessibilityService for in-app actions** (e.g. driving WhatsApp) is powerful but brittle across app updates and OS versions. Evaluate official APIs / share intents first.
-- **Wake-word reliability while plugged in** is the make-or-break UX detail for an always-on device.
-- **STT/TTS: cloud vs on-device** — start cloud for quality (the device is plugged in and on WiFi), revisit on-device later for privacy/latency.
-- **Memory model** — what persists, where, and how a family edits or forgets it. Local-first, but the schema deserves real thought early.
+- **App integrations (§5 Actuators) are the real cost.** Messaging and smart home are where most ongoing work lives — calendar/timers/shopping list turned out easy, telephony is next, these did not.
+- **AccessibilityService for in-app actions** (e.g. driving WhatsApp) is powerful but brittle across app updates and OS versions. Evaluate official APIs / share intents first. Still open — not started.
+- ✅ **Wake-word reliability while plugged in** — resolved: our own trained `hey_teya` model, validated live (5/5 detections incl. ~1.5 m far-field, no false accepts). More validation sessions across rooms/times/speakers still worth doing; true whole-room coverage likely needs a mic array.
+- ✅ **STT/TTS: cloud vs on-device** — decided: Mistral Voxtral (cloud) for both, for quality. Barge-in/interruption is handled separately, on-device (Silero VAD + WebView-hosted AEC), independent of this choice.
+- **Memory model** — partially decided: on-device Room DB holds the household roster, aliases, and per-person memory today. Still open: the deferred "KNOWN people" tier (facts learned about people outside the household, captured by voice) — see the roadmap backlog.
 
 ---
 
-*Decisions recorded from design + architecture sessions — June 2026.*
+*Decisions recorded from design + architecture sessions — June 2026; telephony design revised
+2026-07-13 (outbound-only, see §4) per `docs/roadmap.md`.*
