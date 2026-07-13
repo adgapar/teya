@@ -1,8 +1,11 @@
 package com.teya.agent.calendar
 
+import android.accounts.AccountManager
+import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
+import android.os.Bundle
 import android.provider.CalendarContract
 import android.util.Log
 import java.util.TimeZone
@@ -13,13 +16,18 @@ data class CalendarEvent(
     val beginMillis: Long,
     val endMillis: Long,
     val location: String?,
+    /** Who organized it — an email address, or a bare local name ("My calendar"). Never blank. */
+    val organizer: String,
 )
 
 /**
  * The family calendar, on the native [CalendarContract] provider. Hybrid backing (decided): write
  * into a synced account calendar (e.g. Google) if one is present — so events sync to the family's
  * phones and invites can go out — otherwise create a Teya-owned **local** calendar (zero-setup,
- * on-device only). Reads (via Instances) span every calendar on the device regardless.
+ * on-device only). Reads (via Instances) span every calendar on the device regardless — including
+ * anything anyone in the world emailed an invite to the household's synced account. [events]
+ * (settled fact) and [inboundInvites] (informational only, never fed to the model as fact or
+ * wired to a tool call) split on the same trusted-organizer check; see their doc comments.
  *
  * Blocking content-provider calls — invoke off the main thread.
  */
@@ -28,34 +36,106 @@ class CalendarManager(private val context: Context) {
     private val resolver = context.contentResolver
     private var cachedCalendarId: Long? = null
 
-    /** Events overlapping [startMillis, endMillis], soonest first. Empty on no-permission/failure. */
-    fun events(startMillis: Long, endMillis: Long): List<CalendarEvent> = try {
+    /**
+     * Confirmed events overlapping [startMillis, endMillis], soonest first — organized by the
+     * household itself or a household member (see [isTrustedOrganizer]). This is what's fed to the
+     * model as settled fact ("today's remaining events", [addEvent]'s own writes, etc). Empty on
+     * no-permission/failure.
+     */
+    fun events(startMillis: Long, endMillis: Long, trustedEmails: Set<String>): List<CalendarEvent> =
+        readInstances(startMillis, endMillis, trustedEmails)
+            .filter { it.second }.map { it.first }.sortedBy { it.beginMillis }
+
+    /**
+     * Events in the same window organized by someone **outside** the household — i.e. anyone who
+     * knows the household's synced account address emailed it an invite. Never folded into [events]
+     * or fed to the model as settled fact: these are surfaced separately, purely informational, so
+     * the household can be told about them and choose to act ("yes, add that one") — the choice
+     * stays with a person in the room, never with the model reading the invite's own text.
+     */
+    fun inboundInvites(startMillis: Long, endMillis: Long, trustedEmails: Set<String>): List<CalendarEvent> =
+        readInstances(startMillis, endMillis, trustedEmails)
+            .filterNot { it.second }.map { it.first }.sortedBy { it.beginMillis }
+
+    /** Reads every calendar on the device (see class doc), pairing each instance with whether [isTrustedOrganizer]. */
+    private fun readInstances(
+        startMillis: Long,
+        endMillis: Long,
+        trustedEmails: Set<String>,
+    ): List<Pair<CalendarEvent, Boolean>> = try {
+        requestSync()
         val projection = arrayOf(
             CalendarContract.Instances.TITLE,
             CalendarContract.Instances.BEGIN,
             CalendarContract.Instances.END,
             CalendarContract.Instances.EVENT_LOCATION,
+            CalendarContract.Instances.ORGANIZER,
+            CalendarContract.Calendars.ACCOUNT_NAME,
         )
-        val out = mutableListOf<CalendarEvent>()
+        val out = mutableListOf<Pair<CalendarEvent, Boolean>>()
         CalendarContract.Instances.query(resolver, projection, startMillis, endMillis)?.use { c ->
             while (c.moveToNext()) {
-                out.add(
-                    CalendarEvent(
-                        title = c.getString(0) ?: "(untitled)",
-                        beginMillis = c.getLong(1),
-                        endMillis = c.getLong(2),
-                        location = c.getString(3)?.takeIf { it.isNotBlank() },
-                    )
+                val organizer = c.getString(4)
+                val accountName = c.getString(5)
+                val event = CalendarEvent(
+                    title = c.getString(0) ?: "(untitled)",
+                    beginMillis = c.getLong(1),
+                    endMillis = c.getLong(2),
+                    location = c.getString(3)?.takeIf { it.isNotBlank() },
+                    organizer = organizer?.takeIf { it.isNotBlank() } ?: "(unknown)",
                 )
+                out.add(event to isTrustedOrganizer(organizer, accountName, trustedEmails))
             }
         }
-        out.sortedBy { it.beginMillis }
+        out
     } catch (e: SecurityException) {
         Log.w(TAG, "Calendar read permission not granted", e)
         emptyList()
     } catch (e: Exception) {
         Log.e(TAG, "Failed to read calendar", e)
         emptyList()
+    }
+
+    /**
+     * Nudge every synced account to sync the calendar authority right now instead of waiting for
+     * Android's own lazy periodic job (can lag hours behind an incoming invite). Fire-and-forget —
+     * [ContentResolver.requestSync] is async, so this can't make the read below see the result of
+     * its own nudge, only future reads; harmless no-op for any account without a matching sync
+     * adapter registered for this authority. Safe to call on every read now that untrusted
+     * organizers are filtered out regardless of how fresh the data is.
+     *
+     * **Known gap** (confirmed live via `adb shell dumpsys account` → "Account visibility"):
+     * `AccountManager.accounts` only returns accounts Teya's app has visibility into, and neither
+     * household Google account currently grants that — only Google's own first-party apps do (same
+     * restriction `ContactsRepository.pickAccount()` already silently falls back around, seeding
+     * contacts under a local account instead). So this is a no-op for the accounts that matter today.
+     * Kept anyway: harmless, and it starts working for free the moment visibility opens up (no
+     * discoverable Settings toggle for it on this device as of this writing — see docs/experiments.md).
+     */
+    private fun requestSync() {
+        try {
+            val extras = Bundle().apply {
+                putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true)
+                putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true)
+            }
+            AccountManager.get(context).accounts.forEach { account ->
+                ContentResolver.requestSync(account, CalendarContract.AUTHORITY, extras)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to request calendar sync", e)
+        }
+    }
+
+    /**
+     * Local/no-account organizers (no "@" — a bare calendar name like "My calendar", or the
+     * birthday provider's "local.samsungbirthday") are trusted unconditionally: they can't have
+     * arrived via a network invite. An email-shaped organizer must either be the calendar's own
+     * synced account (self-organized, e.g. Teya's own [addEvent]) or a household member's address.
+     */
+    private fun isTrustedOrganizer(organizer: String?, accountName: String?, trustedEmails: Set<String>): Boolean {
+        if (organizer.isNullOrBlank() || !organizer.contains("@")) return true
+        if (organizer.equals(accountName, ignoreCase = true)) return true
+        return trustedEmails.any { it.equals(organizer, ignoreCase = true) }
     }
 
     /**

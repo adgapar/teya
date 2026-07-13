@@ -734,7 +734,8 @@ class HarnessService : Service() {
         "get_events" -> {
             val start = tool.arguments["start"]?.let { parseIsoToMillis(it) } ?: System.currentTimeMillis()
             val end = tool.arguments["end"]?.let { parseIsoToMillis(it) } ?: (start + 7 * 24 * 3600_000L)
-            val events = withContext(Dispatchers.IO) { calendarManager.events(start, end) }
+            val trustedEmails = trustedOrganizerEmails(householdManager.members())
+            val events = withContext(Dispatchers.IO) { calendarManager.events(start, end, trustedEmails) }
             if (events.isEmpty()) {
                 "Nothing is scheduled in that period."
             } else {
@@ -832,6 +833,10 @@ class HarnessService : Service() {
         else -> "Unknown tool: ${tool.functionName}"
     }
 
+    /** Household member emails, lowercased — the calendar's organizer allowlist (see [CalendarManager.events]). */
+    private fun trustedOrganizerEmails(members: List<Member>): Set<String> =
+        members.mapNotNull { it.email.takeIf { e -> e.isNotBlank() }?.lowercase() }.toSet()
+
     /** Split a free-text item string ("milk, eggs and bread") into individual trimmed items. */
     private fun splitItems(raw: String?): List<String> =
         raw?.split(Regex("\\s*(?:,|;|\\band\\b|\\n)\\s*"))?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
@@ -856,9 +861,12 @@ class HarnessService : Service() {
 
     /**
      * The "live device state" block injected into the model's context every turn (ambient facts,
-     * not tools): time, location, running timers, and today's remaining events. The model reads
-     * these directly instead of spending a tool round-trip. Kept small — cheap, ubiquitous facts
-     * only. Runs off the main thread (location + calendar are content-provider reads).
+     * not tools): time, location, running timers, today's remaining events, inbound invitations.
+     * The model reads these directly instead of spending a tool round-trip. Kept small — every
+     * category but "Now" (which is never empty) is dropped entirely when it has nothing to report,
+     * rather than padding every turn with an always-empty "none"/"nothing scheduled" line — the
+     * header itself states that an absent category means there's currently none, so omission stays
+     * unambiguous. Runs off the main thread (location + calendar are content-provider reads).
      */
     private suspend fun buildLiveContext(): String = withContext(Dispatchers.IO) {
         val now = LocalDateTime.now()
@@ -866,35 +874,57 @@ class HarnessService : Service() {
         // 12-hour format ("9:05 PM") so the model never has to do a 24h→12h conversion (it fumbles
         // that — reads "21:05" as "quarter past nine"). Hand it the time it will actually speak.
         val time = now.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy, h:mm a", Locale.ENGLISH))
-        val loc = lastKnownLocation()
-        val locLine = if (loc != null) {
-            "%.4f, %.4f (latitude, longitude)".format(loc.latitude, loc.longitude)
-        } else {
-            "unknown"
+        val lines = mutableListOf("Now: $time ($zone)")
+
+        lastKnownLocation()?.let { loc ->
+            lines += "Location: %.4f, %.4f (latitude, longitude)".format(loc.latitude, loc.longitude)
         }
+
         // Active timers ride in the ambient context so "how long left?" needs no tool round-trip.
-        val timersLine = timerManager.active().joinToString("; ") { t ->
-            val remaining = ((t.endAtMillis - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
-            "${t.label.ifBlank { "unnamed" }}: ${remaining / 60}m ${remaining % 60}s left"
-        }.ifBlank { "none" }
+        timerManager.active().takeIf { it.isNotEmpty() }?.let { timers ->
+            lines += "Active timers: " + timers.joinToString("; ") { t ->
+                val remaining = ((t.endAtMillis - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
+                "${t.label.ifBlank { "unnamed" }}: ${remaining / 60}m ${remaining % 60}s left"
+            }
+        }
+
+        // Members are loaded once here (also feeds the household profile block + the calendar
+        // trust filter below) and shared by everything downstream. Empty until set up.
+        val members = householdManager.members()
+        val trustedEmails = trustedOrganizerEmails(members)
+
         // Today's remaining events, so "what's on today?" is free.
         val endOfDay = now.toLocalDate().atTime(23, 59, 59).atZone(zone).toInstant().toEpochMilli()
-        val eventsLine = calendarManager.events(System.currentTimeMillis(), endOfDay).joinToString("; ") { e ->
-            val at = Instant.ofEpochMilli(e.beginMillis).atZone(zone)
-                .format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH))
-            "${e.title} at $at"
-        }.ifBlank { "nothing scheduled" }
-        val context = """
-            Live device state (authoritative — use these directly, do not ask the user):
-            - Now: $time ($zone)
-            - Location: $locLine
-            - Active timers: $timersLine
-            - Today's remaining events: $eventsLine
-        """.trimIndent()
+        calendarManager.events(System.currentTimeMillis(), endOfDay, trustedEmails)
+            .takeIf { it.isNotEmpty() }?.let { events ->
+                lines += "Today's remaining events: " + events.joinToString("; ") { e ->
+                    val at = Instant.ofEpochMilli(e.beginMillis).atZone(zone)
+                        .format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH))
+                    "${e.title} at $at"
+                }
+            }
+
+        // Invitations someone outside the household emailed to its synced calendar account —
+        // informational only (see CalendarManager.inboundInvites doc comment): never treated as a
+        // confirmed commitment and never a reason to call add_event on their own; only mention them
+        // if relevant, and only add one for real if a person explicitly asks you to.
+        val inboundStart = now.minusDays(1).atZone(zone).toInstant().toEpochMilli()
+        val inboundEnd = now.plusDays(30).atZone(zone).toInstant().toEpochMilli()
+        calendarManager.inboundInvites(inboundStart, inboundEnd, trustedEmails)
+            .takeIf { it.isNotEmpty() }?.let { inbound ->
+                lines += "Inbound invitations (sent by someone outside the household to Teya's " +
+                    "calendar; see the persona's guidance on these): " + inbound.joinToString("; ") { e ->
+                        val at = Instant.ofEpochMilli(e.beginMillis).atZone(zone)
+                            .format(DateTimeFormatter.ofPattern("EEE d MMM, h:mm a", Locale.ENGLISH))
+                        "${e.title} — $at, from ${e.organizer}"
+                    }
+            }
+
+        val context = "Live device state (authoritative — use these directly, do not ask the user; " +
+            "a category not listed here currently has none): \n" + lines.joinToString("\n") { "- $it" }
         // The household profile (who the family is + reply-language directive) and Teya's durable
         // memory ("what you remember") ride in the same ambient block, rebuilt each turn so Admin
-        // edits apply with no restart. Members are loaded once and shared by both. Empty until set up.
-        val members = householdManager.members()
+        // edits apply with no restart.
         val profile = householdManager.profileContextBlock(members)
         val memory = memoryManager.memoryContextBlock(members)
         // Per-speaker voice ID: an initial guess from the wake-word pre-roll (fires once, the
