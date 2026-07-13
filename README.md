@@ -2,17 +2,15 @@
 
 > *A family agent for the home — a warm, intelligent presence that listens, understands, remembers, and does. Built on a spare Android phone.*
 
-**Status:** Working prototype (July 2026). A dedicated Android device runs the full voice loop —
-including a custom-trained wake word and real mid-sentence interruption — the animated face, a
-growing set of native tools (calendar, timers, shopping list), and a household profile that makes
-Teya contextual (knows the family, their names, the languages they speak, and — as a soft signal —
-who's likely talking).
+**This document is the vision** — the problem, the product, the ideas it's built from, and why now.
+It deliberately doesn't track build status or implementation choices; those live and change
+elsewhere, and would go stale here.
 
 ### Documents
 
-- **This file** — the vision: the problem, the product, and why now.
-- **[docs/roadmap.md](./docs/roadmap.md)** — current status: what's built and what's next.
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** — how we build it: the technical decisions and the reasoning behind them.
+- **This file** — vision: the problem, the product, the core ideas, why now.
+- **[docs/roadmap.md](./docs/roadmap.md)** — status: what's actually built, verified live, and what's next.
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** — how it's built: the technical decisions and the reasoning behind them.
 
 ---
 
@@ -95,8 +93,8 @@ The face and personality should be **gender neutral** — calm, warm, wise, belo
 
 ## 5. Family Use Cases
 
-*These describe where this is headed. For what's actually built and verified live today, see the
-status table in §7 or the running log in [docs/roadmap.md](./docs/roadmap.md).*
+*These describe where this is headed, not a feature list of what's shipped — see
+[docs/roadmap.md](./docs/roadmap.md) for that.*
 
 ### Home logistics
 - Shopping list management by voice
@@ -147,7 +145,7 @@ The harness being built here is an **agent framework** — it gives the AI brain
 
 ---
 
-## 7. The Harness — Technical Architecture
+## 7. The Harness — A Reusable Idea
 
 ```
         Teya               ← the family-facing product (face + personality)
@@ -156,41 +154,29 @@ The harness being built here is an **agent framework** — it gives the AI brain
          |
    ______|________________________________
   |          |           |               |
-Android    AI Model    Smart home    Family data
-phone HW   (Mistral)   (WiFi/BT/     (calendar,
-                        Matter)       memory,
-                                      contacts)
+Android      AI Model    Smart home    Family data
+phone HW                 (WiFi/BT/     (calendar,
+                          Matter)       memory,
+                                        contacts)
 ```
 
-### Core responsibilities of the harness
+The harness is the general-purpose part: it gives an AI brain hands, eyes, and a voice in the
+physical and digital world of a home. Its core responsibilities are:
 
-1. **Voice pipeline** — wake word detection, speech-to-text, text-to-speech
-2. **AI routing** — sending context to the AI model and handling responses
-3. **Action execution** — translating AI intent into real-world actions (send message, set reminder, control device)
+1. **Voice pipeline** — wake word, speech-to-text, text-to-speech
+2. **AI routing** — sending context to the model, handling its responses and tool calls
+3. **Action execution** — turning AI intent into real-world actions
 4. **Family memory** — persistent context about family members, preferences, routines
-5. **App integrations** — WhatsApp, calendar, shopping, smart home APIs
-6. **Face rendering** — animated face that reflects the agent's state
+5. **App integrations** — messaging, calendar, shopping, smart home
+6. **Face rendering** — an animated presence that reflects the agent's state
 
-### The AI backend — Mistral (swappable)
+**Teya** — the name, the face, the personality — is one product built on top of this harness. The
+AI backend behind it is chosen for strong performance-per-cost and to keep the stack on European
+AI, but the harness treats it as swappable, not load-bearing to the idea.
 
-The AI runs on **Mistral**: one European provider that covers many of the agent's needs at once —
-speech-to-text, the reasoning LLM (with tool calling), and text-to-speech. It's chosen for strong
-performance-per-cost and for keeping the stack on European AI. The harness treats the provider as
-swappable behind a single interface, so **other providers can be added later where Mistral falls
-short** — for example, languages its speech models don't yet voice.
-
-### What's built, what's next
-
-| Piece | Status |
-|---|---|
-| Animated face | ✅ Built — a particle-field face that morphs per state |
-| Voice loop (STT → LLM + tools → TTS) | ✅ Built, streaming, running on a dedicated device |
-| Wake word | ✅ Built — our own trained "Hey Teya" model, commercial-use clear, validated live at ~1.5 m |
-| Mid-sentence interruption (barge-in) | ✅ Built — real echo cancellation via a hosted WebView, not just listening in the gaps between sentences |
-| Household profile / family memory | ✅ Members, aliases, languages, home, soft per-speaker voice ID; deeper per-person memory next |
-| App integrations | Growing — calendar (incl. real email invites), timers/alarms, shopping list live; calling next |
-
-A working v1 already runs on a dedicated Android phone — the animated face, the full voice loop, the first native tools, and the household profile — with Mistral as the AI backend. Hardware cost: near zero.
+Hardware cost for the whole thing: near zero — a spare Android phone is the only physical thing
+this needs. For what's actually running today and how it's built, see
+[docs/roadmap.md](./docs/roadmap.md) and [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ---
 
