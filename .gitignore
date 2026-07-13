@@ -8,6 +8,9 @@
 .env.*
 *.env
 !.env.example
+keystore.properties
+*.keystore
+*.jks
 # Ignore build output in every module (root was /build, which missed app/build/)
 build/
 /captures

@@ -1,9 +1,23 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
     id("org.jetbrains.kotlin.plugin.serialization")
     alias(libs.plugins.ksp)
 }
+
+// Release signing: local dev reads keystore.properties (gitignored); CI supplies the same
+// fields via env vars (see .github/workflows/release.yml). Neither present -> release build
+// is simply unsigned, same as before this config existed.
+val keystoreProps = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) load(FileInputStream(file))
+}
+fun signingProp(propKey: String, envKey: String): String? =
+    keystoreProps.getProperty(propKey) ?: System.getenv(envKey)
+val releaseStoreFile = signingProp("storeFile", "KEYSTORE_PATH")
 
 android {
     namespace = "com.teya.agent"
@@ -36,6 +50,17 @@ android {
         }
     }
 
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = rootProject.file(releaseStoreFile)
+                storePassword = signingProp("storePassword", "KEYSTORE_PASSWORD")
+                keyAlias = signingProp("keyAlias", "KEY_ALIAS")
+                keyPassword = signingProp("keyPassword", "KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -43,6 +68,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (releaseStoreFile != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {
