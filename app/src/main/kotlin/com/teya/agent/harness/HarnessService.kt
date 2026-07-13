@@ -29,6 +29,7 @@ import com.teya.agent.persona.AgentTools
 import com.teya.agent.persona.TeyaPersona
 import com.teya.agent.safety.ContactAllowlistManager
 import com.teya.agent.shopping.ShoppingListManager
+import com.teya.agent.telephony.CallResult
 import com.teya.agent.telephony.TelephonyActuator
 import com.teya.agent.timers.TeyaTimer
 import com.teya.agent.timers.TimerManager
@@ -678,8 +679,12 @@ class HarnessService : Service() {
         "place_call" -> {
             val name = tool.arguments["name"] ?: ""
             Log.d(TAG, "Actuator: Placing call to $name")
-            if (telephonyActuator.placeCall(name)) "Calling $name now."
-            else "$name is not on the family's approved contacts, so the call was not placed."
+            when (telephonyActuator.placeCall(name)) {
+                CallResult.SUCCESS -> "Calling $name now."
+                CallResult.NO_SIM -> "I don't have a number to call from yet — there's no working phone line on this device."
+                CallResult.NOT_ALLOWED -> "$name is not on the family's approved contacts, so the call was not placed."
+                CallResult.NO_NUMBER -> "I don't have a phone number saved for $name."
+            }
         }
         "set_timer" -> {
             val seconds = tool.arguments["duration_seconds"]?.toIntOrNull()
