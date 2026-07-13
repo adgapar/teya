@@ -11,6 +11,7 @@ elsewhere, and would go stale here.
 - **This file** — vision: the problem, the product, the core ideas, why now.
 - **[docs/roadmap.md](./docs/roadmap.md)** — status: what's actually built, verified live, and what's next.
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** — how it's built: the technical decisions and the reasoning behind them.
+- **[LICENSE](./LICENSE)** — Apache-2.0.
 
 ---
 
