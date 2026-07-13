@@ -30,6 +30,7 @@ import com.teya.agent.persona.TeyaPersona
 import com.teya.agent.safety.ContactAllowlistManager
 import com.teya.agent.shopping.ShoppingListManager
 import com.teya.agent.telephony.TelephonyActuator
+import com.teya.agent.timers.TeyaTimer
 import com.teya.agent.timers.TimerManager
 import com.teya.agent.ui.face.AgentState
 import com.teya.agent.voice.SttFailedException
@@ -63,6 +64,14 @@ class HarnessService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val TAG = "HarnessService"
         private const val FOLLOWUP_LISTEN_MS = 8000  // wait this long for a follow-up before ending
+        // How long to wait between timer re-announcements (see timerNagLoop) — kept short and
+        // genuinely a bit annoying on purpose: a kitchen timer nobody's acknowledged is more likely
+        // to mean nobody's heard it yet than that they're ignoring it.
+        private const val TIMER_NAG_INTERVAL_MS = 10_000L
+        // Shorter than FOLLOWUP_LISTEN_MS on purpose — a nag cycle is "is anyone there to dismiss
+        // this?", not an open conversational turn, so it shouldn't hold the mic as long before
+        // re-nagging.
+        private const val TIMER_NAG_LISTEN_MS = 4000
         // Deliberate pause after each sentence — see runConversation's speaker loop. Only applied
         // when that sentence fell back to playMp3, or the WebView AEC host isn't active this
         // session (see VoicePipeline.isContinuousBargeInActive); sentences streamed through the
@@ -82,6 +91,10 @@ class HarnessService : Service() {
     private val conversationActive = AtomicBoolean(false)
     // The in-flight "think + speak" round, if any — cancelled on barge-in (see onTrigger).
     @Volatile private var activeTurnJob: Job? = null
+    // The repeat-until-acknowledged timer nag loop, if one is running (see ensureTimerNagLoopRunning).
+    // Only one ever runs — it re-reads TimerManager.ringing() each cycle, so timers that fire while
+    // it's already going just get folded into the next announcement, no need for a loop per timer.
+    @Volatile private var timerNagJob: Job? = null
     // Captured at interrupt time (see onBargeIn) and consumed by the next listenForCommand call in
     // runConversation's loop, so whatever the user was already saying when they interrupted
     // carries through into that recording — see VoicePipeline.consumeBargeInAudio's doc comment.
@@ -162,7 +175,7 @@ class HarnessService : Service() {
                 val label = intent.getStringExtra(EXTRA_TIMER_LABEL).orEmpty()
                 Log.d(TAG, "Timer fired: id=$id label='$label'")
                 if (id != -1) timerManager.onFired(id)
-                announceTimer(label)
+                ensureTimerNagLoopRunning()
             }
             ACTION_RUN_DREAM -> {
                 Log.d(TAG, "Dream alarm fired — running memory decay")
@@ -417,28 +430,87 @@ class HarnessService : Service() {
         return (names + householdManager.languages()).distinct()
     }
 
+    /** Starts the timer nag loop if one isn't already running — see [timerNagJob]'s doc comment. */
+    private fun ensureTimerNagLoopRunning() {
+        if (timerNagJob?.isActive == true) return
+        timerNagJob = scope.launch { timerNagLoop() }
+    }
+
     /**
-     * A Teya-owned timer fired: announce it in her own voice. If a conversation is already running,
-     * skip speaking (the wake word is paused and we'd talk over it) and just log — a rare overlap.
-     * Otherwise pause the wake word, speak, and resume.
+     * Repeat-until-acknowledged: a fired kitchen timer nobody's there to hear the first time is
+     * worse than one that's mildly annoying about it, so this keeps re-announcing every
+     * [TIMER_NAG_INTERVAL_MS] until [TimerManager.ringing] is empty — i.e. until a real
+     * conversation turn (this loop's own listen step below, or a completely separate wake-word
+     * conversation happening at the same time) calls `cancel_timer` for it. Re-reads `ringing()`
+     * fresh each cycle, so this naturally folds in any timer that fires while it's already going.
      */
-    private fun announceTimer(label: String) {
-        val message = if (label.isBlank()) "Time's up — your timer is done." else "Time's up — your $label timer is done."
-        if (conversationActive.get()) {
-            Log.d(TAG, "Timer fired during a conversation; not speaking over it: $message")
-            return
-        }
-        scope.launch {
-            voicePipeline.pauseWakeWord()
-            updateUiState(AgentState.SPEAKING)
+    private suspend fun timerNagLoop() {
+        while (true) {
+            val ringing = timerManager.ringing()
+            if (ringing.isEmpty()) {
+                Log.d(TAG, "No more ringing timers — stopping nag loop")
+                return
+            }
+            if (!conversationActive.compareAndSet(false, true)) {
+                // A real conversation already has the mic — wait it out rather than talk over it.
+                delay(TIMER_NAG_INTERVAL_MS)
+                continue
+            }
             try {
-                voicePipeline.textToSpeech(message)
-            } catch (e: Exception) {
-                Log.e(TAG, "Timer announcement failed", e)
+                nagOnce(ringing)
+            } finally {
+                conversationActive.set(false)
+            }
+            if (timerManager.ringing().isEmpty()) return
+            delay(TIMER_NAG_INTERVAL_MS)
+        }
+    }
+
+    /**
+     * One nag cycle: speak, then listen briefly for a reply and — if anything was said — run it
+     * through the exact same [respond] tool-calling turn a real conversation uses, so "cancel the
+     * spaghetti one" resolves via `cancel_timer` naturally instead of needing special-cased parsing
+     * here. Caller holds [conversationActive] for the duration (see [timerNagLoop]).
+     */
+    private suspend fun nagOnce(ringing: List<TeyaTimer>) {
+        val message = if (ringing.size == 1) {
+            val label = ringing[0].label
+            if (label.isBlank()) "Time's up — your timer is done." else "Time's up — your $label timer is done."
+        } else {
+            "Time's up — your " + ringing.joinToString(" and ") { it.label.ifBlank { "unnamed" } } +
+                " timers are done."
+        }
+        try {
+            voicePipeline.startAecSession()
+            updateUiState(AgentState.SPEAKING)
+            voicePipeline.setBargeInArmed(true)
+            voicePipeline.consumeInterrupted()
+            voicePipeline.textToSpeech(message)
+
+            voicePipeline.setBargeInArmed(false)
+            voicePipeline.pauseWakeWord()
+            updateUiState(AgentState.LISTENING)
+            voicePipeline.playListeningChime()
+            val text = try {
+                voicePipeline.listenForCommand(TIMER_NAG_LISTEN_MS, sttContextBias(), ShortArray(0))
+            } catch (e: SttFailedException) {
+                null
             } finally {
                 voicePipeline.resumeWakeWord()
-                updateUiState(AgentState.IDLE)
             }
+            if (!text.isNullOrBlank()) {
+                Log.d(TAG, "Heard during timer nag: \"$text\"")
+                val history = mutableListOf(ChatMessage("user", text))
+                voicePipeline.setBargeInArmed(true)
+                voicePipeline.consumeInterrupted()
+                respond(history)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Timer nag turn failed", e)
+        } finally {
+            voicePipeline.endAecSession()
+            voicePipeline.setBargeInArmed(false)
+            updateUiState(AgentState.IDLE)
         }
     }
 
@@ -629,7 +701,7 @@ class HarnessService : Service() {
         "cancel_timer" -> {
             val cancelled = timerManager.cancel(tool.arguments["label"])
             when {
-                cancelled.isEmpty() -> "There are no timers running to cancel."
+                cancelled.isEmpty() -> "There's nothing to cancel."
                 cancelled.size == 1 -> "Cancelled the ${cancelled[0].label.ifBlank { "timer" }}."
                 else -> "Cancelled ${cancelled.size} timers."
             }

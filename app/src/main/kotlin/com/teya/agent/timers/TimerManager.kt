@@ -16,10 +16,11 @@ data class TeyaTimer(val id: Int, val label: String, val endAtMillis: Long)
  * Teya-owned countdown timers, scheduled with the native [AlarmManager]. We own them (rather than
  * firing an `AlarmClock` intent) because the system Clock API cannot cancel a *running* timer —
  * owning the state is what makes cancel / list / time-left possible. When a timer fires, the
- * pending intent re-enters [HarnessService] with [HarnessService.ACTION_TIMER_FIRED] so Teya can
- * announce it in her own voice.
+ * pending intent re-enters [HarnessService] with [HarnessService.ACTION_TIMER_FIRED], which moves
+ * it into [ringing] and starts (or joins) the repeat-until-acknowledged nag loop — a kitchen timer
+ * nobody's there to hear it the first time is worse than one that's mildly annoying.
  *
- * The active list is in-memory: if the process is killed the alarm still fires and Teya still
+ * Both lists are in-memory: if the process is killed the alarm still fires and Teya still
  * announces (the label rides in the intent extras), but she'd lose the ability to list/cancel it.
  * Acceptable for an always-on foreground service; persist to disk later if it proves flaky.
  */
@@ -27,6 +28,7 @@ class TimerManager(private val context: Context) {
 
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
     private val timers = mutableListOf<TeyaTimer>()
+    private val firedTimers = mutableListOf<TeyaTimer>()
     private val nextId = AtomicInteger(1)
 
     @Synchronized
@@ -42,18 +44,26 @@ class TimerManager(private val context: Context) {
         return timer
     }
 
-    /** Cancel by label (case-insensitive contains); with no label, cancel the only timer, else all. */
+    /**
+     * Cancel by label (case-insensitive contains); with no label, cancel the only timer, else all.
+     * Searches both still-counting-down timers (their alarm is cancelled too) and already-[ringing]
+     * ones (there's no alarm left to cancel — this is what silences the nag loop for them).
+     */
     @Synchronized
     fun cancel(label: String?): List<TeyaTimer> {
         purgeExpired()
-        val toCancel = when {
-            !label.isNullOrBlank() -> timers.filter { it.label.contains(label.trim(), ignoreCase = true) }
-            else -> timers.toList() // no label → the only one, or all of them
+        fun matches(pool: List<TeyaTimer>) = when {
+            !label.isNullOrBlank() -> pool.filter { it.label.contains(label.trim(), ignoreCase = true) }
+            else -> pool.toList() // no label → the only one, or all of them
         }
-        toCancel.forEach { alarmManager.cancel(pendingIntent(it)) }
-        timers.removeAll(toCancel.toSet())
-        Log.d(TAG, "Cancelled ${toCancel.size} timer(s)")
-        return toCancel
+        val cancelledActive = matches(timers)
+        val cancelledRinging = matches(firedTimers)
+        cancelledActive.forEach { alarmManager.cancel(pendingIntent(it)) }
+        timers.removeAll(cancelledActive.toSet())
+        firedTimers.removeAll(cancelledRinging.toSet())
+        val all = cancelledActive + cancelledRinging
+        Log.d(TAG, "Cancelled ${all.size} timer(s)")
+        return all
     }
 
     /** Active (not-yet-fired) timers, soonest first. */
@@ -63,10 +73,16 @@ class TimerManager(private val context: Context) {
         return timers.sortedBy { it.endAtMillis }
     }
 
-    /** Called when a timer fires so it drops out of the active list. */
+    /** Fired timers nobody has acknowledged (cancelled) yet — what the nag loop keeps announcing. */
+    @Synchronized
+    fun ringing(): List<TeyaTimer> = firedTimers.toList()
+
+    /** Called when a timer fires: moves it from active into [ringing] rather than discarding it. */
     @Synchronized
     fun onFired(id: Int) {
-        timers.removeAll { it.id == id }
+        val timer = timers.find { it.id == id } ?: return
+        timers.remove(timer)
+        firedTimers.add(timer)
     }
 
     private fun purgeExpired() {
