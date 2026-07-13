@@ -1,11 +1,15 @@
 # Teya
 
 > *A family agent for the home — a warm, intelligent presence that listens, understands, remembers, and does. Built on a spare Android phone.*
+>
+> *A home should feel like it's looking after you, because it knows you.*
 
-### Documents
+<!-- TODO: video demo — replace with embed/link once recorded -->
 
-- **[docs/roadmap.md](./docs/roadmap.md)** — status: what's built, verified live, and what's next.
-- **[LICENSE](./LICENSE)** — Apache-2.0.
+<p align="center">
+  <img src="./docs/images/screenshot-idle.png" width="45%" alt="Teya's orb, idle, waiting for the wake word">
+  <img src="./docs/images/screenshot-listening.png" width="45%" alt="Teya's orb, active, mid-conversation">
+</p>
 
 ---
 
@@ -73,6 +77,7 @@ What actually runs where:
 
 None of this needs to be impressive on paper. It needs to work quietly enough that nobody in the house thinks about it.
 
-## what this is chasing
+### Documents
 
-> A home should feel like it's looking after you, because it knows you.
+- **[docs/roadmap.md](./docs/roadmap.md)** — status: what's built, verified live, and what's next.
+- **[LICENSE](./LICENSE)** — Apache-2.0.
