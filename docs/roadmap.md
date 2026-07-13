@@ -1,6 +1,6 @@
 # Teya — Roadmap & Status
 
-Living status doc. Design lives in [ARCHITECTURE.md](../ARCHITECTURE.md); the full findings backlog
+Living status doc. Vision + architecture lives in [README.md](../README.md); the full findings backlog
 is [thoughts/shared/research/2026-07-06-project-audit.md](../thoughts/shared/research/2026-07-06-project-audit.md).
 Audit IDs (C1, H2, …) below refer to that file.
 
@@ -289,9 +289,14 @@ Open-Meteo), with location from the household profile or native device location.
    real Google Calendar email, unless `notify_family=false` (personal reminders/chores) or narrowed
    via `attendees`/`exclude_attendees`. Needed the household's own Google account added to the
    device (`teya@household-account`) — the existing hybrid backing picked its calendar up
-   automatically. Full trail: `docs/experiments.md`. Remaining follow-on slices:
-   **(a) advance voice-reminders** (reuse the timer `AlarmManager`+announce → "football in 30 min");
-   **(c) leave-time / distance** (event location + ambient location).
+   automatically. Full trail: `docs/experiments.md`. ✅ **"Remind me to X" already works today** by
+   routing to whichever existing tool fits: near-term ("remind me to call the plumber in twenty
+   minutes") becomes a timer, later or personal ("remind me to bring cupcakes to the school run")
+   becomes a quiet calendar entry via `notify_family=false`. No dedicated reminder tool exists or is
+   needed for this. Remaining follow-on slices:
+   **(a) advance voice-reminders** (a *proactive* nudge fired ahead of an existing calendar event —
+   reuse the timer `AlarmManager`+announce → "football in 30 min"); **(c) leave-time / distance**
+   (event location + ambient location).
 5. ✅ **Shopping list** (`shopping/ShoppingListManager.kt`) — Teya-owned, persistent
    (SharedPreferences). `add_to_shopping_list` / `remove` / `read` / `clear`; comma-separated
    multi-item; model groups by aisle at read time. Verified live.

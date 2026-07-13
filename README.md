@@ -2,204 +2,77 @@
 
 > *A family agent for the home — a warm, intelligent presence that listens, understands, remembers, and does. Built on a spare Android phone.*
 
-**This document is the vision** — the problem, the product, the ideas it's built from, and why now.
-It deliberately doesn't track build status or implementation choices; those live and change
-elsewhere, and would go stale here.
-
 ### Documents
 
-- **This file** — vision: the problem, the product, the core ideas, why now.
-- **[docs/roadmap.md](./docs/roadmap.md)** — status: what's actually built, verified live, and what's next.
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** — how it's built: the technical decisions and the reasoning behind them.
+- **[docs/roadmap.md](./docs/roadmap.md)** — status: what's built, verified live, and what's next.
 - **[LICENSE](./LICENSE)** — Apache-2.0.
 
 ---
 
-## 1. The Problem
+## a machine that forgets everything
 
-Current voice assistants (Alexa, Siri, Google Assistant) are deeply disappointing for everyday family life. They were designed in the early 2010s around simple voice commands — essentially fancy if-then systems. They don't understand context, they forget everything between sessions, and they can't act across apps in any meaningful way.
+Ask Alexa to set a timer and it works. Ask who's picking the kids up from football, and there's nothing there: no notion of two separate calendars, no memory that this comes up every Tuesday, no way to act on the answer even if it understood the question. Voice assistants were designed in the early 2010s around simple commands — fancy if-then systems. They don't understand context, they forget everything between sessions, and they can't act across apps in any meaningful way. Families use them to set timers and play music, then ignore the rest.
 
-The result: people use them to set timers and play music, then ignore the rest.
+Meanwhile the AI behind ChatGPT and Claude is genuinely intelligent. It sits behind a chat window, though, disconnected from the physical and digital infrastructure of an actual home. Close that gap and you get a **smart family agent** with a physical presence in the house, a glowing screen, that actually helps run the household: an agent that **listens, understands, remembers, and does**.
 
-At the same time, modern AI is genuinely intelligent — but it sits behind a chat interface, disconnected from the physical and digital infrastructure of the home.
+## the phone already in the drawer
 
-The gap between these two worlds is the opportunity.
+The idea that makes this buildable at all: **a spare Android phone is a supercharged Arduino, consumer-ready out of the box.** It already has a display, 4G/5G, a mic and speaker, GPS, a calendar and timer, and it can call an AI model directly, on top of the millions of apps already built for it.
 
----
+Wall-mount an old €50 phone, plug it in, and it becomes the single visible node of an invisible home network. Smart bulbs, locks, calendars, messaging apps: all of it hidden infrastructure. The face on the wall is the only interface the family needs to see.
 
-## 2. The Vision
+There's no server behind it, no local agent stack. Today's AI-agent wave runs heavy — people buy Mac Minis to host coding agents and orchestration frameworks locally. Teya needs none of it: the intelligence lives in the cloud, reached with a few API calls per turn, so the hardware is a cheap phone that makes those calls, keeps the screen alive, and drives the device. Any modern Android phone, Android 8.0 (Oreo) or newer, works.
 
-A **smart family agent** that lives in the home as a physical presence — a glowing, animated face on a screen — and acts as a true coordinator of family life. Not a speaker. Not a chatbot. An agent that **listens, understands, remembers, and does**.
+**The mic and speaker weren't built for this, though.** They're tuned for close, arm's-reach use, and picking up a wake word or clear speech across a room asks more of them than that. Early testing is encouraging but limited, and a bigger room may need an external mic array or speaker.
 
-The key shift: from *command executor* to *family coordinator*.
+## what it's for
 
-> "We're out of milk" → it adds it to the shopping list.  
-> "The kids need to be at football at 5 and I have a meeting until 4:30" → it checks both parents' calendars and suggests who can take them.  
-> "Message Ana that we'll be 20 minutes late" → done.
+Right now, that's:
 
----
+- **Shopping list** — "we're out of milk" gets added without being asked twice.
+- **Calendar** — add an event by voice, recurring or not, and it invites the rest of the household by email automatically.
+- **Timers & alarms** — set one, and it announces out loud, in its own voice, when time's up.
+- **Reminders** — "remind me to call the plumber in twenty minutes" or "remind me to bring cupcakes to the school run" becomes a timer or a quiet calendar entry, whichever actually fits.
+- **Calls** — "Call Grandma," spoken by a five-year-old who can't navigate a dialer, places a normal, hands-free cellular call, but only to someone on an approved family contacts allowlist: no path to dialing an unknown, arbitrary, or premium number.
 
-## 3. Why Android Phone as Hardware
+The biggest beneficiary is whoever in the house carries the mental load: the appointments, the meals, the logistics, the school admin nobody else tracks. Teya becomes a second brain for the household, running quietly in the background. The fuller list, including what's still ahead, lives in [docs/roadmap.md](./docs/roadmap.md).
 
-The insight that makes this project viable: **a spare Android phone is a supercharged Arduino with a face**.
+It's locked down by design: a boxed home appliance fixed in place, running on fresh accounts created solely to operate it, never the family's personal Google, social, or banking logins. **There's nothing personal on it to hijack or steal.** Combined with the calling allowlist, that's what makes it safe to leave on a wall within reach of kids and guests.
 
-| Arduino / Raspberry Pi | Android Phone |
-|---|---|
-| Requires coding to set up | Consumer-ready out of the box |
-| No screen | Beautiful display built in |
-| No cellular | 4G/5G built in |
-| No AI | Can call AI models directly |
-| No microphone | Mic + speaker built in |
-| Fragile ecosystem | Millions of existing apps |
+Privacy works the same way: it's built into the architecture itself. The household roster, per-person memory, and the contacts allowlist live on the device. Raw conversation transcripts stay unwritten, never touching disk. Only what a turn needs to think and speak, or what the nightly dream needs to consolidate memories, goes to the model.
 
-A wall-mounted Android phone (even an old €50 device, plugged in) becomes the **single visible node** of an invisible home network. Everything else — smart bulbs, locks, calendars, messaging apps — is hidden infrastructure. The face on the wall is the only interface the family needs to see.
+## part of the family
 
-**No server, no local agent stack.** Today's AI-agent wave runs heavy — people buy Mac Minis to host coding agents and orchestration frameworks locally. Teya needs none of it: the intelligence lives in the cloud, reached with a few API calls per turn, so the hardware is just a cheap phone that makes those calls, renders the face, and drives the device. The point isn't autonomous coding on expensive silicon — it's **everyday family life, delivered from the cheapest hardware that can already do it**.
+You expect a family member to recognize you and remember things about you. That's what Teya does: it remembers, and it recognizes who's talking.
 
-> **What phone to buy:** any Android phone running **Android 8.0 (Oreo, 2017) or newer** — so basically anything from the last ~8 years, including old hand-me-downs. Below Android 8, voice still works, but you lose the ability to naturally interrupt Teya mid-sentence (you'd have to wait for her to finish talking before speaking over her). During first-time setup, you'll also flip one extra permission toggle ("display over other apps") — a one-time step, not something you do again.
+Ask it to remember something, and it will: "remember I'm allergic to peanuts" gets saved as a fact about you specifically, or about the household if it isn't about one person. Ask it to forget, and that memory is gone. Everything it's saved can also be reviewed and edited by hand.
 
-### What the phone commands via Android
+Most of what Teya remembers, though, nobody asked it to save. At the end of every conversation, the model distills what was actually worth keeping into one short note, or decides there's nothing worth keeping at all. Instead of saving a transcript of the conversation, Teya saves that note, so there's never a full record of what was said sitting on the device.
 
-The agent works through the phone's **own native surface** — no DIY electronics, no wiring:
+**It dreams.** Every night, while the house is asleep, those loose notes get consolidated into durable facts about the household, and anything that hasn't been reinforced fades on a forgetting curve instead of piling up forever. It ages the way a person's memory does, keeping what mattered and letting the rest go quiet. Whatever's been kept comes back on its own, without ever being asked to look it up.
 
-- **Telephony** → place calls over the cellular dialer + SIM ("call Grandma")
-- **Messaging** → SMS and installed-messenger apps
-- **Calendar, alarms & timers** → the family's schedule
-- **Location & audio** → "home"/weather context, volume, playback
-- **Notifications** → read and act on what other apps surface
-- **Google Home / Matter** → the smart-home ecosystem (bulbs, plugs, locks, thermostats)
+It also knows who's talking. Each household member's voice gets enrolled once, and from then on a small on-device model matches who's speaking against those samples, no cloud speaker-ID service involved. A quiet match just tells two people apart; a confident one lets Teya greet someone by name. That runs alongside the wake word and barge-in detection, both on-device too, so most of the listening happens on the phone before anything reaches the cloud.
 
----
+## the harness
 
-## 4. The Face
+The agent loop of Teya connects an LLM, TTS, STT, wake word, and VAD models to the phone itself, turning what the model decides into a tool call tied to Android's native SDK: placing a call, adding a shopping-list item, saving a memory.
 
-An animated, living presence on the screen changes the relationship with the device entirely — people engage more naturally, and less transactionally, with something that feels alive than with a blank box or a flat waveform bar. Especially children.
+I wanted onboarding to stay simple, so I stuck to one provider instead of mixing several. It needed to be cheap and multilingual — my own family speaks several languages at home, so Mistral was a very good fit, and it's what runs the reasoning (Mistral Small) plus the speech-to-text and text-to-speech (Voxtral) today. The model itself is swappable, more providers can be added later. Onboarding is where the household enters its own API key.
 
-### Design direction
+There's no backend server behind any of this: family data and device control stay local by default, since telephony and the mic/speaker are Android-local APIs a cloud server couldn't reach anyway.
 
-It is **not** a face with eyes and a mouth — that risks the uncanny valley and dates quickly. It's a single **field of ~830 points** that reassembles into a different living form for each state, so the presence reads through **motion and colour**, not features:
+The app is native Kotlin, because it needs deep access to Android's own APIs: reading notifications, acting inside other apps, placing calls, running as an always-on foreground service. Hardware cost and iOS's own lockdown on that kind of background and permission access ruled that platform out. And the app never goes through Play Store or the App Store, so cross-platform's real selling point, one codebase shipped to both stores, was never relevant here.
 
-- *Idle* — a slow rolling sea (sea-blue)
-- *Listening* — rings drawn inward, like an inhale (aqua)
-- *Thinking* — an orbiting swirl (violet)
-- *Speaking* — a waveform ribbon that fans at the loud peaks (amber)
+A call gets placed and then left alone: when a kid says "call Dad," the app dials a normal cellular call and steps aside. It never joins the conversation, and stops managing the call once dialed. A plain cellular call on the SIM: no VoIP, no audio capture, no root.
 
-The points glow additively, so the screen is literally a **warm ambient light source** on the wall. A live transcript sits centred over the field — the words it hears while listening, its reply while speaking.
+What actually runs where:
 
-### Gender
+- **On-device (local, no network round-trip):** the wake word (a self-trained `hey_teya` model), barge-in/VAD and echo cancellation for mid-sentence interruption, per-speaker voice ID, the animated on-screen presence, the shopping list, and all of family memory, the household roster, aliases, and the contacts allowlist.
+- **Cloud, via Mistral:** reasoning (the tool-use loop), speech-to-text, and text-to-speech. This is the only mandatory cloud dependency in the system.
+- **Phone APIs:** telephony (outbound calls), calendar and alarms/timers (shipped), and, still ahead, reading other apps' notifications, acting inside other apps, and smart-home control over BLE/Matter.
 
-The face and personality should be **gender neutral** — calm, warm, wise, belonging to the whole family. Not subservient (challenging the female-default AI trope), but not cold or mechanical either. The goal is a presence that family members project their own relationship onto, rather than one that imposes a gender.
+None of this needs to be impressive on paper. It needs to work quietly enough that nobody in the house thinks about it.
 
----
+## what this is chasing
 
-## 5. Family Use Cases
-
-*These describe where this is headed, not a feature list of what's shipped — see
-[docs/roadmap.md](./docs/roadmap.md) for that.*
-
-### Home logistics
-- Shopping list management by voice
-- Calendar coordination across all family members
-- School and activity reminders pushed to everyone's devices
-
-### Kids
-- Homework help — patient, at the child's level
-- Personalised bedtime stories with favourite characters
-- Screen time management and enforcement
-
-### Calling & staying in touch
-- "Call Dad", "Call Grandma" — the agent places a normal phone call to anyone on the family contacts list, completely hands-free. Especially valuable for young kids who can't (or shouldn't) navigate a dialer themselves.
-
-> **Safety by design:** the agent can only call people on an approved family **contacts allowlist**. A spoken name ("call Dad") is matched against that list, and anything not on it is refused — there is no path to dialing an unknown, arbitrary, or premium number. A child can reach exactly the people they're allowed to, and no one else. The allowlist *is* the security model.
-
-### Scheduling
-- "When is everyone free this weekend?" — checks all calendars, gives a real answer
-- Booking appointments that don't clash with school
-- Holiday research with budget constraints
-
-### Admin
-- Voice-logged expenses and spending summaries ("paid 12 for lunch" → weekly and by-category totals)
-- Reminders the family sets by voice ("remind us to cancel the trial on the 15th")
-
-### Locked down by design
-
-Teya is a **boxed home appliance, not a phone you carry**. It works only in its home-assistant role — no personal-phone or on-the-go mode. It runs on **fresh, neutral accounts** created just to operate the device and reach people, never the family's personal Google, social, or banking logins — so there's **nothing personal on it to hijack or steal**. Together with the calling allowlist, that makes it safe to leave on a wall within reach of kids and guests.
-
-### The deeper value
-
-The biggest beneficiary is the person who carries the family's **mental load** — tracking appointments, meals, logistics, school admin. The assistant becomes a **second brain for the household**, running silently in the background.
-
----
-
-## 6. What This Actually Is — An Agent
-
-This is not an assistant. It is an **agent**.
-
-| Assistant | Agent |
-|---|---|
-| Answers questions | Takes actions |
-| Reactive | Proactive |
-| One turn | Multi-step |
-| Talks | Does |
-
-The harness being built here is an **agent framework** — it gives the AI brain hands, eyes, and a voice in the physical and digital world. The family-facing product (the face, the name, the personality) sits on top of this harness. The harness is the engine.
-
----
-
-## 7. The Harness — A Reusable Idea
-
-```
-        Teya               ← the family-facing product (face + personality)
-         |
-   THE HARNESS             ← the agent framework this repo builds
-         |
-   ______|________________________________
-  |          |           |               |
-Android      AI Model    Smart home    Family data
-phone HW                 (WiFi/BT/     (calendar,
-                          Matter)       memory,
-                                        contacts)
-```
-
-The harness is the general-purpose part: it gives an AI brain hands, eyes, and a voice in the
-physical and digital world of a home. Its core responsibilities are:
-
-1. **Voice pipeline** — wake word, speech-to-text, text-to-speech
-2. **AI routing** — sending context to the model, handling its responses and tool calls
-3. **Action execution** — turning AI intent into real-world actions
-4. **Family memory** — persistent context about family members, preferences, routines
-5. **App integrations** — messaging, calendar, shopping, smart home
-6. **Face rendering** — an animated presence that reflects the agent's state
-
-**Teya** — the name, the face, the personality — is one product built on top of this harness. The
-AI backend behind it is chosen for strong performance-per-cost and to keep the stack on European
-AI, but the harness treats it as swappable, not load-bearing to the idea.
-
-Hardware cost for the whole thing: near zero — a spare Android phone is the only physical thing
-this needs. For what's actually running today and how it's built, see
-[docs/roadmap.md](./docs/roadmap.md) and [ARCHITECTURE.md](./ARCHITECTURE.md).
-
----
-
-## 8. Competitive Landscape
-
-The incumbents each solved one piece and stopped there. Amazon's Alexa and Google's Nest Hub brought voice control and smart-home routines into the mainstream, but both are essentially command parsers: they don't reason, they forget everything between requests, and they carry no sense of the family they live with. Apple's HomePod is a polished speaker locked inside Apple's ecosystem, with no screen and the weakest assistant of the three. Meta's Portal bet on video calling and was quietly discontinued. The newer AI gadgets — Rabbit's R1, Humane's Pin — put a real model in a pocket device but have no home presence, and both have largely faltered.
-
-So the thing families actually want has not been built: a warm, intelligent presence that knows the household, acts on its behalf, and lives in the home rather than in a pocket or a distant cloud. That space is still wide open.
-
----
-
-## 9. Why Now
-
-Everything this needs has arrived at roughly the same moment. Large language models are finally good enough to understand family context and messy, real-world intent reliably, and the agentic patterns around them — tool use, multi-step reasoning — have matured from demos into something dependable. The hardware is effectively free: capable Android phones are sitting unused in drawers everywhere. Smart-home integration, for years a tangle of incompatible ecosystems, is converging on Matter. And the market is already primed — a decade of Alexa and Google Assistant taught families the habit of talking to their home; they are simply waiting for it to actually work.
-
----
-
-## 10. The Emotional Core
-
-The best way to understand what this project is building is a feeling:
-
-> A home should feel like it's looking after you — not because you programmed it to, but because it knows you.
-
-That is what Teya is chasing. Not a smart speaker and not a robot, but a genuine presence: warm, capable, always there, and belonging to the whole family.
-
+> A home should feel like it's looking after you, because it knows you.

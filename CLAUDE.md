@@ -1,7 +1,7 @@
 # CLAUDE.md — Teya
 
 Family voice assistant on a spare Android phone (wall device). **Read [docs/roadmap.md](docs/roadmap.md) first** for
-current status + what's next. Vision: [README.md](README.md); design decisions: [ARCHITECTURE.md](ARCHITECTURE.md).
+current status + what's next. Vision + architecture: [README.md](README.md).
 Open-ended investigations (e.g. barge-in/AEC) keep a separate experiment trail in
 [docs/experiments.md](docs/experiments.md) — what's been tried, what worked/didn't, what's being
 tested now — so roadmap.md can stay goal-level.
