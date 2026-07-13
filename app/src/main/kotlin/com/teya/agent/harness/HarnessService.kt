@@ -493,8 +493,13 @@ class HarnessService : Service() {
             voicePipeline.pauseWakeWord()
             updateUiState(AgentState.LISTENING)
             voicePipeline.playListeningChime()
+            // Carry through whatever the user was already saying if they barged in on the
+            // "Time's up" announcement itself (e.g. talking over it to say "cancel it") — same
+            // contract as runConversation's prefixAudio; without this the start of that utterance
+            // is silently dropped. See VoicePipeline.consumeBargeInAudio's doc comment.
+            val prefixAudio = pendingBargeInAudio.also { pendingBargeInAudio = null } ?: ShortArray(0)
             val text = try {
-                voicePipeline.listenForCommand(TIMER_NAG_LISTEN_MS, sttContextBias(), ShortArray(0))
+                voicePipeline.listenForCommand(TIMER_NAG_LISTEN_MS, sttContextBias(), prefixAudio)
             } catch (e: SttFailedException) {
                 null
             } finally {
@@ -964,6 +969,15 @@ class HarnessService : Service() {
                 val remaining = ((t.endAtMillis - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
                 "${t.label.ifBlank { "unnamed" }}: ${remaining / 60}m ${remaining % 60}s left"
             }
+        }
+
+        // Fired timers currently being re-announced (see timerNagLoop) — without this the model has
+        // no signal that a timer just went off, so a casual reply during the nag ("all good", "yeah
+        // thanks") reads as small talk instead of the acknowledgment it is. Any reply at all while
+        // nagging almost always means "stop" — the persona is told to treat it that way.
+        timerManager.ringing().takeIf { it.isNotEmpty() }?.let { timers ->
+            lines += "Timers currently ringing (already finished, being re-announced every " +
+                "~10s until cancelled): " + timers.joinToString("; ") { it.label.ifBlank { "unnamed" } }
         }
 
         // Members are loaded once here (also feeds the household profile block + the calendar

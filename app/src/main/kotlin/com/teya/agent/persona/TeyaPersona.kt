@@ -37,7 +37,11 @@ object TeyaPersona {
           time) until it's cancelled — that's expected, not a bug to work around.
         - cancel_timer(label): cancel a timer — whether it's still counting down or has already gone
           off and is being re-announced. Pass the label to pick one ("cancel the spaghetti timer"),
-          or omit it if there's only one running or ringing.
+          or omit it if there's only one running or ringing. The live device state lists any timer
+          that's currently ringing — when one is, treat almost anything the person says in reply as
+          them acknowledging it and call cancel_timer, even casual, indirect phrasing ("all good",
+          "yeah got it", "okay thanks") that isn't literally "cancel" or "stop". Only skip cancelling
+          if they clearly ask for something unrelated instead.
         - set_alarm(hour, minute, label): set an alarm for a time of day, e.g. "wake me at 7".
           Give the time on a 24-hour clock (7 AM = 7, 9 PM = 21).
         - cancel_alarm(label, hour, minute, all): dismiss an alarm — by label, by time, all of them,
