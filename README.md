@@ -19,11 +19,11 @@ Ask Alexa to set a timer and it works. Ask who's picking the kids up from footba
 
 Meanwhile the AI behind ChatGPT and Claude is genuinely intelligent. It sits behind a chat window, though, disconnected from the physical and digital infrastructure of an actual home. Close that gap and you get a **smart family agent** with a physical presence in the house, a glowing screen, that actually helps run the household: an agent that **listens, understands, remembers, and does**.
 
-## the phone already in the drawer
+## any cheap android phone
 
-The idea that makes this buildable at all: **a spare Android phone is a supercharged Arduino, consumer-ready out of the box.** It already has a display, 4G/5G, a mic and speaker, GPS, a calendar and timer, and it can call an AI model directly, on top of the millions of apps already built for it.
+The idea that makes this buildable at all: **a cheap Android phone is a supercharged Arduino, consumer-ready out of the box.** It already has a display, 4G/5G, a mic and speaker, GPS, a calendar and timer, and it can call an AI model directly, on top of the millions of apps already built for it.
 
-Wall-mount an old €50 phone, plug it in, and it becomes the single visible node of an invisible home network. Smart bulbs, locks, calendars, messaging apps: all of it hidden infrastructure. The face on the wall is the only interface the family needs to see.
+Wall-mount any cheap phone, plug it in, and it becomes the single visible node of an invisible home network. Smart bulbs, locks, calendars, messaging apps: all of it hidden infrastructure. The face on the wall is the only interface the family needs to see.
 
 There's no server behind it, no local agent stack. Today's AI-agent wave runs heavy — people buy Mac Minis to host coding agents and orchestration frameworks locally. Teya needs none of it: the intelligence lives in the cloud, reached with a few API calls per turn, so the hardware is a cheap phone that makes those calls, keeps the screen alive, and drives the device. Any modern Android phone, Android 8.0 (Oreo) or newer, works.
 
