@@ -65,6 +65,12 @@ class HarnessService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val TAG = "HarnessService"
         private const val FOLLOWUP_LISTEN_MS = 8000  // wait this long for a follow-up before ending
+        // The very first listen after a wake trigger starts with this short window instead of
+        // FOLLOWUP_LISTEN_MS — the chime alone is the acknowledgment, so most turns skip straight
+        // to listening with no TTS latency in the way. Only if nobody's said anything by the time
+        // this expires do we fall back to speaking Languages.greeting (see runConversation) and
+        // re-listen with the normal window, on the assumption the chime wasn't understood/heard.
+        private const val INITIAL_LISTEN_MS = 1500
         // How long to wait between timer re-announcements (see timerNagLoop) — kept short and
         // genuinely a bit annoying on purpose: a kitchen timer nobody's acknowledged is more likely
         // to mean nobody's heard it yet than that they're ignoring it.
@@ -361,15 +367,9 @@ class HarnessService : Service() {
             // arm/disarm below, which continues to govern only sileroVad. See
             // VoicePipeline.startAecSession()'s doc comment for why.
             voicePipeline.startAecSession()
-            updateUiState(AgentState.SPEAKING)
-            Log.d(TAG, "Prompting...")
             voicePipeline.setBargeInArmed(true)
             voicePipeline.consumeInterrupted() // clear any stale flag before this fresh speaking phase — see VoicePipeline.textToSpeech's doc comment on why this can't live inside textToSpeech itself
-            // Picks one of the household's speakable languages at random each trigger — see
-            // Languages.greeting's doc comment for why this can't just ask the LLM to translate
-            // "Yes?" on the fly.
-            val greetingLang = householdManager.speakableLanguages().random()
-            voicePipeline.textToSpeech(Languages.greeting(greetingLang))
+            var greetingSpoken = false // becomes true once the "Yes?" fallback has fired, see below
 
             while (true) {
                 voicePipeline.setBargeInArmed(false)
@@ -379,8 +379,12 @@ class HarnessService : Service() {
                 sendDebug(user = "…", agent = "")
                 Log.d(TAG, "Listening for command...")
                 val prefixAudio = pendingBargeInAudio.also { pendingBargeInAudio = null } ?: ShortArray(0)
+                // The very first listen (history still empty) uses the short INITIAL_LISTEN_MS
+                // window — see its doc comment. Every later listen (follow-up turns, or the retry
+                // right below after the greeting fallback) uses the normal FOLLOWUP_LISTEN_MS.
+                val listenMs = if (history.isEmpty() && !greetingSpoken) INITIAL_LISTEN_MS else FOLLOWUP_LISTEN_MS
                 val text = try {
-                    voicePipeline.listenForCommand(FOLLOWUP_LISTEN_MS, sttContextBias(), prefixAudio)
+                    voicePipeline.listenForCommand(listenMs, sttContextBias(), prefixAudio)
                 } catch (e: SttFailedException) {
                     // Distinct from blank (genuine silence) — tell the user instead of just going
                     // quiet, which used to be indistinguishable from her simply not hearing anything.
@@ -399,6 +403,19 @@ class HarnessService : Service() {
                     break
                 }
                 if (text.isBlank()) {
+                    // First-turn silence after the short chime-only window: the chime alone might
+                    // not have registered, so fall back to a spoken "Yes?" and give it one more
+                    // (normal-length) listen before giving up. Only fires once per conversation.
+                    if (history.isEmpty() && !greetingSpoken) {
+                        greetingSpoken = true
+                        updateUiState(AgentState.SPEAKING)
+                        // Picks one of the household's speakable languages at random each trigger —
+                        // see Languages.greeting's doc comment for why this can't just ask the LLM
+                        // to translate "Yes?" on the fly.
+                        val greetingLang = householdManager.speakableLanguages().random()
+                        voicePipeline.textToSpeech(Languages.greeting(greetingLang))
+                        continue
+                    }
                     Log.d(TAG, "No follow-up heard — ending conversation")
                     break
                 }
