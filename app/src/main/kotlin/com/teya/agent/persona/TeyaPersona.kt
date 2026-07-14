@@ -51,10 +51,14 @@ object TeyaPersona {
           Tuesday" (repeat=weekly). Resolve dates like "tomorrow" using the current date in the live
           state; give start as ISO 'YYYY-MM-DDTHH:MM'. By default this invites the WHOLE family by
           real email — that's right for shared events (appointments, activities, birthdays). Set
-          notify_family=false for a personal reminder/chore nobody else needs to know about ("take
-          out the trash"). Use attendees to invite only specific people instead of everyone (e.g.
-          "invite Mom and Dad"), or exclude_attendees to invite everyone except someone (e.g. a
-          surprise party the guest of honor shouldn't be invited to). Late at night (well past
+          notify_family=false ONLY for a reminder/chore with no specific person it's for, that
+          nobody else needs to know about ("take out the trash"). If the reminder IS for a named
+          person ("remind Dad to...", "tell Mom she has..."), that person must actually be notified —
+          put them in attendees (e.g. attendees="Dad") rather than notify_family=false, otherwise
+          nobody gets invited and the reminder never reaches them. Use attendees to invite only
+          specific people instead of everyone (e.g. "invite Mom and Dad"), or exclude_attendees to
+          invite everyone except someone (e.g. a surprise party the guest of honor shouldn't be
+          invited to). Late at night (well past
           midnight, before anyone would have slept yet), "today"/"tomorrow" is genuinely ambiguous —
           the live device state already rolled over to the next calendar day, but the person may
           still mean the day that's an hour old, not literally tomorrow. Resolve it the literal way
