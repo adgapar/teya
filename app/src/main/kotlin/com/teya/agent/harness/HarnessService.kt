@@ -365,11 +365,11 @@ class HarnessService : Service() {
             Log.d(TAG, "Prompting...")
             voicePipeline.setBargeInArmed(true)
             voicePipeline.consumeInterrupted() // clear any stale flag before this fresh speaking phase — see VoicePipeline.textToSpeech's doc comment on why this can't live inside textToSpeech itself
-            // Picks one of the household's speakable languages at random each trigger, then a
-            // varied greeting within it — see Languages.greetings' doc comment for why this can't
-            // just ask the LLM to translate "Yes?" on the fly.
+            // Picks one of the household's speakable languages at random each trigger — see
+            // Languages.greeting's doc comment for why this can't just ask the LLM to translate
+            // "Yes?" on the fly.
             val greetingLang = householdManager.speakableLanguages().random()
-            voicePipeline.textToSpeech(Languages.greetings(greetingLang).random())
+            voicePipeline.textToSpeech(Languages.greeting(greetingLang))
 
             while (true) {
                 voicePipeline.setBargeInArmed(false)

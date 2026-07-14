@@ -26,22 +26,22 @@ object Languages {
 
     /**
      * Short acknowledgement Teya speaks on trigger (wake word or tap), before she starts
-     * listening — varied per language so it doesn't feel canned, and so a household that speaks
+     * listening — consistently "Yes?" (or that language's equivalent), so a household that speaks
      * e.g. Spanish hears "¿Sí?" rather than an English "Yes?" translated on the fly by the LLM
      * (which would cost a round-trip this instant reply can't afford). Covers all of TTS_VOICED;
-     * falls back to English's list for anything else.
+     * falls back to English for anything else.
      */
-    private val GREETINGS: Map<String, List<String>> = mapOf(
-        "English" to listOf("Yes?", "Mm-hmm?", "I'm listening.", "Go ahead.", "What's up?"),
-        "Spanish" to listOf("¿Sí?", "Dime.", "Te escucho.", "¿Qué pasa?"),
-        "French" to listOf("Oui ?", "Je t'écoute.", "Vas-y.", "Dis-moi."),
-        "German" to listOf("Ja?", "Ich höre.", "Sag's mir.", "Was gibt's?"),
-        "Portuguese" to listOf("Sim?", "Diz.", "Estou a ouvir.", "Pode falar."),
-        "Italian" to listOf("Sì?", "Dimmi.", "Ti ascolto.", "Vai pure."),
-        "Dutch" to listOf("Ja?", "Ik luister.", "Zeg het maar.", "Ga je gang."),
-        "Hindi" to listOf("हाँ?", "बोलिए।", "मैं सुन रही हूँ।", "कहिए।"),
-        "Arabic" to listOf("نعم؟", "تفضل.", "أنا أستمع.", "قل لي."),
+    private val GREETING: Map<String, String> = mapOf(
+        "English" to "Yes?",
+        "Spanish" to "¿Sí?",
+        "French" to "Oui ?",
+        "German" to "Ja?",
+        "Portuguese" to "Sim?",
+        "Italian" to "Sì?",
+        "Dutch" to "Ja?",
+        "Hindi" to "हाँ?",
+        "Arabic" to "نعم؟",
     )
 
-    fun greetings(language: String): List<String> = GREETINGS[language] ?: GREETINGS.getValue("English")
+    fun greeting(language: String): String = GREETING[language] ?: GREETING.getValue("English")
 }
