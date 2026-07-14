@@ -17,7 +17,7 @@
 
 Ask Alexa to set a timer and it works. Ask who's picking the kids up from football, and there's nothing there: no notion of two separate calendars, no memory that this comes up every Tuesday, no way to act on the answer even if it understood the question. Voice assistants were designed in the early 2010s around simple commands — fancy if-then systems. They don't understand context, they forget everything between sessions, and they can't act across apps in any meaningful way. Families use them to set timers and play music, then ignore the rest.
 
-Meanwhile the AI behind ChatGPT and Claude is genuinely intelligent. It sits behind a chat window, though, disconnected from the physical and digital infrastructure of an actual home. Close that gap and you get a **smart family agent** with a physical presence in the house, a glowing screen, that actually helps run the household: an agent that **listens, understands, remembers, and does**.
+Meanwhile the AI behind ChatGPT and Claude is genuinely intelligent. It sits behind a chat window, though, disconnected from the physical and digital infrastructure of an actual home. Put that same intelligence on a device the whole household shares, instead of one person's chat window, and you get a **smart family agent** that actually helps run the household: an agent that **listens, understands, remembers, and does**.
 
 ## any cheap android phone
 
