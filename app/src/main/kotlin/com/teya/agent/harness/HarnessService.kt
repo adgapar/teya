@@ -899,8 +899,13 @@ class HarnessService : Service() {
             } else {
                 val currency = tool.arguments["currency"]?.trim()?.takeIf { it.isNotBlank() }?.uppercase()
                     ?: configManager.expenseCurrency
-                val entry = expenseManager.log(amount, currency, tool.arguments["category"], item)
-                "Logged ${ExpenseManager.formatCents(entry.amountCents)} $currency for $item (${entry.category})."
+                val timestamp = tool.arguments["date"]?.let { parseIsoToMillis(it) } ?: System.currentTimeMillis()
+                val entry = expenseManager.log(amount, currency, tool.arguments["category"], item, timestamp)
+                val whenStr = if (tool.arguments["date"] != null) {
+                    " on " + Instant.ofEpochMilli(entry.timestampMillis).atZone(ZoneId.systemDefault())
+                        .format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH))
+                } else ""
+                "Logged ${ExpenseManager.formatCents(entry.amountCents)} $currency for $item (${entry.category})$whenStr."
             }
         }
         "query_expenses" -> {
@@ -1020,6 +1025,19 @@ class HarnessService : Service() {
         // that — reads "21:05" as "quarter past nine"). Hand it the time it will actually speak.
         val time = now.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy, h:mm a", Locale.ENGLISH))
         val lines = mutableListOf("Now: $time ($zone)")
+
+        // Models are unreliable at weekday<->date arithmetic ("last Tuesday", "next Friday") from a
+        // single "Now:" line alone — spelling out this week and last week's actual dates lets it look
+        // the answer up instead of computing it, for get_events/add_event/log_expense date resolution.
+        val today = now.toLocalDate()
+        val dayFmt = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)
+        val monday = today.with(java.time.DayOfWeek.MONDAY)
+        fun weekLine(weekMonday: LocalDate) = (0..6L).joinToString(", ") { offset ->
+            val d = weekMonday.plusDays(offset)
+            d.format(dayFmt) + (if (d == today) " (today)" else "")
+        }
+        lines += "This week: ${weekLine(monday)}"
+        lines += "Last week: ${weekLine(monday.minusWeeks(1))}"
 
         lastKnownLocation()?.let { loc ->
             lines += "Location: %.4f, %.4f (latitude, longitude)".format(loc.latitude, loc.longitude)

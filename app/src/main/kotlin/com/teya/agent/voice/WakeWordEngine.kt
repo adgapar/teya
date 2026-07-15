@@ -249,7 +249,8 @@ class WakeWordEngine(
         isRunning = true
         try {
             audioRecord?.startRecording()
-            Log.d(TAG, "Microphone recording started (wake word)")
+            Log.d(TAG, "Microphone recording started (wake word), threshold=${config.wakeWordThreshold} " +
+                "patience=${config.wakeWordPatience} gain=${config.wakeWordInputGain}")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start recording", e)
             isRunning = false

@@ -62,13 +62,23 @@ class ExpenseManager(context: Context) {
         }
     }
 
-    /** Log one expense. Returns the stored entry (with its assigned id and normalized category). */
+    /**
+     * Log one expense. [timestampMillis] defaults to now — pass an earlier moment for a
+     * backdated entry ("yesterday I spent..."). Returns the stored entry (with its assigned id
+     * and normalized category).
+     */
     @Synchronized
-    fun log(amount: Double, currency: String, category: String?, item: String): Expense {
+    fun log(
+        amount: Double,
+        currency: String,
+        category: String?,
+        item: String,
+        timestampMillis: Long = System.currentTimeMillis(),
+    ): Expense {
         val current = load().toMutableList()
         val entry = Expense(
             id = (current.maxOfOrNull { it.id } ?: 0L) + 1,
-            timestampMillis = System.currentTimeMillis(),
+            timestampMillis = timestampMillis,
             amountCents = (amount * 100).roundToLong(),
             currency = currency,
             category = Categories.normalize(category),

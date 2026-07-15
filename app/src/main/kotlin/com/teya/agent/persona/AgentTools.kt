@@ -284,6 +284,12 @@ object AgentTools {
                     put("description", "ISO currency code, e.g. USD, GBP. Omit to use the household's " +
                         "default currency — only set this if a different currency was explicitly stated.")
                 }
+                putJsonObject("date") {
+                    put("type", "string")
+                    put("description", "Date it happened, ISO 'YYYY-MM-DD', ONLY if it wasn't today " +
+                        "(e.g. 'yesterday I spent...', 'on Monday I paid...') — resolve the relative " +
+                        "date against the current date in the live device state. Omit for today.")
+                }
             }
             putJsonArray("required") { add("amount"); add("item") }
         },
