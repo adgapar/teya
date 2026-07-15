@@ -37,6 +37,7 @@ Right now, that's:
 - **Calendar** — add an event by voice, recurring or not, and it invites the rest of the household by email automatically.
 - **Timers & alarms** — set one, and it announces out loud, in its own voice, when time's up.
 - **Reminders** — "remind me to call the plumber in twenty minutes" or "remind me to bring cupcakes to the school run" becomes a timer or a quiet calendar entry, whichever actually fits.
+- **Expenses** — "12 euros for fruit" gets logged and categorized on the spot; ask "how much have we spent this month" and it adds the numbers up exactly, never guessing.
 - **Calls** — "Call Grandma," spoken by a five-year-old who can't navigate a dialer, places a normal, hands-free cellular call, but only to someone on an approved family contacts allowlist: no path to dialing an unknown, arbitrary, or premium number.
 
 The biggest beneficiary is whoever in the house carries the mental load: the appointments, the meals, the logistics, the school admin nobody else tracks. Teya becomes a second brain for the household, running quietly in the background. The fuller list, including what's still ahead, lives in [docs/roadmap.md](./docs/roadmap.md).
@@ -71,7 +72,7 @@ A call gets placed and then left alone: when a kid says "call Dad," the app dial
 
 What actually runs where:
 
-- **On-device (local, no network round-trip):** the wake word (a self-trained `hey_teya` model), barge-in/VAD and echo cancellation for mid-sentence interruption, per-speaker voice ID, the animated on-screen presence, the shopping list, and all of family memory, the household roster, aliases, and the contacts allowlist.
+- **On-device (local, no network round-trip):** the wake word (a self-trained `hey_teya` model), barge-in/VAD and echo cancellation for mid-sentence interruption, per-speaker voice ID, the animated on-screen presence, the shopping list, the expense log, and all of family memory, the household roster, aliases, and the contacts allowlist.
 - **Cloud, via Mistral:** reasoning (the tool-use loop), speech-to-text, and text-to-speech. This is the only mandatory cloud dependency in the system.
 - **Phone APIs:** telephony (outbound calls), calendar and alarms/timers (shipped), and, still ahead, reading other apps' notifications, acting inside other apps, and smart-home control over BLE/Matter.
 
