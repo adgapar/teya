@@ -797,7 +797,7 @@ class HarnessService : Service() {
             } else {
                 val duration = tool.arguments["duration_minutes"]?.toIntOrNull()?.takeIf { it > 0 } ?: 60
                 val location = tool.arguments["location"]?.takeIf { it.isNotBlank() }
-                val rrule = repeatToRrule(tool.arguments["repeat"])
+                val rrule = repeatToRrule(tool.arguments["repeat"], tool.arguments["until"])
 
                 // Default: invite the whole family (minus any excluded) on shared events; explicit
                 // `attendees` narrows to just those people; `notify_family=false` (personal reminders,
@@ -999,15 +999,33 @@ class HarnessService : Service() {
             .getOrNull()
     }
 
-    /** Map a friendly repeat word to an RFC-5545 RRULE (weekday of a weekly rule comes from the start). */
-    private fun repeatToRrule(repeat: String?): String? = when (repeat?.lowercase()?.trim()) {
-        "daily" -> "FREQ=DAILY"
-        "weekly" -> "FREQ=WEEKLY"
-        "monthly" -> "FREQ=MONTHLY"
-        "yearly" -> "FREQ=YEARLY"
-        "weekdays" -> "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
-        else -> null
+    /**
+     * Map a friendly repeat word (+ optional end date) to an RFC-5545 RRULE (weekday of a weekly
+     * rule comes from the start). [until] is the last local calendar day the series should still
+     * happen on ("until end of July" → that day) — folded in as an inclusive UNTIL bound, one
+     * second before local midnight, converted to UTC as RFC-5545 requires. Without it the series
+     * repeats forever, which is only right when nobody gave an end point.
+     */
+    private fun repeatToRrule(repeat: String?, until: String?): String? {
+        val freq = when (repeat?.lowercase()?.trim()) {
+            "daily" -> "FREQ=DAILY"
+            "weekly" -> "FREQ=WEEKLY"
+            "monthly" -> "FREQ=MONTHLY"
+            "yearly" -> "FREQ=YEARLY"
+            "weekdays" -> "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
+            else -> null
+        } ?: return null
+        val untilPart = until?.let { untilToRruleClause(it) }
+        return if (untilPart != null) "$freq;$untilPart" else freq
     }
+
+    /** "YYYY-MM-DD" (last day the series still runs) -> "UNTIL=<UTC instant of that day's end>". */
+    private fun untilToRruleClause(untilDate: String): String? = runCatching {
+        val endOfDayLocal = LocalDate.parse(untilDate).atTime(23, 59, 59).atZone(ZoneId.systemDefault())
+        val utcStamp = endOfDayLocal.withZoneSameInstant(ZoneId.of("UTC"))
+            .format(DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'"))
+        "UNTIL=$utcStamp"
+    }.getOrNull()
 
     /**
      * The "live device state" block injected into the model's context every turn (ambient facts,

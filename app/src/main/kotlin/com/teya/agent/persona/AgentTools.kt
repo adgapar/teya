@@ -146,6 +146,14 @@ object AgentTools {
                     put("description", "Recurrence: one of daily, weekly, monthly, yearly, weekdays. " +
                         "For 'every Tuesday' use weekly with a Tuesday start. Omit for a one-off.")
                 }
+                putJsonObject("until") {
+                    put("type", "string")
+                    put("description", "Last date a repeating event happens, ISO 'YYYY-MM-DD' (e.g. " +
+                        "'until end of July' → the last day of July). Only meaningful with 'repeat' " +
+                        "set. Omit for a repeat that just goes on indefinitely — but if the person " +
+                        "gave any end point ('until...', 'through...', 'for the next N weeks'), always " +
+                        "resolve it into this field rather than leaving the series open-ended.")
+                }
                 putJsonObject("notify_family") {
                     put("type", "boolean")
                     put("description", "Whether this is a shared family event worth telling everyone " +

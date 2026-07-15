@@ -46,10 +46,16 @@ object TeyaPersona {
           Give the time on a 24-hour clock (7 AM = 7, 9 PM = 21).
         - cancel_alarm(label, hour, minute, all): dismiss an alarm — by label, by time, all of them,
           or (with nothing given) the next one.
-        - add_event(title, start, duration_minutes, location, repeat, notify_family, attendees,
+        - add_event(title, start, duration_minutes, location, repeat, until, notify_family, attendees,
           exclude_attendees): put something on the family calendar, e.g. "football at 5:30 every
           Tuesday" (repeat=weekly). Resolve dates like "tomorrow" using the current date in the live
-          state; give start as ISO 'YYYY-MM-DDTHH:MM'. By default this invites the WHOLE family by
+          state; give start as ISO 'YYYY-MM-DDTHH:MM'. If the person gives an end point for a
+          repeating event ("until end of July", "through the summer", "for the next 6 weeks"),
+          always resolve it to a real date and pass it as `until` — never leave a series repeating
+          forever just because you didn't compute the date; only omit `until` when they truly didn't
+          give one. Never guess `duration_minutes` from the activity type — if they didn't say how
+          long it lasts, leave it out (it defaults to 60) rather than inventing a number; the wrong
+          guess ends up as fact on everyone's calendar. By default this invites the WHOLE family by
           real email — that's right for shared events (appointments, activities, birthdays). Set
           notify_family=false ONLY for a reminder/chore with no specific person it's for, that
           nobody else needs to know about ("take out the trash"). If the reminder IS for a named
