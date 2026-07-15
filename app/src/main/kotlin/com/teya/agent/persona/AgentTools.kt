@@ -258,6 +258,72 @@ object AgentTools {
         },
     )
 
+    val logExpense = ToolSpec(
+        name = "log_expense",
+        description = "Log money spent, e.g. '12 euros for fruit' or 'paid 3.50 for a coffee'. This " +
+            "is a budget/expense record, NOT the shopping list — use this whenever an amount of money " +
+            "is mentioned, even if the item would also belong on the shopping list.",
+        parameters = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {
+                putJsonObject("amount") {
+                    put("type", "number")
+                    put("description", "How much was spent, as a plain number, e.g. 12 or 3.5.")
+                }
+                putJsonObject("item") {
+                    put("type", "string")
+                    put("description", "What it was for, e.g. 'fruit' or 'coffee'.")
+                }
+                putJsonObject("category") {
+                    put("type", "string")
+                    put("description", "One of: groceries, dining, transport, utilities, health, " +
+                        "household, entertainment, kids, other. Pick the closest fit yourself.")
+                }
+                putJsonObject("currency") {
+                    put("type", "string")
+                    put("description", "ISO currency code, e.g. USD, GBP. Omit to use the household's " +
+                        "default currency — only set this if a different currency was explicitly stated.")
+                }
+            }
+            putJsonArray("required") { add("amount"); add("item") }
+        },
+    )
+
+    val queryExpenses = ToolSpec(
+        name = "query_expenses",
+        description = "Answer 'how much have we spent' questions. Totals and breakdowns are computed " +
+            "for you exactly — read the numbers back, never add them up yourself.",
+        parameters = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {
+                putJsonObject("period") {
+                    put("type", "string")
+                    put("description", "One of: today, week, month, year, all. Defaults to month.")
+                }
+                putJsonObject("category") {
+                    put("type", "string")
+                    put("description", "Limit to one category (see log_expense). Omit for everything.")
+                }
+            }
+        },
+    )
+
+    val deleteExpense = ToolSpec(
+        name = "delete_expense",
+        description = "Remove a logged expense — a mis-logged entry, or someone says 'undo that'. " +
+            "This is the only way to remove one; never call log_expense with a negative amount instead.",
+        parameters = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {
+                putJsonObject("item") {
+                    put("type", "string")
+                    put("description", "Which expense, matched by what it was for, e.g. 'coffee'. " +
+                        "Omit to remove the most recently logged one.")
+                }
+            }
+        },
+    )
+
     val remember = ToolSpec(
         name = "remember",
         description = "Save something to long-term memory about the family so you recall it in future " +
@@ -327,6 +393,7 @@ object AgentTools {
     val all: List<ToolSpec> = listOf(
         placeCall, setTimer, cancelTimer, setAlarm, cancelAlarm, addEvent, getEvents, cancelEvent,
         addToShoppingList, removeFromShoppingList, readShoppingList, clearShoppingList,
+        logExpense, queryExpenses, deleteExpense,
         remember, forget, searchMemory,
     )
 }

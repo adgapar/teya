@@ -300,15 +300,21 @@ Open-Meteo), with location from the household profile or native device location.
 5. ✅ **Shopping list** (`shopping/ShoppingListManager.kt`) — Teya-owned, persistent
    (SharedPreferences). `add_to_shopping_list` / `remove` / `read` / `clear`; comma-separated
    multi-item; model groups by aisle at read time. Verified live.
-6. **Expense tracker** — voice logging + **deterministic math** (the key design: the LLM extracts &
-   classifies, a tool computes; the model never sums — see the deterministic-math principle).
-   - `log_expense(amount, item, quantity, category)` — from "paid 3.50 for 1 kg of tomatoes"; the
-     LLM parses the amount/item/qty and classifies the category, date stamped from ambient `now`.
-   - Persistent dated store (SharedPreferences/Room), like the shopping list.
-   - **`query_expenses(period, category)`** — filters + aggregates **in code** (total / count /
-     by-category breakdown) and returns exact figures for the model to phrase. LLM never adds up.
-   - Ship the inverse in the same slice: `delete_expense` / correct a mis-logged entry.
-   - Open Qs: currency (from locale?), category taxonomy, period vocabulary (today/week/month).
+6. ✅ **Expense tracker** (`expenses/ExpenseManager.kt`) — Teya-owned, persistent (SharedPreferences,
+   like the shopping list), separate record from it (logging "12 euros for fruit" no longer lands on
+   the shopping list). `log_expense(amount, item, category, currency)` — the LLM parses amount/item
+   and classifies against a **fixed 9-category taxonomy** (groceries, dining, transport, utilities,
+   health, household, entertainment, kids, other — deliberately not customizable); amounts are
+   stored as integer cents, never floats, so sums are exact. **Deterministic math**: `query_expenses
+   (period, category)` filters + aggregates **in code** (total / count / by-category breakdown) for
+   periods today/week/month/year/all — the model only phrases the numbers it's handed, never adds
+   them up. `delete_expense(item)` ships in the same slice (removes the most recent match, or the
+   last entry if none named). Currency defaults to EUR (`ConfigManager.expenseCurrency`, not part of
+   onboarding per the zero-setup principle) with a per-call override if a different currency is
+   explicitly stated; no Admin UI for it yet. **Verified live on-device**: "I spent 12 euros for
+   fruits and then 19 euros for groceries" logged two independent rows in one turn (parallel tool
+   calls), both categorized `groceries`; "how much do you guys spend?" correctly answered "31 euros
+   total, all on groceries" via `query_expenses(period=month)` — no LLM arithmetic.
 7. **`send_message`** — SMS / messenger intent to an allowlisted contact; safety-gated like calls.
 8. Device state & control — battery, volume/DND, open-app/launch intents.
 

@@ -19,6 +19,7 @@ import androidx.core.app.NotificationCompat
 import com.teya.agent.R
 import com.teya.agent.brain.*
 import com.teya.agent.calendar.CalendarManager
+import com.teya.agent.expenses.ExpenseManager
 import com.teya.agent.household.HouseholdManager
 import com.teya.agent.household.Languages
 import com.teya.agent.household.Member
@@ -49,6 +50,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
@@ -126,6 +128,7 @@ class HarnessService : Service() {
     private lateinit var timerManager: TimerManager
     private lateinit var calendarManager: CalendarManager
     private lateinit var shoppingList: ShoppingListManager
+    private lateinit var expenseManager: ExpenseManager
     private lateinit var householdManager: HouseholdManager
     private lateinit var memoryManager: MemoryManager
     private lateinit var configManager: ConfigManager
@@ -145,6 +148,7 @@ class HarnessService : Service() {
         timerManager = TimerManager(this)
         calendarManager = CalendarManager(this)
         shoppingList = ShoppingListManager(this)
+        expenseManager = ExpenseManager(this)
         householdManager = HouseholdManager(this)
         memoryManager = MemoryManager(this)
         speakerIdManager = SpeakerIdManager(this)
@@ -886,6 +890,47 @@ class HarnessService : Service() {
         "clear_shopping_list" -> {
             val n = shoppingList.clear()
             if (n == 0) "The shopping list was already empty." else "Cleared the shopping list ($n items)."
+        }
+        "log_expense" -> {
+            val amount = tool.arguments["amount"]?.toDoubleOrNull()
+            val item = tool.arguments["item"]?.trim()
+            if (amount == null || amount <= 0 || item.isNullOrBlank()) {
+                "I need an amount and what it was for to log that expense."
+            } else {
+                val currency = tool.arguments["currency"]?.trim()?.takeIf { it.isNotBlank() }?.uppercase()
+                    ?: configManager.expenseCurrency
+                val entry = expenseManager.log(amount, currency, tool.arguments["category"], item)
+                "Logged ${ExpenseManager.formatCents(entry.amountCents)} $currency for $item (${entry.category})."
+            }
+        }
+        "query_expenses" -> {
+            val now = ZonedDateTime.now()
+            val period = tool.arguments["period"]?.trim()?.lowercase() ?: "month"
+            val startDate = when (period) {
+                "today" -> now.toLocalDate()
+                "week" -> now.toLocalDate().minusDays(6)
+                "year" -> now.toLocalDate().withDayOfYear(1)
+                "all" -> null
+                else -> now.toLocalDate().withDayOfMonth(1)
+            }
+            val startMillis = startDate?.atStartOfDay(now.zone)?.toInstant()?.toEpochMilli() ?: 0L
+            val endMillis = now.toInstant().toEpochMilli() + 1
+            val category = tool.arguments["category"]
+            val summary = expenseManager.query(startMillis, endMillis, category)
+            if (summary.count == 0) {
+                "No expenses logged for that period" + (category?.let { " in $it" } ?: "") + "."
+            } else {
+                val breakdown = summary.byCategory.entries.joinToString(", ") {
+                    "${it.key}: ${ExpenseManager.formatCents(it.value)} ${summary.currency}"
+                }
+                "Total ${ExpenseManager.formatCents(summary.totalCents)} ${summary.currency} over " +
+                    "${summary.count} expense(s). By category: $breakdown."
+            }
+        }
+        "delete_expense" -> {
+            val removed = expenseManager.delete(tool.arguments["item"])
+            if (removed == null) "I couldn't find an expense to remove."
+            else "Removed ${ExpenseManager.formatCents(removed.amountCents)} ${removed.currency} for ${removed.item}."
         }
         "remember" -> {
             val fact = tool.arguments["fact"]?.trim().orEmpty()

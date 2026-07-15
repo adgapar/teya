@@ -51,6 +51,15 @@ class ConfigManager(context: Context) {
         get() = prefs.getBoolean("home_confirmed", false)
         set(value) = prefs.edit().putBoolean("home_confirmed", value).apply()
 
+    /**
+     * Currency code (ISO 4217, e.g. "EUR") for [com.teya.agent.expenses.ExpenseManager]. Not part
+     * of onboarding — defaults to EUR since the dev household is in Europe; no Admin UI yet, but
+     * settable here once one exists.
+     */
+    var expenseCurrency: String
+        get() = prefs.getString("expense_currency", "EUR") ?: "EUR"
+        set(value) = prefs.edit().putString("expense_currency", value.trim().uppercase()).apply()
+
     /** When the memory "dreamer" (decay/consolidation) last ran; 0 = never. Shown in Admin. */
     var lastDreamAt: Long
         get() = prefs.getLong("last_dream_at", 0L)
