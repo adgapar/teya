@@ -41,8 +41,26 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleRelease --no-daemon
 
+      - name: Build changelog from commit messages
+        # generate_release_notes (GitHub's built-in notes) only lists merged PRs — this repo
+        # commits straight to main with no PRs, so it always rendered as just the compare link,
+        # no actual description of what changed. List real commit subjects since the last tag instead.
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || echo "")
+          {
+            echo "body<<CHANGELOG_EOF"
+            if [ -n "$PREV_TAG" ]; then
+              git log "${PREV_TAG}..${GITHUB_REF_NAME}" --no-merges --pretty=format:"- %s"
+            else
+              git log "${GITHUB_REF_NAME}" --no-merges --pretty=format:"- %s"
+            fi
+            echo ""
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Attach APK to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          body: ${{ steps.changelog.outputs.body }}
           files: app/build/outputs/apk/release/app-release.apk
