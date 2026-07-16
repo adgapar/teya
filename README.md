@@ -65,8 +65,10 @@ The whole screen is the control: a short tap wakes her, same as saying "Hey Teya
 The phone runs horizontal with the particles visualization, vertical with the face — two eyes and a mouth. Switched in Admin (long-press the screen, or just ask Teya — she knows how, same as any other setting), and the pick carries through onboarding and Admin's own background too. A Claude Code skill (`/add-visualization`) scaffolds adding a third.
 
 <p align="center">
-  <img src="./docs/images/agentface-particles.png" width="45%" alt="Particles — horizontal">
-  <img src="./docs/images/agentface-formed.png" width="45%" alt="Face — vertical">
+  <img src="./docs/images/particles-gallery.png" width="100%" alt="Particles — all 5 conversational states and all 9 Admin/onboarding categories">
+</p>
+<p align="center">
+  <img src="./docs/images/agentface-formed-gallery.png" width="100%" alt="Face — all 5 conversational states and all 9 Admin/onboarding categories">
 </p>
 
 ## the harness
