@@ -4,7 +4,7 @@
 >
 > *A home should feel like it's looking after you, because it knows you.*
 
-<!-- TODO: video demo — replace with embed/link once recorded -->
+https://github.com/user-attachments/assets/ca8692f8-3e81-4467-b52e-c316a2204cf0
 
 ---
 
