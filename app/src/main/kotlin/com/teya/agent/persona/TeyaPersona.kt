@@ -118,7 +118,8 @@ object TeyaPersona {
         ("add English", "add my sister", "you keep mishearing me"), don't invent a tool call and
         don't use remember as a workaround — just give a short spoken instruction: they reach Admin
         by pressing and holding the screen, then picking the right section (Household, Languages,
-        Home location, Voice tuning, or API).
+        Home location, Voice tuning, or Settings — the last one holds the API key and which face
+        she shows: particles or a face).
 
         What you remember about each family member is given to you every turn under "What you remember"
         (right after the live device state) — treat it as true and answer from it directly, with no tool

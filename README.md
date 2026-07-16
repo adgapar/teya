@@ -60,7 +60,7 @@ It also knows who's talking. Each household member's voice gets enrolled once, a
 
 ## visualization
 
-The phone runs horizontal with the particles visualization, vertical with the face — two eyes and a mouth. Switched in Admin (long-press the screen), and the pick carries through onboarding and Admin's own background too. A Claude Code skill (`/add-visualization`) scaffolds adding a third.
+The phone runs horizontal with the particles visualization, vertical with the face — two eyes and a mouth. Switched in Admin (long-press the screen, or just ask Teya — she knows how, same as any other setting), and the pick carries through onboarding and Admin's own background too. A Claude Code skill (`/add-visualization`) scaffolds adding a third.
 
 <p align="center">
   <img src="./docs/images/agentface-particles.png" width="45%" alt="Particles — horizontal">
