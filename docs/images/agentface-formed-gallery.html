@@ -1,0 +1,315 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>FormedFace — reference gallery</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #060708;
+    color: #cdd3d6;
+    font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  }
+  .page { padding: 40px; }
+  h1 {
+    font-size: 18px; font-weight: 600; color: #f4f6f7; margin: 0 0 4px;
+  }
+  h2 {
+    font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #6b7377;
+    font-family: ui-monospace, "SF Mono", monospace; margin: 40px 0 16px;
+  }
+  .grid { display: flex; flex-wrap: wrap; gap: 22px; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .cell canvas { border-radius: 10px; display: block; }
+  .cell .label { font-size: 12px; color: #9aa1a5; font-family: ui-monospace, "SF Mono", monospace; letter-spacing: 0.04em; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>FormedFace — AgentVisualization reference renders</h1>
+  <div style="font-size:12px;color:#6b7377;">Exact port of FormedFace.kt's math — static frame per mode, headless-rendered, no phone.</div>
+
+  <h2>Face() — conversational states</h2>
+  <div class="grid" id="faceGrid"></div>
+
+  <h2>Ambient() — Admin/onboarding background (glow only, no eyes/mouth)</h2>
+  <div class="grid" id="ambientGrid"></div>
+</div>
+
+<script>
+const TAU = Math.PI * 2;
+const FACE_BG = "#060708";
+const FACE_INK = "#f7f1ee";
+
+const IDLE_RGB = [74,134,200];
+const LISTEN_RGB = [69,208,224];
+const THINK_RGB = [169,139,255];
+const SPEAK_RGB = [255,190,75];
+const BRAIN_OFF_RGB = [156,86,80];
+const GUARDED_RGB = [120,140,150];
+
+function rgbCss(rgb, a) {
+  return "rgba(" + Math.round(rgb[0]) + "," + Math.round(rgb[1]) + "," + Math.round(rgb[2]) + "," + a + ")";
+}
+
+// ---- ports of agentStateTarget / categoryTarget from FormedFace.kt ----
+function agentStateTarget(state, t, rd) {
+  const eyeUp = -rd * 0.34;
+  switch (state) {
+    case "IDLE": {
+      const breathe = Math.sin(t * 3.0);
+      return {
+        eyeR: rd * (0.095 + breathe * 0.01), spacing: rd * 0.9,
+        gazeX: 0, gazeY: eyeUp + Math.sin(t * 1.5) * rd * 0.008,
+        openL: 1, openR: 1,
+        headX: Math.sin(t * 0.9) * rd * 0.015, headY: Math.sin(t * 1.5 + 1.4) * rd * 0.012,
+        mouthCy: rd * 0.95, mouthAmp: rd * (0.045 + breathe * 0.008), mouthWidth: rd * 0.5, mouthWobble: 0,
+        rgb: IDLE_RGB, forceShut: false,
+      };
+    }
+    case "LISTENING": {
+      const pulse = Math.pow(Math.abs(Math.sin(t * 1.1)), 6);
+      const scan = Math.sin(t * 1.8) * rd * 0.05;
+      return {
+        eyeR: rd * (0.105 + pulse * 0.015), spacing: rd * (0.9 + pulse * 0.02),
+        gazeX: scan, gazeY: eyeUp - pulse * rd * 0.01,
+        openL: 1.1 + pulse * 0.1, openR: 1.1 + pulse * 0.1,
+        headX: scan * 0.3, headY: -pulse * rd * 0.01,
+        mouthCy: rd * 0.9, mouthAmp: rd * 0.012, mouthWidth: rd * 0.4, mouthWobble: 0,
+        rgb: LISTEN_RGB, forceShut: false,
+      };
+    }
+    case "THINKING": {
+      const dart = Math.sin(t * 2.1) * rd * 0.06 + Math.sin(t * 5.7) * rd * 0.02;
+      const squint = (Math.sin(t * 1.5) + 1) / 2;
+      return {
+        eyeR: rd * 0.085, spacing: rd * 0.9,
+        gazeX: dart, gazeY: eyeUp - rd * 0.02,
+        openL: 0.85 - squint * 0.4, openR: 0.55 + squint * 0.35,
+        headX: dart * 0.15, headY: -rd * 0.02,
+        mouthCy: rd * 0.86, mouthAmp: -rd * 0.012, mouthWidth: rd * 0.28, mouthWobble: Math.sin(t * 7.2) * rd * 0.035,
+        rgb: THINK_RGB, forceShut: false,
+      };
+    }
+    case "SPEAKING": {
+      const talk = Math.pow(Math.abs(Math.sin(t * 7.5)), 2) * 0.7 + Math.pow(Math.abs(Math.sin(t * 11.3)), 2) * 0.5;
+      const brow = Math.pow(Math.abs(Math.sin(t * 3.1)), 4);
+      return {
+        eyeR: rd * (0.095 + brow * 0.01), spacing: rd * 0.9,
+        gazeX: 0, gazeY: eyeUp - brow * rd * 0.012,
+        openL: 1 + brow * 0.2, openR: 1 + brow * 0.2,
+        headX: 0, headY: -brow * rd * 0.015,
+        mouthCy: rd * 1.0, mouthAmp: rd * (0.05 + talk * 0.28), mouthWidth: rd * (0.45 + talk * 0.18), mouthWobble: (talk - 0.5) * rd * 0.05,
+        rgb: SPEAK_RGB, forceShut: false,
+      };
+    }
+    case "BRAIN_OFF": {
+      return {
+        eyeR: rd * 0.095, spacing: rd * 0.9,
+        gazeX: 0, gazeY: -rd * 0.30 + Math.sin(t * 0.45) * rd * 0.008,
+        openL: 1, openR: 1,
+        headX: 0, headY: rd * 0.02,
+        mouthCy: rd * 0.86, mouthAmp: -rd * 0.03, mouthWidth: rd * 0.3, mouthWobble: 0,
+        rgb: BRAIN_OFF_RGB, forceShut: true,
+      };
+    }
+  }
+}
+
+function categoryTarget(category, t, rd, memberCount, activeSlot) {
+  const eyeUp = -rd * 0.34;
+  const progressOf = { INTRO: 0, HOUSEHOLD: 0, LANGUAGES: 0.33, HOME: 0.66, DONE: 1 };
+  function ramp() {
+    const p = progressOf[category];
+    const cool = [90,130,170], warm = [230,120,70];
+    return [cool[0]+(warm[0]-cool[0])*p, cool[1]+(warm[1]-cool[1])*p, cool[2]+(warm[2]-cool[2])*p];
+  }
+  switch (category) {
+    case "INTRO": return {
+      eyeR: rd*0.08, spacing: rd*0.9,
+      gazeX: Math.sin(t*0.4)*rd*0.05, gazeY: eyeUp + Math.sin(t*0.3)*rd*0.02,
+      openL: 0.8, openR: 0.8,
+      headX: Math.sin(t*0.25)*rd*0.01, headY: Math.sin(t*0.3+0.7)*rd*0.01,
+      mouthCy: rd*0.85, mouthAmp: 0, mouthWidth: rd*0.28, mouthWobble: 0,
+      rgb: ramp(), forceShut: false,
+    };
+    case "HOUSEHOLD": {
+      const slots = Math.max(memberCount, 1);
+      const ang = (activeSlot >= 0 && activeSlot < slots) ? (activeSlot/slots)*TAU + t*0.05 : t*0.3;
+      return {
+        eyeR: rd*0.10, spacing: rd*0.9,
+        gazeX: Math.cos(ang)*rd*0.06, gazeY: eyeUp + Math.sin(ang)*rd*0.02,
+        openL: 1, openR: 1,
+        headX: 0, headY: 0,
+        mouthCy: rd*0.9, mouthAmp: rd*0.06, mouthWidth: rd*0.5, mouthWobble: 0,
+        rgb: ramp(), forceShut: false,
+      };
+    }
+    case "LANGUAGES": return {
+      eyeR: rd*0.095, spacing: rd*0.9,
+      gazeX: Math.sin(t*1.2)*rd*0.08, gazeY: eyeUp,
+      openL: 1, openR: 1,
+      headX: 0, headY: 0,
+      mouthCy: rd*0.88, mouthAmp: rd*0.02, mouthWidth: rd*0.32, mouthWobble: 0,
+      rgb: ramp(), forceShut: false,
+    };
+    case "HOME": return {
+      eyeR: rd*0.10, spacing: rd*0.9,
+      gazeX: 0, gazeY: eyeUp,
+      openL: 0.85, openR: 0.85,
+      headX: Math.sin(t*0.4)*rd*0.012, headY: Math.sin(t*0.5+1.0)*rd*0.012,
+      mouthCy: rd*0.9, mouthAmp: rd*0.08, mouthWidth: rd*0.55, mouthWobble: 0,
+      rgb: ramp(), forceShut: false,
+    };
+    case "DONE": return {
+      eyeR: rd*0.10, spacing: rd*0.9,
+      gazeX: 0, gazeY: eyeUp + rd*0.03,
+      openL: 0.75, openR: 0.75,
+      headX: 0, headY: Math.sin(t*0.2)*rd*0.01,
+      mouthCy: rd*0.88, mouthAmp: rd*0.05, mouthWidth: rd*0.45, mouthWobble: 0,
+      rgb: ramp(), forceShut: false,
+    };
+    case "MEMORY": return {
+      eyeR: rd*0.095, spacing: rd*0.9,
+      gazeX: Math.cos(t*0.3)*rd*0.05, gazeY: eyeUp + Math.sin(t*0.3)*rd*0.03,
+      openL: 0.65, openR: 0.65,
+      headX: 0, headY: 0,
+      mouthCy: rd*0.86, mouthAmp: rd*0.03, mouthWidth: rd*0.35, mouthWobble: 0,
+      rgb: THINK_RGB, forceShut: false,
+    };
+    case "VOICE": {
+      const talk = Math.pow(Math.abs(Math.sin(t*7.5)),2)*0.7 + Math.pow(Math.abs(Math.sin(t*11.3)),2)*0.5;
+      return {
+        eyeR: rd*0.10, spacing: rd*0.9,
+        gazeX: 0, gazeY: eyeUp,
+        openL: 1.05, openR: 1.05,
+        headX: 0, headY: 0,
+        mouthCy: rd*1.0, mouthAmp: rd*(0.05+talk*0.28), mouthWidth: rd*(0.4+talk*0.18), mouthWobble: (talk-0.5)*rd*0.05,
+        rgb: SPEAK_RGB, forceShut: false,
+      };
+    }
+    case "API": return {
+      eyeR: rd*0.085, spacing: rd*0.9,
+      gazeX: 0, gazeY: eyeUp,
+      openL: 0.6, openR: 0.6,
+      headX: 0, headY: 0,
+      mouthCy: rd*0.86, mouthAmp: -rd*0.01, mouthWidth: rd*0.25, mouthWobble: 0,
+      rgb: GUARDED_RGB, forceShut: false,
+    };
+    case "TRAINER": return {
+      eyeR: rd*0.10, spacing: rd*0.9,
+      gazeX: 0, gazeY: eyeUp,
+      openL: 1.15, openR: 1.15,
+      headX: 0, headY: 0,
+      mouthCy: rd*0.86, mouthAmp: rd*0.01, mouthWidth: rd*0.3, mouthWobble: 0,
+      rgb: GUARDED_RGB, forceShut: false,
+    };
+  }
+}
+
+// ---- ports of drawEyeShape / drawMouthShape / draw / drawGlowOnly ----
+function drawEyeShape(ctx, x, y, r, openY) {
+  const h = Math.max(openY, 0.06);
+  const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 2.4);
+  grad.addColorStop(0, "rgba(255,255,255,0.5)");
+  grad.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(x, y, r * 2.4, 0, TAU); ctx.fill();
+
+  ctx.save();
+  ctx.translate(x, y); ctx.scale(1, h); ctx.translate(-x, -y);
+  ctx.fillStyle = FACE_INK;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+function drawMouthShape(ctx, cx, mouthCy, amp, width, wobble) {
+  const half = width / 2;
+  const fullness = width * 0.16;
+  ctx.fillStyle = FACE_INK;
+  ctx.beginPath();
+  ctx.moveTo(cx - half, mouthCy - wobble);
+  ctx.quadraticCurveTo(cx, mouthCy + amp, cx + half, mouthCy + wobble);
+  ctx.quadraticCurveTo(cx, mouthCy + amp + fullness, cx - half, mouthCy - wobble);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawFace(canvas, target) {
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  const cx = w / 2, cy = h / 2;
+  const r = Math.min(w, h) / 2.3;
+  const base = rgbCss(target.rgb, 1);
+
+  ctx.fillStyle = FACE_BG; ctx.fillRect(0, 0, w, h);
+
+  let grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 2.1);
+  grad.addColorStop(0, rgbCss(target.rgb, 0.14));
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+
+  const leftX = cx + target.headX - target.spacing / 2 + target.gazeX;
+  const rightX = cx + target.headX + target.spacing / 2 + target.gazeX;
+  const eyeY = cy + target.headY + target.gazeY;
+  const blinkOpen = target.forceShut ? 0.05 : 1;
+  drawEyeShape(ctx, leftX, eyeY, target.eyeR, target.openL * blinkOpen);
+  drawEyeShape(ctx, rightX, eyeY, target.eyeR, target.openR * blinkOpen);
+  drawMouthShape(ctx, cx + target.headX, cy + target.headY + target.mouthCy, target.mouthAmp, target.mouthWidth, target.mouthWobble);
+
+  grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 1.1);
+  grad.addColorStop(0, "rgba(6,7,8,0.5)");
+  grad.addColorStop(0.6, "rgba(6,7,8,0.16)");
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+}
+
+function drawAmbient(canvas, target) {
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  const cx = w / 2, cy = h / 2;
+  const r = Math.min(w, h) / 2.3;
+
+  ctx.fillStyle = FACE_BG; ctx.fillRect(0, 0, w, h);
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 2.6);
+  grad.addColorStop(0, rgbCss(target.rgb, 0.18));
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+}
+
+// ---- build the gallery ----
+const FACE_W = 400, FACE_H = 700;
+const AMBIENT_W = 460, AMBIENT_H = 210;
+
+const faceModes = [
+  ["IDLE", 0.6], ["LISTENING", 1.43], ["THINKING", 0.9], ["SPEAKING", 0.2094], ["BRAIN_OFF", 0],
+];
+const faceGrid = document.getElementById("faceGrid");
+faceModes.forEach(([mode, t]) => {
+  const cell = document.createElement("div"); cell.className = "cell";
+  const canvas = document.createElement("canvas"); canvas.width = FACE_W; canvas.height = FACE_H;
+  const rd = Math.min(FACE_W, FACE_H) / 2.3;
+  drawFace(canvas, agentStateTarget(mode, t, rd));
+  const label = document.createElement("div"); label.className = "label"; label.textContent = mode;
+  cell.appendChild(canvas); cell.appendChild(label);
+  faceGrid.appendChild(cell);
+});
+
+const ambientModes = [
+  ["INTRO", 0.5], ["HOUSEHOLD", 0.5], ["LANGUAGES", 1.31], ["HOME", 0.5], ["DONE", 0.5],
+  ["MEMORY", 1.5], ["VOICE", 0.2094], ["API", 0], ["TRAINER", 0],
+];
+const ambientGrid = document.getElementById("ambientGrid");
+ambientModes.forEach(([category, t]) => {
+  const cell = document.createElement("div"); cell.className = "cell";
+  const canvas = document.createElement("canvas"); canvas.width = AMBIENT_W; canvas.height = AMBIENT_H;
+  const rd = Math.min(AMBIENT_W, AMBIENT_H) / 2.3;
+  drawAmbient(canvas, categoryTarget(category, t, rd, 4, -1));
+  const label = document.createElement("div"); label.className = "label"; label.textContent = category;
+  cell.appendChild(canvas); cell.appendChild(label);
+  ambientGrid.appendChild(cell);
+});
+</script>
+</body>
+</html>
