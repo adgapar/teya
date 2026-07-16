@@ -2,6 +2,7 @@ package com.teya.agent
 
 import android.Manifest
 import android.content.*
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -34,8 +35,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.teya.agent.harness.ConfigManager
 import com.teya.agent.harness.HarnessService
-import com.teya.agent.ui.face.AgentFace
 import com.teya.agent.ui.face.AgentState
+import com.teya.agent.ui.face.AgentVisualization
+import com.teya.agent.ui.face.AgentVisualizations
 import com.teya.agent.ui.face.FaceBackground
 import com.teya.agent.ui.face.stateColor
 import com.teya.agent.ui.theme.TeyaTheme
@@ -56,6 +58,8 @@ class MainActivity : ComponentActivity() {
     private val _lastDreamAt = mutableStateOf(0L)
     private val _lastDreamNote = mutableStateOf("")
     private val _lastTuningChangedAt = mutableStateOf(0L)
+    // Read fresh in onResume too — a style change in Admin should show on the face without a restart.
+    private val _visualization = mutableStateOf<AgentVisualization>(AgentVisualizations.default)
     // BRAIN_OFF's caption fallback — HarnessService also broadcasts this live, but that broadcast
     // isn't queued: if this Activity's receiver registers even slightly late (e.g. right after
     // SetupActivity hands off), the live text is silently missed while the state change survives.
@@ -106,12 +110,16 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        _visualization.value = AgentVisualizations.byId(configManager.faceStyle)
+        applyOrientation(_visualization.value)
+
         checkAndRequestPermissions()
 
         setContent {
             TeyaTheme {
                 MainScreen(
                     state = _agentState.value,
+                    visualization = _visualization.value,
                     userText = _userText.value,
                     agentText = _agentText.value,
                     lastDreamAt = _lastDreamAt.value,
@@ -161,6 +169,8 @@ class MainActivity : ComponentActivity() {
         _lastDreamNote.value = configManager.lastDreamNote
         _lastTuningChangedAt.value = configManager.lastTuningChangedAt
         _lastAuthErrorNote.value = configManager.lastAuthErrorNote
+        _visualization.value = AgentVisualizations.byId(configManager.faceStyle)
+        applyOrientation(_visualization.value)
     }
 
     override fun onStop() {
@@ -169,6 +179,18 @@ class MainActivity : ComponentActivity() {
             unregisterReceiver(stateReceiver)
         } catch (e: Exception) {
             Log.e("MainActivity", "Failed to unregister receiver", e)
+        }
+    }
+
+    /** The wall screen is landscape by default (manifest), but a visualization can require the
+     *  opposite — [com.teya.agent.ui.face.AgentVisualization.prefersPortrait] — overridden here at
+     *  runtime rather than only in the manifest, since the choice is a user setting, not fixed. A
+     *  real vertical screen, not just a vertical-proportioned drawing inside a landscape one. */
+    private fun applyOrientation(visualization: AgentVisualization) {
+        requestedOrientation = if (visualization.prefersPortrait) {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         }
     }
 
@@ -222,6 +244,7 @@ fun MainScreen(
     agentText: String,
     onOrbClick: () -> Unit,
     onOpenAdmin: () -> Unit,
+    visualization: AgentVisualization = AgentVisualizations.default,
     lastDreamAt: Long = 0L,
     lastDreamNote: String = "",
     lastTuningChangedAt: Long = 0L,
@@ -238,7 +261,7 @@ fun MainScreen(
                 .fillMaxSize()
                 .combinedClickable(onClick = onOrbClick, onLongClick = onOpenAdmin)
         ) {
-            AgentFace(state = state)
+            visualization.Face(state = state)
 
             // idea 3: ambient status motes — Admin state leaks back into the idle face passively,
             // tap to reveal (no hover on a touchscreen), auto-hides after a couple seconds.
@@ -251,17 +274,18 @@ fun MainScreen(
                 )
             }
 
-            // Live transcript, centred over the field (the user's words while listening,
-            // Teya's reply while speaking).
+            // Live transcript (the user's words while listening, Teya's reply while speaking) —
+            // each visualization decides where it sits relative to the face.
+            val bottomAligned = visualization.transcriptAlignment == Alignment.BottomCenter
             CenteredTranscript(
                 state = state,
                 userText = userText,
                 agentText = agentText,
                 lastAuthErrorNote = lastAuthErrorNote,
                 modifier = Modifier
-                    .align(Alignment.Center)
+                    .align(visualization.transcriptAlignment)
                     .fillMaxWidth()
-                    .padding(horizontal = 40.dp)
+                    .padding(horizontal = 40.dp, vertical = if (bottomAligned) 56.dp else 0.dp)
             )
         }
     }

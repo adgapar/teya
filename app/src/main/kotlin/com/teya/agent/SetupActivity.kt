@@ -66,8 +66,9 @@ import com.teya.agent.household.LocationProbe
 import com.teya.agent.household.Member
 import com.teya.agent.household.TeyaColors
 import com.teya.agent.household.toAliasList
+import com.teya.agent.ui.face.AgentVisualization
+import com.teya.agent.ui.face.AgentVisualizations
 import com.teya.agent.ui.face.OnboardingCategory
-import com.teya.agent.ui.face.OnboardingParticles
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -119,6 +120,7 @@ class SetupActivity : ComponentActivity() {
                 city = detectedCity.value,
                 coords = detectedCoords.value,
                 onComplete = ::finishOnboarding,
+                initialVisualization = AgentVisualizations.byId(configManager.faceStyle),
             )
         }
     }
@@ -176,7 +178,12 @@ private sealed class Composer {
 }
 
 @Composable
-fun AgenticOnboardingWizard(city: String, coords: String, onComplete: (OnboardingData) -> Unit) {
+fun AgenticOnboardingWizard(
+    city: String,
+    coords: String,
+    onComplete: (OnboardingData) -> Unit,
+    initialVisualization: AgentVisualization = AgentVisualizations.default,
+) {
     var currentQuestion by remember { mutableStateOf("") }
     var phase by remember { mutableStateOf(0) }
     var apiKey by remember { mutableStateOf("") }
@@ -339,7 +346,7 @@ fun AgenticOnboardingWizard(city: String, coords: String, onComplete: (Onboardin
     // recenter with the keyboard too, or the formation stays positioned against the full screen
     // height and ends up rendering behind/below the keyboard instead of in the visible area above it.
     Box(Modifier.fillMaxSize().background(TeyaColors.Page).systemBarsPadding().imePadding()) {
-        OnboardingParticles(particleCategory, memberCount, Modifier.fillMaxSize())
+        initialVisualization.Ambient(category = particleCategory, memberCount = memberCount, modifier = Modifier.fillMaxSize())
         Column(Modifier.fillMaxSize()) {
             PhaseDots(phase, Modifier.padding(horizontal = 22.dp, vertical = 18.dp))
 

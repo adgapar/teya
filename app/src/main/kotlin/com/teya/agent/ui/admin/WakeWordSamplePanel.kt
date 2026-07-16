@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,6 +60,20 @@ private const val SAMPLE_RATE = 16000
 private const val MAX_RECORD_MS = 6000
 private const val WAV_HEADER_BYTES = 44
 
+/** Tap-to-explain text for the two Voice ID thresholds below — moved here (from Voice Tuning's
+ *  own TUNE_INFO) since they're meaningless without the enrollment this panel does. */
+private data class VoiceIdInfo(val title: String, val default: String, val body: String)
+private val VOICE_ID_INFO: Map<String, VoiceIdInfo> = mapOf(
+    "Voice ID" to VoiceIdInfo(
+        "Voice ID threshold", "0.6",
+        "How similar a captured voice must sound to an enrolled sample (0–1) before Teya silently guesses who's speaking — a soft signal she never states aloud at this level. Lower it if she never guesses even with enrolled voices; raise it if she guesses wrong between two similar-sounding people.",
+    ),
+    "Voice ID (confident)" to VoiceIdInfo(
+        "Voice ID confident threshold", "0.8",
+        "Higher bar (0–1, above the base Voice ID threshold) before Teya's allowed to actually use a voice match — e.g. greet someone by name — instead of only using it silently to break a tie between two people sharing a nickname. Raise it if she greets the wrong person; lower it if she never feels confident enough to greet anyone by name.",
+    ),
+)
+
 /**
  * Records a short clip on this phone, tagged to a household member — doubles as: (1) a per-member
  * voiceprint enrollment sample (see `docs/roadmap.md` → Household setup & personalization —
@@ -72,7 +87,12 @@ private const val WAV_HEADER_BYTES = 44
  * the wake-word training clips are the byproduct.
  */
 @Composable
-fun WakeWordSamplePanel(members: List<Member>, modifier: Modifier = Modifier) {
+fun WakeWordSamplePanel(
+    members: List<Member>,
+    tuning: com.teya.agent.VoiceTuning,
+    onTuningChange: (com.teya.agent.VoiceTuning) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val voiceSampleDao = remember { TeyaDatabase.get(context).voiceSampleDao() }
@@ -100,12 +120,57 @@ fun WakeWordSamplePanel(members: List<Member>, modifier: Modifier = Modifier) {
         PackageManager.PERMISSION_GRANTED
     val canRecord = hasPermission && selected != null
 
+    var voiceIdInfo by remember { mutableStateOf<VoiceIdInfo?>(null) }
+
     Column(
         modifier.fillMaxSize().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         AdminEyebrow("VOICE ID / WAKE WORD SAMPLES")
+        Spacer(Modifier.height(16.dp))
+
+        // The matching thresholds these enrolled samples get compared against — kept here rather
+        // than in Voice Tuning since they're meaningless without the enrollment this panel does.
+        // Tap a label for what it does, same convention as Voice Tuning's own fields.
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            LabeledField(
+                "Voice ID", tuning.speakerIdThreshold,
+                { onTuningChange(tuning.copy(speakerIdThreshold = it)) },
+                keyboardType = KeyboardType.Decimal, modifier = Modifier.width(120.dp),
+                onLabelClick = { voiceIdInfo = VOICE_ID_INFO["Voice ID"] },
+            )
+            LabeledField(
+                "Voice ID (confident)", tuning.speakerIdConfidentThreshold,
+                { onTuningChange(tuning.copy(speakerIdConfidentThreshold = it)) },
+                keyboardType = KeyboardType.Decimal, modifier = Modifier.width(160.dp),
+                onLabelClick = { voiceIdInfo = VOICE_ID_INFO["Voice ID (confident)"] },
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Set defaults",
+            color = TeyaColors.Muted2, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clickable {
+                onTuningChange(
+                    tuning.copy(
+                        speakerIdThreshold = com.teya.agent.VoiceTuning.DEFAULTS.speakerIdThreshold,
+                        speakerIdConfidentThreshold = com.teya.agent.VoiceTuning.DEFAULTS.speakerIdConfidentThreshold,
+                    )
+                )
+            },
+        )
+        voiceIdInfo?.let { i ->
+            Spacer(Modifier.height(10.dp))
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.widthIn(max = 320.dp)) {
+                Text(
+                    "${i.title}  ·  default ${i.default}",
+                    color = TeyaColors.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(i.body, color = TeyaColors.Muted, fontSize = 11.sp, lineHeight = 15.sp, textAlign = TextAlign.Center)
+            }
+        }
         Spacer(Modifier.height(20.dp))
 
         if (enrollable.isEmpty()) {

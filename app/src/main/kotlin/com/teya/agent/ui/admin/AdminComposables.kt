@@ -60,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -86,6 +87,9 @@ import com.teya.agent.household.Member
 import com.teya.agent.household.MemoryEntry
 import com.teya.agent.household.Note
 import com.teya.agent.household.TeyaColors
+import com.teya.agent.ui.face.AgentState
+import com.teya.agent.ui.face.AgentVisualization
+import com.teya.agent.ui.face.AgentVisualizations
 import com.teya.agent.ui.face.OnboardingCategory
 import com.teya.agent.ui.face.householdClusterPixelOffset
 import kotlin.math.PI
@@ -100,7 +104,7 @@ enum class AdminSection(val label: String, val navLabel: String, val category: O
     LANGUAGES("Languages", "LANG", OnboardingCategory.LANGUAGES),
     HOME("Home", "HOME", OnboardingCategory.HOME),
     VOICE("Voice", "VOICE", OnboardingCategory.VOICE),
-    API("API", "API", OnboardingCategory.API),
+    SETTINGS("Settings", "SETTINGS", OnboardingCategory.API),
     // Temporary — remove alongside WakeWordSamplePanel.kt once wake word training is done.
     TRAINER("Wake Word", "SAMPLE", OnboardingCategory.TRAINER),
 }
@@ -177,7 +181,7 @@ private fun SectionGlyph(section: AdminSection, tint: Color, size: Dp) {
                 )
                 pts.forEach { p -> drawLine(tint, prev, p, strokeWidth = stroke.width, cap = StrokeCap.Round); prev = p }
             }
-            AdminSection.API -> {
+            AdminSection.SETTINGS -> {
                 val c = Offset(s / 2f, s / 2f)
                 drawCircle(tint, s * 0.07f, center = c)
                 drawCircle(tint, s * 0.4f, center = c, style = stroke)
@@ -755,15 +759,49 @@ private val TUNE_INFO: Map<String, TuneInfo> = mapOf(
         "Volume boost", "6.0",
         "Extra loudness (dB) added on top of the device's own volume when Teya speaks — separate from the volume buttons, which still work normally (turn her down or mute for quiet hours). Raise it if she's hard to hear from across the room; lower it if her voice sounds distorted or too loud.",
     ),
-    "Voice ID" to TuneInfo(
-        "Voice ID threshold", "0.6",
-        "How similar a captured voice must sound to an enrolled sample (0–1) before Teya silently guesses who's speaking — a soft signal she never states aloud at this level. Lower it if she never guesses even with enrolled voices; raise it if she guesses wrong between two similar-sounding people.",
-    ),
-    "Voice ID (confident)" to TuneInfo(
-        "Voice ID confident threshold", "0.8",
-        "Higher bar (0–1, above the base Voice ID threshold) before Teya's allowed to actually use a voice match — e.g. greet someone by name — instead of only using it silently to break a tie between two people sharing a nickname. Raise it if she greets the wrong person; lower it if she never feels confident enough to greet anyone by name.",
-    ),
+    // Voice ID / Voice ID (confident) — see WakeWordSamplePanel.kt's own VOICE_ID_INFO; they moved
+    // there with the fields since they're meaningless without the enrollment that panel does.
 )
+
+/** Visualization picker — each option renders a small live preview via its own
+ *  [AgentVisualization.Face] so you can see the design before picking it, not just read its name.
+ *  Iterates [AgentVisualizations.all], so a new visualization just needs registering there to show
+ *  up here automatically. */
+@Composable
+private fun FaceStylePicker(visualization: AgentVisualization, onChange: (AgentVisualization) -> Unit, modifier: Modifier = Modifier) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier) {
+        Text("FACE STYLE", color = TeyaColors.Muted2, fontSize = 9.5.sp, letterSpacing = 1.4.sp, fontFamily = FontFamily.Monospace)
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            AgentVisualizations.all.forEach { option ->
+                FaceStyleOption(option, selected = option.id == visualization.id) { onChange(option) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FaceStyleOption(visualization: AgentVisualization, selected: Boolean, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .border(1.dp, if (selected) TeyaColors.AccentFill else TeyaColors.Edge, RoundedCornerShape(14.dp))
+            .background(if (selected) TeyaColors.AccentFill.copy(alpha = 0.12f) else Color.Transparent, RoundedCornerShape(14.dp))
+            .padding(10.dp),
+    ) {
+        Box(Modifier.size(64.dp).clip(RoundedCornerShape(10.dp))) {
+            visualization.Face(state = AgentState.IDLE)
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            visualization.displayName,
+            color = if (selected) TeyaColors.AccentInk else TeyaColors.Muted,
+            fontSize = 11.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        )
+    }
+}
 
 /** The TTS voice picker (actor pill row, then that actor's emotion variants) — see
  *  docs/mistral-voices.md / [com.teya.agent.brain.MistralVoices] for the full 30-voice catalog. */
@@ -993,8 +1031,8 @@ private fun TuningGrid(
         F("Wake gain", tuning.wakeWordInputGain) { tuning.copy(wakeWordInputGain = it) },
         F("Patience", tuning.wakeWordPatience) { tuning.copy(wakeWordPatience = it) },
         F("TTS boost", tuning.ttsVolumeBoostDb) { tuning.copy(ttsVolumeBoostDb = it) },
-        F("Voice ID", tuning.speakerIdThreshold) { tuning.copy(speakerIdThreshold = it) },
-        F("Voice ID (confident)", tuning.speakerIdConfidentThreshold) { tuning.copy(speakerIdConfidentThreshold = it) },
+        // Voice ID / Voice ID (confident) live in WakeWordSamplePanel (SAMPLE tab) instead — they
+        // tune the same voice-ID matching that panel records samples for, not barge-in/wake-word.
     )
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         fields.chunked(columns).forEach { row ->
@@ -1011,17 +1049,26 @@ private fun TuningGrid(
     }
 }
 
-// ---- API ----
+// ---- Settings (API key + appearance — generic, non-voice-tuning knobs) ----
 
 @Composable
-fun ApiPanel(apiKey: String, onChange: (String) -> Unit, lastAuthErrorAt: Long, modifier: Modifier = Modifier) {
+fun SettingsPanel(
+    apiKey: String,
+    onChange: (String) -> Unit,
+    lastAuthErrorAt: Long,
+    visualization: AgentVisualization,
+    onVisualizationChange: (AgentVisualization) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier.fillMaxSize().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        AdminEyebrow("API")
+        AdminEyebrow("SETTINGS")
         Spacer(Modifier.height(16.dp))
+        FaceStylePicker(visualization = visualization, onChange = onVisualizationChange)
+        Spacer(Modifier.height(20.dp))
         LabeledField("Mistral API key", apiKey, onChange, isPassword = true, modifier = Modifier.width(240.dp))
         if (lastAuthErrorAt > 0L) {
             Spacer(Modifier.height(16.dp))

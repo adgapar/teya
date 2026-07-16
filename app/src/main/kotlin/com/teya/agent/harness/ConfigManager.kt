@@ -34,6 +34,15 @@ class ConfigManager(context: Context) {
             ?: com.teya.agent.brain.MistralVoices.DEFAULT
         set(value) = prefs.edit().putString("tts_voice", value).apply()
 
+    /** Which [com.teya.agent.ui.face.AgentVisualization] renders the wall face (and, via its
+     *  `Ambient()`, Admin/onboarding's background too) — the id of one entry in
+     *  [com.teya.agent.ui.face.AgentVisualizations.all]. Chosen in Admin's Voice panel; resolved
+     *  with [com.teya.agent.ui.face.AgentVisualizations.byId], which falls back to the default for
+     *  anything unrecognized rather than crashing. */
+    var faceStyle: String
+        get() = prefs.getString("face_style", "particles") ?: "particles"
+        set(value) = prefs.edit().putString("face_style", value).apply()
+
     /**
      * Household languages, as a CSV of canonical English names ("English,Spanish,Russian"), stored
      * in the order the user picked. Household-level (not per-person). Empty when none set yet.

@@ -31,9 +31,27 @@ Key files:
   feature extractor); `NoiseSuppressor` + software input gain/threshold/patience (`ConfigManager`).
 - `safety/` — Room contact allowlist (call safety). `telephony/` — dialer/actuator (call feature).
 - `MainActivity` (orb + dev overlay), `SetupActivity` (LAUNCHER; API-key entry), `SettingsActivity`.
+- `ui/face/AgentVisualization.kt` — the pluggable presence design: `Face()` (conversation, driven by
+  `AgentState`) + `Ambient()` (Admin/onboarding background, driven by `OnboardingCategory`), plus
+  `prefersPortrait`/`transcriptAlignment`. `AgentVisualizations.all` is the registry MainActivity/
+  SettingsActivity/SetupActivity all read from — one setting (`ConfigManager.faceStyle`) picks one
+  implementation for all three surfaces. Two today: `ParticleVisualization` (wraps the original
+  `AgentFace.kt`/`OnboardingParticles.kt` particle engine) and `FormedFaceVisualization` (`FormedFace.kt`
+  — isolated vector eyes+mouth, no particles, no shared internals with the other one).
 
 ### Adding a tool (the next phase)
 1. Add a `ToolSpec` to `AgentTools.all`. 2. Handle it in `HarnessService.handleToolCall()`. 3. Mention it in `TeyaPersona`.
+
+### Adding a visualization
+1. Implement `AgentVisualization` (`ui/face/AgentVisualization.kt`) — `id`, `displayName`, `Face()`,
+   `Ambient()`, optionally `prefersPortrait`/`transcriptAlignment`. 2. Add it to
+   `AgentVisualizations.all`. That's it — Admin's picker (live preview per option), MainActivity,
+   and onboarding all pick it up automatically; nothing else needs editing. `FormedFace.kt` is the
+   template to copy: `Face()` takes `AgentState`, `Ambient()` takes `OnboardingCategory` (9 values —
+   5 narrative onboarding steps sharing a cool→warm `progress` ramp, 4 Admin-only sections with
+   their own fixed tint) + `memberCount`/`activeSlot` (Household only). Keep `Ambient()` visually
+   quiet (no shapes sitting on top of Admin's own text/buttons) — see `FormedFaceAmbient`'s
+   glow-only render vs. `FormedFace`'s full expressive one.
 
 ## Config / models
 - Mistral API key: entered in-app (EncryptedSharedPreferences via `ConfigManager`); also in **`.env`** (gitignored,

@@ -58,15 +58,17 @@ import com.teya.agent.household.MemoryEntry
 import com.teya.agent.household.MemoryManager
 import com.teya.agent.household.TeyaColors
 import com.teya.agent.ui.admin.AdminSection
-import com.teya.agent.ui.admin.ApiPanel
 import com.teya.agent.ui.admin.ConstellationNav
 import com.teya.agent.ui.admin.HomePanel
 import com.teya.agent.ui.admin.HouseholdTapOverlay
 import com.teya.agent.ui.admin.LanguagesPanel
 import com.teya.agent.ui.admin.MemoryPanel
 import com.teya.agent.ui.admin.PersonPager
+import com.teya.agent.ui.admin.SettingsPanel
 import com.teya.agent.ui.admin.VoiceTuningPanel
 import com.teya.agent.ui.admin.WakeWordSamplePanel
+import com.teya.agent.ui.face.AgentVisualization
+import com.teya.agent.ui.face.AgentVisualizations
 import com.teya.agent.ui.face.OnboardingCategory
 import com.teya.agent.ui.face.OnboardingParticles
 import kotlinx.coroutines.delay
@@ -133,6 +135,7 @@ class SettingsActivity : ComponentActivity() {
                 initialApiKey = config.mistralApiKey ?: "",
                 initialTuning = initialTuning,
                 initialTtsVoice = config.ttsVoice,
+                initialVisualization = AgentVisualizations.byId(config.faceStyle),
                 home = home.value,
                 overlayGranted = overlayGranted.value,
                 onGrantOverlay = ::requestOverlayPermission,
@@ -159,11 +162,12 @@ class SettingsActivity : ComponentActivity() {
                         ).show()
                     }
                 },
-                onSave = { members, langs, homeConfirmed, apiKey, tuning, ttsVoice ->
+                onSave = { members, langs, homeConfirmed, apiKey, tuning, ttsVoice, visualization ->
                     config.mistralApiKey = apiKey.trim()
                     config.languages = langs
                     config.homeConfirmed = homeConfirmed
                     config.ttsVoice = ttsVoice
+                    config.faceStyle = visualization.id
                     if (tuning != initialTuning) config.lastTuningChangedAt = System.currentTimeMillis()
                     tuning.vadThreshold.toFloatOrNull()?.let { config.vadThreshold = it }
                     tuning.vadSpeechDurationMs.toIntOrNull()?.let { config.vadSpeechDurationMs = it }
@@ -260,6 +264,7 @@ private fun AdminScreen(
     initialApiKey: String,
     initialTuning: VoiceTuning,
     initialTtsVoice: String,
+    initialVisualization: AgentVisualization,
     home: LocationProbe.Home,
     overlayGranted: Boolean,
     onGrantOverlay: () -> Unit,
@@ -267,7 +272,7 @@ private fun AdminScreen(
     onToggleRotation: () -> Unit,
     onDeleteMemory: (Int) -> Unit,
     onRunDream: () -> Unit,
-    onSave: (List<Member>, List<String>, Boolean, String, VoiceTuning, String) -> Unit,
+    onSave: (List<Member>, List<String>, Boolean, String, VoiceTuning, String, AgentVisualization) -> Unit,
 ) {
     // systemBarsPadding lives HERE, on the shared container — not just on the content Column below.
     // Content and the particle field must measure within the same inset-adjusted bounds, or the
@@ -289,6 +294,7 @@ private fun AdminScreen(
         var homeConfirmed by remember { mutableStateOf(initialHomeConfirmed) }
         var tuning by remember { mutableStateOf(initialTuning) }
         var ttsVoice by remember { mutableStateOf(initialTtsVoice) }
+        var visualization by remember { mutableStateOf(initialVisualization) }
         var section by remember { mutableStateOf(AdminSection.HOUSEHOLD) }
         var personIdx by remember { mutableStateOf(0) }
         var closing by remember { mutableStateOf(false) }
@@ -300,7 +306,7 @@ private fun AdminScreen(
         // actually finishes, instead of an instant cut to whatever's behind it.
         val activeCategory = if (closing) OnboardingCategory.DONE else section.category
 
-        OnboardingParticles(
+        visualization.Ambient(
             category = activeCategory,
             memberCount = members.size.coerceAtLeast(1),
             modifier = Modifier.fillMaxSize(),
@@ -324,7 +330,7 @@ private fun AdminScreen(
                     // swirl (idea 6): the field settling back down doubles as "wrapping up".
                     AdminIconButton(Icons.Filled.Close, "Save & close") {
                         closing = true
-                        onSave(members.toList(), langs.toList(), homeConfirmed, apiKey, tuning, ttsVoice)
+                        onSave(members.toList(), langs.toList(), homeConfirmed, apiKey, tuning, ttsVoice, visualization)
                     }
                 }
             }
@@ -369,8 +375,13 @@ private fun AdminScreen(
                             overlayGranted = overlayGranted, onGrantOverlay = onGrantOverlay,
                             ttsVoice = ttsVoice, onTtsVoiceChange = { ttsVoice = it },
                         )
-                        AdminSection.API -> ApiPanel(apiKey = apiKey, onChange = { apiKey = it }, lastAuthErrorAt = lastAuthErrorAt)
-                        AdminSection.TRAINER -> WakeWordSamplePanel(members = members)
+                        AdminSection.SETTINGS -> SettingsPanel(
+                            apiKey = apiKey, onChange = { apiKey = it }, lastAuthErrorAt = lastAuthErrorAt,
+                            visualization = visualization, onVisualizationChange = { visualization = it },
+                        )
+                        AdminSection.TRAINER -> WakeWordSamplePanel(
+                            members = members, tuning = tuning, onTuningChange = { tuning = it },
+                        )
                     }
                 }
             }
