@@ -6,11 +6,6 @@
 
 <!-- TODO: video demo — replace with embed/link once recorded -->
 
-<p align="center">
-  <img src="./docs/images/screenshot-idle.png" width="45%" alt="Teya's orb, idle, waiting for the wake word">
-  <img src="./docs/images/screenshot-speaking.png" width="45%" alt="Teya's orb, speaking, mid-conversation">
-</p>
-
 ---
 
 ## a machine that forgets everything
