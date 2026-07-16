@@ -24,6 +24,17 @@ There's no server behind it, no local agent stack. Today's AI-agent wave runs he
 
 **The mic and speaker weren't built for this, though.** They're tuned for close, arm's-reach use, and picking up a wake word or clear speech across a room asks more of them than that. Early testing is encouraging but limited, and a bigger room may need an external mic array or speaker.
 
+## install it
+
+No Play Store, no app store review: grab the APK straight from [Releases](https://github.com/adgapar/teya/releases/latest) and sideload it.
+
+1. On the phone, enable "install unknown apps" for your browser (Settings prompts you the first time you try).
+2. Download the latest `.apk` from the Releases page above.
+3. Tap the downloaded file to install.
+4. Open Teya and follow onboarding — it asks for the household's Mistral API key and the permissions it needs. Wake word tuning and per-person voice enrollment live in Admin (long-press the screen) afterward.
+
+There's no auto-updater — for a new version, come back to Releases, download the new APK, and tap it again. As long as it's signed with the same key, it installs over the existing app without needing an uninstall first (so household data, settings, and memory are kept).
+
 ## what it's for
 
 Right now, that's:
