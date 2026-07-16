@@ -60,6 +60,8 @@ It also knows who's talking. Each household member's voice gets enrolled once, a
 
 ## visualization
 
+The whole screen is the control: a short tap wakes her, same as saying "Hey Teya"; a long press opens Admin.
+
 The phone runs horizontal with the particles visualization, vertical with the face — two eyes and a mouth. Switched in Admin (long-press the screen, or just ask Teya — she knows how, same as any other setting), and the pick carries through onboarding and Admin's own background too. A Claude Code skill (`/add-visualization`) scaffolds adding a third.
 
 <p align="center">
