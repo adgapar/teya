@@ -1,0 +1,340 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Particles — reference gallery</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #060708; color: #cdd3d6; font-family: -apple-system, system-ui, sans-serif; }
+  .page { padding: 40px; }
+  h1 { font-size: 18px; font-weight: 600; color: #f4f6f7; margin: 0 0 4px; }
+  h2 { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #6b7377; font-family: ui-monospace, "SF Mono", monospace; margin: 40px 0 16px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 22px; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .cell canvas { border-radius: 10px; display: block; }
+  .cell .label { font-size: 12px; color: #9aa1a5; font-family: ui-monospace, "SF Mono", monospace; letter-spacing: 0.04em; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Particles — AgentVisualization reference renders</h1>
+  <div style="font-size:12px;color:#6b7377;">Port of AgentFace.kt / OnboardingParticles.kt's exact formation math — field run forward ~3s of simulated time, then frozen and drawn.</div>
+
+  <h2>AgentFace — conversational states</h2>
+  <div class="grid" id="faceGrid"></div>
+
+  <h2>OnboardingParticles — Admin/onboarding background (9 categories)</h2>
+  <div class="grid" id="catGrid"></div>
+</div>
+
+<script>
+const PI = Math.PI, TAU = PI * 2;
+const FACE_BG = "#060708";
+
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function seededArray(n, seed) {
+  const rnd = mulberry32(seed);
+  return Array.from({ length: n }, () => rnd());
+}
+
+// ================= AgentFace's ParticleField (5 conversational states) =================
+const N_FACE = 828, COLS = 46, ROWS = 18;
+const ra1 = seededArray(N_FACE, 42), rb1 = seededArray(N_FACE, 4242), rc1 = seededArray(N_FACE, 424242);
+
+const PALETTE = {
+  IDLE: [74,134,200], LISTENING: [69,208,224], THINKING: [169,139,255], SPEAKING: [255,190,75], BRAIN_OFF: [156,86,80],
+};
+const PERIOD_MS = { IDLE: 7000, LISTENING: 1600, THINKING: 4200, SPEAKING: 1500, BRAIN_OFF: 9000 };
+const ENERGY_TARGET = { IDLE: 0.45, LISTENING: 1.0, THINKING: 0.82, SPEAKING: 1.0, BRAIN_OFF: 0.4 };
+
+function faceTarget(i, cx, cy, r, state, t, e) {
+  switch (state) {
+    case "IDLE": {
+      const cIdx = i % COLS, row = Math.floor(i / COLS);
+      const gx = (cIdx / (COLS - 1)) * 2 - 1;
+      const d = row / (ROWS - 1);
+      const persp = 0.42 + 0.58 * d;
+      let wave = Math.sin(gx * 3 + d * 5 - t * TAU) * 0.10;
+      wave += Math.sin(gx * 6.5 + d * 2 + t * TAU * 0.5) * 0.045;
+      wave *= r * (0.3 + 0.7 * d) * (0.7 + 0.7 * e);
+      return { x: cx + gx * r * 1.9 * persp, y: cy - r * 0.32 + d * r * 0.98 - wave, s: r * 0.006 * (0.55 + 0.9 * d), a: 0.10 + 0.55 * d };
+    }
+    case "LISTENING": {
+      const rings = 6, ppr = Math.floor(N_FACE / rings);
+      const ring = Math.floor(i / ppr), idx = i % ppr;
+      const ang = (idx / ppr) * TAU;
+      let u = (ring / rings) - t; u -= Math.floor(u);
+      const trem = 1 + 0.05 * e * Math.sin(ang * 6 + t * TAU * 3);
+      const rad = r * (0.16 + 0.80 * u) * trem;
+      return { x: cx + Math.cos(ang) * rad, y: cy + Math.sin(ang) * rad, s: r * 0.0072, a: (0.12 + 0.6 * Math.sin(PI * u)) * (0.5 + 0.5 * e) };
+    }
+    case "THINKING": {
+      const rr = r * (0.18 + 0.78 * ra1[i]);
+      const speed = 0.4 + rb1[i] * 1.3;
+      const dir = rc1[i] < 0.5 ? 1 : -1;
+      const ang = ra1[i] * TAU + t * TAU * speed * dir;
+      const ell = 0.72 + 0.28 * rb1[i];
+      const wob = 1 + 0.10 * Math.sin(t * TAU * 2 + i * 0.7);
+      return { x: cx + Math.cos(ang) * rr * wob, y: cy + Math.sin(ang) * rr * ell * wob, s: r * 0.0075, a: 0.2 + 0.5 * e };
+    }
+    case "SPEAKING": {
+      const lines = 6, cols = Math.floor(N_FACE / lines);
+      const line = i % lines, cIdx = Math.floor(i / lines);
+      const span = r * 2.0;
+      const d = (cIdx / (cols - 1)) * 2 - 1;
+      const env = Math.pow(Math.cos(d * PI / 2), 1.2);
+      const syl = 0.35 + 0.65 * Math.abs(Math.sin(t * TAU * 1.7 + d * 2.2));
+      const amp = r * 0.44 * e * env * syl;
+      const y0 = Math.sin(d * 8 * PI - t * TAU * 2) * amp;
+      const mid = (lines - 1) / 2;
+      const band = r * 0.05 + Math.abs(y0) * 0.7;
+      const off = (line - mid) / lines * band * 2;
+      return { x: cx + d * span, y: cy + y0 + off, s: r * 0.0085, a: (0.14 + 0.55 * env * e) * (1 - Math.abs(line - mid) / mid * 0.45) };
+    }
+    case "BRAIN_OFF": {
+      const cIdx = i % COLS, row = Math.floor(i / COLS);
+      const gx = (cIdx / (COLS - 1)) * 2 - 1;
+      const d = row / (ROWS - 1);
+      const flicker = 0.45 + 0.55 * Math.sin(t * TAU * 0.6 + ra1[i] * TAU * 4);
+      return { x: cx + gx * r * 1.5 * (0.42 + 0.58 * d), y: cy + r * (0.5 + d * 0.55), s: r * 0.0075 * (0.4 + 0.6 * d), a: 0.14 + 0.42 * d * flicker };
+    }
+  }
+}
+
+function renderFaceState(canvas, state) {
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  const cx = w / 2, cy = h / 2;
+  const r = Math.min(w, h) / 3.4;
+
+  const px = new Float32Array(N_FACE).fill(cx), py = new Float32Array(N_FACE).fill(cy);
+  const ps = new Float32Array(N_FACE), pa = new Float32Array(N_FACE);
+  let col = PALETTE.IDLE.slice();
+  let phase = 0, energy = 0.45;
+  const dt = 16;
+  const steps = Math.round(3000 / dt); // ~3s settle
+
+  for (let s = 0; s < steps; s++) {
+    phase = (phase + dt / PERIOD_MS[state]) % 1;
+    const pal = PALETTE[state];
+    const ck = Math.min(dt / 340, 1);
+    for (let c = 0; c < 3; c++) col[c] += (pal[c] - col[c]) * ck;
+    energy += (ENERGY_TARGET[state] - energy) * Math.min(dt / 460, 1);
+    const k = Math.min(dt / 180, 1);
+    for (let i = 0; i < N_FACE; i++) {
+      const t = faceTarget(i, cx, cy, r, state, phase, energy);
+      px[i] += (t.x - px[i]) * k;
+      py[i] += (t.y - py[i]) * k;
+      ps[i] += (t.s - ps[i]) * k;
+      pa[i] += (t.a - pa[i]) * k;
+    }
+  }
+
+  ctx.fillStyle = FACE_BG; ctx.fillRect(0, 0, w, h);
+  const base = `rgb(${col[0]|0},${col[1]|0},${col[2]|0})`;
+  let grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 2.1);
+  grad.addColorStop(0, `rgba(${col[0]|0},${col[1]|0},${col[2]|0},${0.12 * (0.4 + 0.6 * energy)})`);
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+
+  ctx.globalCompositeOperation = "lighter";
+  for (let i = 0; i < N_FACE; i++) {
+    if (pa[i] < 0.01) continue;
+    ctx.fillStyle = `rgba(${col[0]|0},${col[1]|0},${col[2]|0},${Math.min(Math.max(pa[i],0),1)})`;
+    ctx.beginPath(); ctx.arc(px[i], py[i], Math.max(ps[i], 0.5), 0, TAU); ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+
+  grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 1.1);
+  grad.addColorStop(0, "rgba(6,7,8,0.5)"); grad.addColorStop(0.6, "rgba(6,7,8,0.16)"); grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+}
+
+// ================= OnboardingParticles' OnboardingField (9 categories) =================
+const N_CAT = 760;
+const ra2 = seededArray(N_CAT, 7), rb2 = seededArray(N_CAT, 707), rc2 = seededArray(N_CAT, 70707);
+
+const CATEGORY = {
+  INTRO: { progress: 0, energy: 0.3 }, HOUSEHOLD: { progress: 0, energy: 0.5 },
+  LANGUAGES: { progress: 0.33, energy: 0.9 }, HOME: { progress: 0.66, energy: 0.75 },
+  DONE: { progress: 1, energy: 0.95 }, MEMORY: { progress: 1, energy: 0.6 },
+  VOICE: { progress: 1, energy: 1.0 }, API: { progress: 0, energy: 0.3 }, TRAINER: { progress: 0, energy: 0.5 },
+};
+const CONTINENTS = [
+  [1.05,0.3,0.62], [1.75,1.9,0.5], [0.85,3.5,0.48], [2.35,4.7,0.55], [1.4,5.6,0.42], [2.6,2.6,0.4],
+];
+function isLand(phi, theta) {
+  return CONTINENTS.some(([cphi, ctheta, cr]) => {
+    const cosD = Math.cos(phi) * Math.cos(cphi) + Math.sin(phi) * Math.sin(cphi) * Math.cos(theta - ctheta);
+    return Math.acos(Math.min(Math.max(cosD, -1), 1)) < cr;
+  });
+}
+const OCEAN = [58,108,168], LAND = [110,140,80];
+function warmthRgb(progress) {
+  const cool = [90,130,170], warm = [230,120,70];
+  return [cool[0]+(warm[0]-cool[0])*progress, cool[1]+(warm[1]-cool[1])*progress, cool[2]+(warm[2]-cool[2])*progress];
+}
+
+// Returns unit-space {x,y,s,a} plus optional {color:[r,g,b]}
+function catTarget(i, category, memberCount, t, activeSlot, e) {
+  switch (category) {
+    case "INTRO": {
+      const x = Math.sin(t*0.09+ra2[i]*23)*0.5 + Math.sin(t*0.05+rb2[i]*17)*0.32;
+      const y = Math.cos(t*0.08+rb2[i]*19)*0.5 + Math.cos(t*0.045+rc2[i]*13)*0.32;
+      return { x, y: y*0.95, s: 0.0095*(0.6+0.5*rb2[i]), a: 0.3+0.45*rb2[i] };
+    }
+    case "HOUSEHOLD": {
+      const slots = Math.max(memberCount, 1);
+      const slot = i % slots, idxInSlot = Math.floor(i / slots);
+      const clusterR = slots === 1 ? 0 : 0.55;
+      const clusterAng = (slot/slots)*TAU + t*0.05;
+      const ccx = Math.cos(clusterAng)*clusterR, ccy = Math.sin(clusterAng)*clusterR*0.9;
+      const orbitR = 0.1 + 0.16*ra2[i];
+      const ang = rb2[i]*TAU + t*(0.3+0.5*rb2[i])*(rc2[i]<0.5?1:-1);
+      const wob = 1 + 0.08*Math.sin(t*TAU*0.6 + idxInSlot*0.9);
+      let s = 0.009*(1.15-orbitR*2.5), a = 0.28+0.55*(1-orbitR/0.26);
+      let color = null;
+      if (slots > 1 && activeSlot >= 0 && activeSlot < slots) {
+        if (slot === activeSlot) { s *= 1.55; a = Math.min(a*1.9, 1); color = [232,98,42]; }
+        else { s *= 0.6; a *= 0.35; }
+      }
+      return { x: ccx+Math.cos(ang)*orbitR*wob, y: ccy+Math.sin(ang)*orbitR*wob, s, a, color };
+    }
+    case "LANGUAGES": {
+      const golden = PI*(1+Math.sqrt(5));
+      const phi = Math.acos(1 - 2*(i+0.5)/N_CAT);
+      const theta = golden*i + t*0.3;
+      const x3 = Math.sin(phi)*Math.cos(theta), y3 = Math.cos(phi), z3 = Math.sin(phi)*Math.sin(theta);
+      const sphereR = 0.88;
+      const depth = (z3+1)/2;
+      const thetaMod = ((theta % TAU) + TAU) % TAU;
+      const land = isLand(phi, thetaMod);
+      return { x: x3*sphereR, y: y3*sphereR, s: 0.0105*(0.45+0.65*depth), a: 0.16+0.82*depth, color: land ? LAND : OCEAN };
+    }
+    case "HOME": {
+      const rings = 6, ppr = Math.max(Math.floor(N_CAT/rings), 1);
+      const ring = Math.floor(i/ppr), idx = i % ppr;
+      const ang = (idx/ppr)*TAU;
+      let u = (ring/rings) - t; u -= Math.floor(u);
+      const trem = 1 + 0.05*e*Math.sin(ang*6+t*TAU*3);
+      const rad = (0.16+0.80*u)*trem;
+      return { x: Math.cos(ang)*rad, y: Math.sin(ang)*rad, s: 0.0072, a: (0.12+0.6*Math.sin(PI*u))*(0.5+0.5*e) };
+    }
+    case "DONE": {
+      const rr = 0.18+0.78*ra2[i], speed = 0.4+rb2[i]*1.3, dir = rc2[i]<0.5?1:-1;
+      const ang = ra2[i]*TAU + t*speed*dir;
+      const ell = 0.72+0.28*rb2[i];
+      const wob = 1+0.10*Math.sin(t*TAU*2+i*0.7);
+      return { x: Math.cos(ang)*rr*wob, y: Math.sin(ang)*rr*ell*wob, s: 0.0075, a: 0.2+0.5*e };
+    }
+    case "MEMORY": {
+      const rr = 0.18+0.78*ra2[i], speed = 0.4+rb2[i]*1.3, dir = rc2[i]<0.5?1:-1;
+      const ang = ra2[i]*TAU + t*speed*dir;
+      const ell = 0.72+0.28*rb2[i];
+      const wob = 1+0.10*Math.sin(t*TAU*2+i*0.7);
+      return { x: Math.cos(ang)*rr*wob, y: Math.sin(ang)*rr*ell*wob, s: 0.0075, a: 0.2+0.5*e, color: [169,139,255] };
+    }
+    case "VOICE": {
+      const lines = 6, cols = Math.max(Math.floor(N_CAT/lines), 1);
+      const line = i % lines, cIdx = Math.floor(i/lines);
+      const span = 2.0;
+      const d = Math.min(Math.max((cIdx/Math.max(cols-1,1))*2-1, -1), 1);
+      const env = Math.pow(Math.cos(d*PI/2), 1.2);
+      const syl = 0.35+0.65*Math.abs(Math.sin(t*TAU*1.7+d*2.2));
+      const amp = 0.44*e*env*syl;
+      const y0 = Math.sin(d*8*PI-t*TAU*2)*amp;
+      const mid = (lines-1)/2;
+      const band = 0.05+Math.abs(y0)*0.7;
+      const off = (line-mid)/lines*band*2;
+      return { x: d*span, y: y0+off, s: 0.0085, a: (0.14+0.55*env*e)*(1-Math.abs(line-mid)/mid*0.45), color: [255,190,75] };
+    }
+    case "API": case "TRAINER": {
+      const rr = 0.1+0.12*ra2[i];
+      const ang = rb2[i]*TAU + t*(0.15+0.2*rb2[i])*(rc2[i]<0.5?1:-1);
+      return { x: Math.cos(ang)*rr, y: Math.sin(ang)*rr*0.9, s: 0.006, a: 0.15+0.3*ra2[i], color: [120,140,150] };
+    }
+  }
+}
+
+function renderCategory(canvas, category, memberCount, activeSlot) {
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  const cx = w / 2, cy = h / 2;
+  const rd = Math.min(w, h) / 3.4;
+  const meta = CATEGORY[category];
+
+  const px = new Float32Array(N_CAT).fill(cx), py = new Float32Array(N_CAT).fill(cy);
+  const ps = new Float32Array(N_CAT), pa = new Float32Array(N_CAT);
+  const pcr = new Float32Array(N_CAT), pcg = new Float32Array(N_CAT), pcb = new Float32Array(N_CAT);
+  let col = [90,130,170];
+  let clock = 0;
+  const dt = 16;
+  const steps = Math.round(3000 / dt);
+
+  for (let s = 0; s < steps; s++) {
+    clock += (dt/1000) * 0.55;
+    const target = warmthRgb(meta.progress);
+    const ck = Math.min(dt/500, 1);
+    for (let c = 0; c < 3; c++) col[c] += (target[c] - col[c]) * ck;
+    const k = Math.min(dt/220, 1);
+    for (let i = 0; i < N_CAT; i++) {
+      const t = catTarget(i, category, memberCount, clock, activeSlot, meta.energy);
+      px[i] += (cx + t.x*rd - px[i]) * k;
+      py[i] += (cy + t.y*rd - py[i]) * k;
+      ps[i] += (t.s*rd - ps[i]) * k;
+      pa[i] += (t.a - pa[i]) * k;
+      if (t.color) { pcr[i] = t.color[0]; pcg[i] = t.color[1]; pcb[i] = t.color[2]; }
+      else { pcr[i] = col[0]; pcg[i] = col[1]; pcb[i] = col[2]; }
+    }
+  }
+
+  ctx.fillStyle = FACE_BG; ctx.fillRect(0, 0, w, h);
+  let grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, rd * 2.3);
+  grad.addColorStop(0, `rgba(${col[0]|0},${col[1]|0},${col[2]|0},0.16)`);
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+
+  ctx.globalCompositeOperation = "lighter";
+  for (let i = 0; i < N_CAT; i++) {
+    if (pa[i] < 0.01) continue;
+    ctx.fillStyle = `rgba(${pcr[i]|0},${pcg[i]|0},${pcb[i]|0},${Math.min(Math.max(pa[i],0),1)})`;
+    ctx.beginPath(); ctx.arc(px[i], py[i], Math.max(ps[i], 0.5), 0, TAU); ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+
+  grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, rd * 1.3);
+  grad.addColorStop(0, "rgba(6,7,8,0.4)"); grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+}
+
+// ---- build the gallery ----
+const W = 480, H = 300;
+const faceGrid = document.getElementById("faceGrid");
+["IDLE","LISTENING","THINKING","SPEAKING","BRAIN_OFF"].forEach(state => {
+  const cell = document.createElement("div"); cell.className = "cell";
+  const canvas = document.createElement("canvas"); canvas.width = W; canvas.height = H;
+  renderFaceState(canvas, state);
+  const label = document.createElement("div"); label.className = "label"; label.textContent = state;
+  cell.appendChild(canvas); cell.appendChild(label);
+  faceGrid.appendChild(cell);
+});
+
+const catGrid = document.getElementById("catGrid");
+["INTRO","HOUSEHOLD","LANGUAGES","HOME","DONE","MEMORY","VOICE","API","TRAINER"].forEach(category => {
+  const cell = document.createElement("div"); cell.className = "cell";
+  const canvas = document.createElement("canvas"); canvas.width = W; canvas.height = H;
+  renderCategory(canvas, category, 4, -1);
+  const label = document.createElement("div"); label.className = "label"; label.textContent = category;
+  cell.appendChild(canvas); cell.appendChild(label);
+  catGrid.appendChild(cell);
+});
+</script>
+</body>
+</html>
