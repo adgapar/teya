@@ -58,13 +58,13 @@ Most of what Teya remembers, though, nobody asked it to save. At the end of ever
 
 It also knows who's talking. Each household member's voice gets enrolled once, and from then on a small on-device model matches who's speaking against those samples, no cloud speaker-ID service involved. A quiet match just tells two people apart; a confident one lets Teya greet someone by name. That runs alongside the wake word and barge-in detection, both on-device too, so most of the listening happens on the phone before anything reaches the cloud.
 
-## a face, not just a voice
+## visualization
 
-The screen isn't a dashboard — it's the one visible sign that something is present and listening. By default it's a field of particles that reshapes itself with the conversation: calm at rest, drawn into rings while listening, swirling while it thinks, a waveform while it speaks. A second style — two eyes and a mouth, nothing more — is built the same way underneath and can be switched to instead, in Settings. Whichever one's picked carries through the household settings screen and onboarding too, not just the idle wall display, and it's built so a third look can be added later without touching how either existing one works.
+The phone runs horizontal with the particles visualization, vertical with the face — two eyes and a mouth. Switched in Admin (long-press the screen), and the pick carries through onboarding and Admin's own background too. A Claude Code skill (`/add-visualization`) scaffolds adding a third.
 
 <p align="center">
-  <img src="./docs/images/agentface-particles.png" width="45%" alt="Particles — the default, a field of points reshaping itself with the conversation">
-  <img src="./docs/images/agentface-formed.png" width="45%" alt="Face — two eyes and a mouth, the second selectable style">
+  <img src="./docs/images/agentface-particles.png" width="45%" alt="Particles — horizontal">
+  <img src="./docs/images/agentface-formed.png" width="45%" alt="Face — vertical">
 </p>
 
 ## the harness
