@@ -35,6 +35,8 @@ No Play Store, no app store review: grab the APK straight from [Releases](https:
 
 There's no auto-updater — for a new version, come back to Releases, download the new APK, and tap it again. As long as it's signed with the same key, it installs over the existing app without needing an uninstall first (so household data, settings, and memory are kept).
 
+**Requirements:** any Android phone on 8.0 (Oreo) or newer, a steady internet connection (Mistral runs in the cloud), power (it's meant to stay on), and a Mistral API key — the household pays for its own usage.
+
 ## what it's for
 
 Right now, that's:
@@ -96,6 +98,20 @@ What actually runs where:
 - **Phone APIs:** telephony (outbound calls), calendar and alarms/timers (shipped), and, still ahead, reading other apps' notifications, acting inside other apps, and smart-home control over BLE/Matter.
 
 None of this needs to be impressive on paper. It needs to work quietly enough that nobody in the house thinks about it.
+
+## contributing
+
+This started as a solo build, but the codebase and roadmap are open. If something here interests you — a new tool, a visualization, better wake-word/VAD tuning, a second LLM provider — open an issue to talk it through, or send a PR. [docs/roadmap.md](./docs/roadmap.md) has the current status and what's next; the "Adding a tool" and "Adding a visualization" recipes in [CLAUDE.md](./CLAUDE.md) are the fastest way into the codebase.
+
+## FAQ
+
+**Is it offline?** No. Reasoning, speech-to-text, and text-to-speech run through Mistral's cloud API. Everything else — wake word, barge-in, voice ID, memory, the shopping list, the contacts allowlist — stays on the device.
+
+**Does it work on iOS?** No. Teya needs deep, unsandboxed access to Android's own APIs (telephony, notifications, an always-on foreground service), which iOS doesn't allow.
+
+**Can it control smart-home devices yet?** Not yet — BLE/Matter control is on the roadmap, see [docs/roadmap.md](./docs/roadmap.md).
+
+**Is my voice or what I said stored anywhere?** No raw transcript is ever written to disk. Only a short, distilled memory note survives a conversation, consolidated further each night; voice ID matching runs on-device with no cloud speaker-ID service involved.
 
 ### Documents
 
