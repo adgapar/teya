@@ -6,6 +6,8 @@
 
 https://github.com/user-attachments/assets/ca8692f8-3e81-4467-b52e-c316a2204cf0
 
+*Prefer reading? The longer write-up: [How and why I built a home AI assistant](https://www.adgapar.dev/how-and-why-i-built-a-home-ai-assistant/).*
+
 ---
 
 ## a machine that forgets everything
@@ -115,5 +117,6 @@ This started as a solo build, but the codebase and roadmap are open. If somethin
 
 ### Documents
 
+- **[How and why I built a home AI assistant](https://www.adgapar.dev/how-and-why-i-built-a-home-ai-assistant/)** — the longer write-up: motivation, hardware choice, and the engineering challenges behind it.
 - **[docs/roadmap.md](./docs/roadmap.md)** — status: what's built, verified live, and what's next.
 - **[LICENSE](./LICENSE)** — Apache-2.0.
