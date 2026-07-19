@@ -136,6 +136,9 @@ class SettingsActivity : ComponentActivity() {
                 initialTuning = initialTuning,
                 initialTtsVoice = config.ttsVoice,
                 initialVisualization = AgentVisualizations.byId(config.faceStyle),
+                initialQuietHoursEnabled = config.quietHoursEnabled,
+                initialQuietHoursStart = minutesToHHMM(config.quietHoursStartMin),
+                initialQuietHoursEnd = minutesToHHMM(config.quietHoursEndMin),
                 home = home.value,
                 overlayGranted = overlayGranted.value,
                 onGrantOverlay = ::requestOverlayPermission,
@@ -162,12 +165,16 @@ class SettingsActivity : ComponentActivity() {
                         ).show()
                     }
                 },
-                onSave = { members, langs, homeConfirmed, apiKey, tuning, ttsVoice, visualization ->
+                onSave = { members, langs, homeConfirmed, apiKey, tuning, ttsVoice, visualization,
+                           quietHoursEnabled, quietHoursStart, quietHoursEnd ->
                     config.mistralApiKey = apiKey.trim()
                     config.languages = langs
                     config.homeConfirmed = homeConfirmed
                     config.ttsVoice = ttsVoice
                     config.faceStyle = visualization.id
+                    config.quietHoursEnabled = quietHoursEnabled
+                    hhmmToMinutes(quietHoursStart)?.let { config.quietHoursStartMin = it }
+                    hhmmToMinutes(quietHoursEnd)?.let { config.quietHoursEndMin = it }
                     if (tuning != initialTuning) config.lastTuningChangedAt = System.currentTimeMillis()
                     tuning.vadThreshold.toFloatOrNull()?.let { config.vadThreshold = it }
                     tuning.vadSpeechDurationMs.toIntOrNull()?.let { config.vadSpeechDurationMs = it }
@@ -218,6 +225,19 @@ class SettingsActivity : ComponentActivity() {
     }
 }
 
+/** Minutes-since-midnight -> "HH:MM" for display/editing in Admin. */
+private fun minutesToHHMM(min: Int): String = "%02d:%02d".format(min / 60, min % 60)
+
+/** "HH:MM" -> minutes-since-midnight, or null if unparseable (Save then keeps the previous value). */
+private fun hhmmToMinutes(hhmm: String): Int? {
+    val parts = hhmm.trim().split(":")
+    if (parts.size != 2) return null
+    val h = parts[0].toIntOrNull() ?: return null
+    val m = parts[1].toIntOrNull() ?: return null
+    if (h !in 0..23 || m !in 0..59) return null
+    return h * 60 + m
+}
+
 /**
  * Working copies of the barge-in/wake-word tuning knobs (see ConfigManager), kept as strings so
  * the text fields can hold an in-progress edit; parsed back to numbers on Save (an unparseable
@@ -265,6 +285,9 @@ private fun AdminScreen(
     initialTuning: VoiceTuning,
     initialTtsVoice: String,
     initialVisualization: AgentVisualization,
+    initialQuietHoursEnabled: Boolean,
+    initialQuietHoursStart: String,
+    initialQuietHoursEnd: String,
     home: LocationProbe.Home,
     overlayGranted: Boolean,
     onGrantOverlay: () -> Unit,
@@ -272,7 +295,7 @@ private fun AdminScreen(
     onToggleRotation: () -> Unit,
     onDeleteMemory: (Int) -> Unit,
     onRunDream: () -> Unit,
-    onSave: (List<Member>, List<String>, Boolean, String, VoiceTuning, String, AgentVisualization) -> Unit,
+    onSave: (List<Member>, List<String>, Boolean, String, VoiceTuning, String, AgentVisualization, Boolean, String, String) -> Unit,
 ) {
     // systemBarsPadding lives HERE, on the shared container — not just on the content Column below.
     // Content and the particle field must measure within the same inset-adjusted bounds, or the
@@ -295,6 +318,9 @@ private fun AdminScreen(
         var tuning by remember { mutableStateOf(initialTuning) }
         var ttsVoice by remember { mutableStateOf(initialTtsVoice) }
         var visualization by remember { mutableStateOf(initialVisualization) }
+        var quietHoursEnabled by remember { mutableStateOf(initialQuietHoursEnabled) }
+        var quietHoursStart by remember { mutableStateOf(initialQuietHoursStart) }
+        var quietHoursEnd by remember { mutableStateOf(initialQuietHoursEnd) }
         var section by remember { mutableStateOf(AdminSection.HOUSEHOLD) }
         var personIdx by remember { mutableStateOf(0) }
         var closing by remember { mutableStateOf(false) }
@@ -330,7 +356,10 @@ private fun AdminScreen(
                     // swirl (idea 6): the field settling back down doubles as "wrapping up".
                     AdminIconButton(Icons.Filled.Close, "Save & close") {
                         closing = true
-                        onSave(members.toList(), langs.toList(), homeConfirmed, apiKey, tuning, ttsVoice, visualization)
+                        onSave(
+                            members.toList(), langs.toList(), homeConfirmed, apiKey, tuning, ttsVoice, visualization,
+                            quietHoursEnabled, quietHoursStart, quietHoursEnd,
+                        )
                     }
                 }
             }
@@ -378,6 +407,9 @@ private fun AdminScreen(
                         AdminSection.SETTINGS -> SettingsPanel(
                             apiKey = apiKey, onChange = { apiKey = it }, lastAuthErrorAt = lastAuthErrorAt,
                             visualization = visualization, onVisualizationChange = { visualization = it },
+                            quietHoursEnabled = quietHoursEnabled, onQuietHoursEnabledChange = { quietHoursEnabled = it },
+                            quietHoursStart = quietHoursStart, onQuietHoursStartChange = { quietHoursStart = it },
+                            quietHoursEnd = quietHoursEnd, onQuietHoursEndChange = { quietHoursEnd = it },
                         )
                         AdminSection.TRAINER -> WakeWordSamplePanel(
                             members = members, tuning = tuning, onTuningChange = { tuning = it },

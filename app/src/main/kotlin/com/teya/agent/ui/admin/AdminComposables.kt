@@ -1058,6 +1058,12 @@ fun SettingsPanel(
     lastAuthErrorAt: Long,
     visualization: AgentVisualization,
     onVisualizationChange: (AgentVisualization) -> Unit,
+    quietHoursEnabled: Boolean,
+    onQuietHoursEnabledChange: (Boolean) -> Unit,
+    quietHoursStart: String,
+    onQuietHoursStartChange: (String) -> Unit,
+    quietHoursEnd: String,
+    onQuietHoursEndChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -1070,6 +1076,25 @@ fun SettingsPanel(
         FaceStylePicker(visualization = visualization, onChange = onVisualizationChange)
         Spacer(Modifier.height(20.dp))
         LabeledField("Mistral API key", apiKey, onChange, isPassword = true, modifier = Modifier.width(240.dp))
+        Spacer(Modifier.height(24.dp))
+        Text("QUIET HOURS", color = TeyaColors.Muted2, fontSize = 9.5.sp, letterSpacing = 1.4.sp, fontFamily = FontFamily.Monospace)
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            HomeTogglePill("On", quietHoursEnabled) { onQuietHoursEnabledChange(true) }
+            HomeTogglePill("Off", !quietHoursEnabled) { onQuietHoursEnabledChange(false) }
+        }
+        if (quietHoursEnabled) {
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                LabeledField("From", quietHoursStart, onQuietHoursStartChange, modifier = Modifier.width(90.dp))
+                LabeledField("Until", quietHoursEnd, onQuietHoursEndChange, modifier = Modifier.width(90.dp))
+            }
+            Spacer(Modifier.height(10.dp))
+            Note(
+                "24h HH:MM. She still wakes and listens, just stays silent — no chime, no speech — until this window ends.",
+                modifier = Modifier.widthIn(max = 280.dp),
+            )
+        }
         if (lastAuthErrorAt > 0L) {
             Spacer(Modifier.height(16.dp))
             Text(

@@ -141,6 +141,7 @@ class VoicePipeline(private val context: Context) {
      * stream that was too quiet to hear reliably even at 15cm.
      */
     private fun playTone(freqHz: Double, durationMs: Int, volume: Float = 0.9f) {
+        if (isQuietHours()) return
         Thread {
             var track: AudioTrack? = null
             try {
@@ -183,6 +184,21 @@ class VoicePipeline(private val context: Context) {
                 try { track?.release() } catch (_: Exception) {}
             }
         }.start()
+    }
+
+    /**
+     * True if local time currently falls within the configured quiet-hours window (handles the
+     * default overnight wraparound, e.g. 00:00-07:00, as well as a same-day window). Read fresh
+     * each call so an Admin change to the setting/window takes effect on the very next chime/TTS.
+     */
+    private fun isQuietHours(): Boolean {
+        if (!config.quietHoursEnabled) return false
+        val start = config.quietHoursStartMin
+        val end = config.quietHoursEndMin
+        if (start == end) return false
+        val now = java.time.LocalTime.now()
+        val nowMin = now.hour * 60 + now.minute
+        return if (start < end) nowMin in start until end else nowMin >= start || nowMin < end
     }
 
     /** Cue: Teya has started listening for your command — see [playTone]'s doc comment. */
@@ -743,6 +759,10 @@ class VoicePipeline(private val context: Context) {
      */
     suspend fun textToSpeech(text: String): Boolean {
         if (text.isBlank()) return true
+        // Quiet hours: still a "successful" turn (conversation/tool-calling/on-screen text continue
+        // as normal via HarnessService's own broadcasts) — just no audible output. See
+        // ConfigManager.quietHoursEnabled's doc comment.
+        if (isQuietHours()) return true
         val client = mistralClient ?: run {
             Log.e("VoicePipeline", "MistralClient not set, cannot speak")
             return true

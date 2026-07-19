@@ -173,6 +173,26 @@ class ConfigManager(context: Context) {
         get() = prefs.getFloat("speaker_id_confident_threshold", 0.8f)
         set(value) = prefs.edit().putFloat("speaker_id_confident_threshold", value).apply()
 
+    /**
+     * Quiet hours: while enabled and the current local time falls in [quietHoursStartMin,
+     * quietHoursEndMin) (wrapping past midnight, e.g. default 00:00-07:00), Teya still responds to
+     * wake word/tap and runs the conversation as normal (STT, tool calls, on-screen text) but stays
+     * silent — no chime, no TTS — see [com.teya.agent.voice.VoicePipeline]'s textToSpeech/playTone.
+     */
+    var quietHoursEnabled: Boolean
+        get() = prefs.getBoolean("quiet_hours_enabled", false)
+        set(value) = prefs.edit().putBoolean("quiet_hours_enabled", value).apply()
+
+    /** Quiet hours start, minutes since local midnight (default 0 = 00:00). */
+    var quietHoursStartMin: Int
+        get() = prefs.getInt("quiet_hours_start_min", 0)
+        set(value) = prefs.edit().putInt("quiet_hours_start_min", value).apply()
+
+    /** Quiet hours end, minutes since local midnight (default 7*60 = 07:00). */
+    var quietHoursEndMin: Int
+        get() = prefs.getInt("quiet_hours_end_min", 7 * 60)
+        set(value) = prefs.edit().putInt("quiet_hours_end_min", value).apply()
+
     /** When any Voice tuning knob was last actually changed in Admin; 0 = never. Drives the idle
      *  face's ambient status mote so a retune is visible without opening Admin. */
     var lastTuningChangedAt: Long
