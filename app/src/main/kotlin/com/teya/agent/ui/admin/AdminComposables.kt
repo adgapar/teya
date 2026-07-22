@@ -815,7 +815,22 @@ private fun VoicePicker(voice: String, onChange: (String) -> Unit, modifier: Mod
         Text("TTS VOICE", color = TeyaColors.Muted2, fontSize = 9.5.sp, letterSpacing = 1.4.sp, fontFamily = FontFamily.Monospace)
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            actors.forEach { a -> VoiceChip(a, a == actor) { actor = a } }
+            actors.forEach { a ->
+                VoiceChip(a, a == actor) {
+                    actor = a
+                    // Picking an actor IS picking a voice — commit one of that actor's variants
+                    // right away (keep the current emotion if this actor has it, else its neutral,
+                    // else the first). Without this, tapping an actor only moved a local highlight
+                    // and never called onChange, so switching actor then closing kept the old voice.
+                    if (a != current.actor) {
+                        val variants = com.teya.agent.brain.MistralVoices.ALL.filter { it.actor == a }
+                        val pick = variants.find { it.emotion == current.emotion }
+                            ?: variants.find { it.emotion == "Neutral" }
+                            ?: variants.first()
+                        onChange(pick.slug)
+                    }
+                }
+            }
         }
         Spacer(Modifier.height(8.dp))
         FlowRow(
