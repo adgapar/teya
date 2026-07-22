@@ -836,7 +836,11 @@ class HarnessService : Service() {
             }
         }
         "get_events" -> {
-            val start = tool.arguments["start"]?.let { parseIsoToMillis(it) } ?: System.currentTimeMillis()
+            // Default the range start to the START of today, not "now" — a bare "what's on today?"
+            // must include events earlier in the day (the 6pm event asked about at 8pm), not just
+            // what's still ahead.
+            val start = tool.arguments["start"]?.let { parseIsoToMillis(it) }
+                ?: LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
             val end = tool.arguments["end"]?.let { parseIsoToMillis(it) } ?: (start + 7 * 24 * 3600_000L)
             val trustedEmails = trustedOrganizerEmails(householdManager.members())
             val events = withContext(Dispatchers.IO) { calendarManager.events(start, end, trustedEmails) }
@@ -1083,15 +1087,38 @@ class HarnessService : Service() {
         val members = householdManager.members()
         val trustedEmails = trustedOrganizerEmails(members)
 
-        // Today's remaining events, so "what's on today?" is free.
+        // The whole of today's calendar, so "what's on today?" is free. Spans the full day — NOT
+        // just what's still ahead: asked at 8pm, "what do we have today?" must still surface the
+        // 6pm event that already started. Events already begun are tagged so Teya speaks of them
+        // in the past ("guests were at 6") rather than as still upcoming.
+        val startOfDay = now.toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
         val endOfDay = now.toLocalDate().atTime(23, 59, 59).atZone(zone).toInstant().toEpochMilli()
-        calendarManager.events(System.currentTimeMillis(), endOfDay, trustedEmails)
+        calendarManager.events(startOfDay, endOfDay, trustedEmails)
             .takeIf { it.isNotEmpty() }?.let { events ->
-                lines += "Today's remaining events: " + events.joinToString("; ") { e ->
+                lines += "Today's events: " + events.joinToString("; ") { e ->
                     val at = Instant.ofEpochMilli(e.beginMillis).atZone(zone)
                         .format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH))
-                    "${e.title} at $at"
+                    val passed = e.beginMillis < System.currentTimeMillis()
+                    "${e.title} at $at" + (if (passed) " (earlier today)" else "")
                 }
+            }
+
+        // The next week's events ride in context too, not just today's — the model isn't reliable
+        // about reaching for get_events when asked ("anything this weekend?"), and a family week is
+        // small enough to carry directly. Tomorrow 00:00 through +7 days; capped so a busy calendar
+        // can't balloon the prompt (the tail is still reachable via get_events).
+        val upcomingStart = now.toLocalDate().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val upcomingEnd = now.toLocalDate().plusDays(7).atTime(23, 59, 59).atZone(zone).toInstant().toEpochMilli()
+        calendarManager.events(upcomingStart, upcomingEnd, trustedEmails)
+            .takeIf { it.isNotEmpty() }?.let { events ->
+                val cap = 15
+                val shown = events.take(cap).joinToString("; ") { e ->
+                    val at = Instant.ofEpochMilli(e.beginMillis).atZone(zone)
+                        .format(DateTimeFormatter.ofPattern("EEE d MMM, h:mm a", Locale.ENGLISH))
+                    "${e.title} — $at" + (e.location?.let { " at $it" } ?: "")
+                }
+                val more = (events.size - cap).takeIf { it > 0 }?.let { " (+$it more — use get_events)" } ?: ""
+                lines += "Upcoming events (next 7 days): $shown$more"
             }
 
         // Invitations someone outside the household emailed to its synced calendar account —

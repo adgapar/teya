@@ -188,7 +188,8 @@ object AgentTools {
             putJsonObject("properties") {
                 putJsonObject("start") {
                     put("type", "string")
-                    put("description", "Range start, ISO 'YYYY-MM-DDTHH:MM'. Defaults to now.")
+                    put("description", "Range start, ISO 'YYYY-MM-DDTHH:MM'. Defaults to the start " +
+                        "of today (so 'what's on today?' includes events earlier in the day).")
                 }
                 putJsonObject("end") {
                     put("type", "string")
