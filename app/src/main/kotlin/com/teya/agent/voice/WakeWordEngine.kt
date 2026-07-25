@@ -219,6 +219,9 @@ class WakeWordEngine(
         echoCanceler?.setEnabled(enabled)
     }
 
+    /** Whether the capture loop is currently running (see [start]/[stop]). */
+    val isCapturing: Boolean get() = isRunning
+
     @SuppressLint("MissingPermission")
     fun start() {
         if (isRunning) return

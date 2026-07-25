@@ -61,6 +61,11 @@ class HarnessService : Service() {
         const val ACTION_TRANSCRIPT = "com.teya.agent.TRANSCRIPT_UPDATE"
         const val ACTION_TIMER_FIRED = "com.teya.agent.action.TIMER_FIRED"
         const val ACTION_RUN_DREAM = "com.teya.agent.action.RUN_DREAM"
+        /** Sent by the main screen's corner icon to flip manual touch mode (tap-only). */
+        const val ACTION_TOGGLE_TOUCH_MODE = "com.teya.agent.action.TOGGLE_TOUCH_MODE"
+        /** Broadcast to the UI with boolean extra [EXTRA_AUTO_LISTEN] = effective auto-listen state. */
+        const val ACTION_LISTENING_MODE = "com.teya.agent.LISTENING_MODE"
+        const val EXTRA_AUTO_LISTEN = "auto_listen"
         const val EXTRA_TIMER_LABEL = "timer_label"
         const val EXTRA_TIMER_ID = "timer_id"
         private const val CHANNEL_ID = "teya_harness_channel"
@@ -104,6 +109,10 @@ class HarnessService : Service() {
     // Only one ever runs — it re-reads TimerManager.ringing() each cycle, so timers that fire while
     // it's already going just get folded into the next announcement, no need for a loop per timer.
     @Volatile private var timerNagJob: Job? = null
+
+    // Minute-tick reconcile of idle wake-word listening with touch mode / the quiet-hours window
+    // (see ensureListeningModeLoopRunning).
+    @Volatile private var listeningModeJob: Job? = null
     // Captured at interrupt time (see onBargeIn) and consumed by the next listenForCommand call in
     // runConversation's loop, so whatever the user was already saying when they interrupted
     // carries through into that recording — see VoicePipeline.consumeBargeInAudio's doc comment.
@@ -193,6 +202,11 @@ class HarnessService : Service() {
                 Log.d(TAG, "Dream alarm fired — running memory decay")
                 scope.launch { runDream() }
             }
+            ACTION_TOGGLE_TOUCH_MODE -> {
+                configManager.touchModeEnabled = !configManager.touchModeEnabled
+                Log.d(TAG, "Touch mode toggled → ${configManager.touchModeEnabled}")
+                applyListeningMode()
+            }
             else -> {
                 Log.d(TAG, "Service started, initializing wake word loop")
                 startAgentLoop()
@@ -210,6 +224,52 @@ class HarnessService : Service() {
             },
             onBargeIn = { onBargeIn() }
         )
+        applyListeningMode()            // honor touch mode / night window from the first idle
+        ensureListeningModeLoopRunning()
+    }
+
+    /**
+     * Reconcile idle wake-word listening with the current mode, then tell the UI. Auto-listening is
+     * OFF in manual touch mode ([ConfigManager.touchModeEnabled]) or inside the quiet-hours night
+     * window ([ConfigManager.inQuietHoursNow] — "Do Not Disturb"): only a screen tap reaches Teya
+     * then. Tap-to-talk ([ACTION_TRIGGER_VOICE]) always works regardless. Reconciles against the
+     * engine's *actual* running state, since the per-turn pause/resume in [runConversation] moves it
+     * behind this gate's back (it must — barge-in needs the engine while Teya speaks). Safe to call
+     * at the end of a turn; the schedule loop below skips it mid-conversation.
+     */
+    private fun applyListeningMode() {
+        val want = shouldAutoListen()
+        // Only touch the engine while idle — mid-conversation it's the turn's own (barge-in needs
+        // it running while Teya speaks), so a toggle tapped then just updates the UI and takes
+        // effect when onTrigger settles the idle state as the turn ends.
+        if (!conversationActive.get()) {
+            val running = voicePipeline.isWakeWordRunning()
+            if (want && !running) voicePipeline.resumeWakeWord()
+            else if (!want && running) voicePipeline.pauseWakeWord()
+        }
+        sendBroadcast(Intent(ACTION_LISTENING_MODE).apply {
+            putExtra(EXTRA_AUTO_LISTEN, want)
+            setPackage(packageName)
+        })
+    }
+
+    private fun shouldAutoListen(): Boolean =
+        !configManager.touchModeEnabled && !configManager.inQuietHoursNow()
+
+    /**
+     * Ticks once a minute so crossing a quiet-hours boundary flips listening automatically with no
+     * user action (entering the window stops the wake word; leaving it restarts). Skips while a
+     * conversation is live — reconciling then would cut the engine barge-in relies on; the turn's
+     * own end-of-session [applyListeningMode] settles the idle state once it finishes.
+     */
+    private fun ensureListeningModeLoopRunning() {
+        if (listeningModeJob?.isActive == true) return
+        listeningModeJob = scope.launch {
+            while (true) {
+                if (!conversationActive.get()) applyListeningMode()
+                delay(60_000)
+            }
+        }
     }
 
     /**
@@ -330,6 +390,7 @@ class HarnessService : Service() {
                 runConversation()
             } finally {
                 conversationActive.set(false)
+                applyListeningMode() // settle idle listening now the turn's done (touch mode / night window may suppress it)
             }
         }
     }
@@ -438,7 +499,7 @@ class HarnessService : Service() {
         } finally {
             voicePipeline.endAecSession()
             voicePipeline.setBargeInArmed(false)
-            voicePipeline.resumeWakeWord() // back to idle wake-word listening for the next trigger
+            voicePipeline.resumeWakeWord() // leave the engine running as the turn unwinds; onTrigger's finally settles the idle mode (touch / night) once conversationActive clears
             updateUiState(AgentState.IDLE)
             pendingSpeakerAudio = null
             pendingCommandAudio = null

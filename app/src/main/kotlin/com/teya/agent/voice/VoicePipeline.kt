@@ -187,19 +187,12 @@ class VoicePipeline(private val context: Context) {
     }
 
     /**
-     * True if local time currently falls within the configured quiet-hours window (handles the
-     * default overnight wraparound, e.g. 00:00-07:00, as well as a same-day window). Read fresh
-     * each call so an Admin change to the setting/window takes effect on the very next chime/TTS.
+     * True if local time currently falls within the configured quiet-hours window. Delegates to
+     * [ConfigManager.inQuietHoursNow] — the single source of truth shared with the wake-word gate
+     * in HarnessService — so the TTS/chime muting here and the auto-listen suppression there stay
+     * in lockstep.
      */
-    private fun isQuietHours(): Boolean {
-        if (!config.quietHoursEnabled) return false
-        val start = config.quietHoursStartMin
-        val end = config.quietHoursEndMin
-        if (start == end) return false
-        val now = java.time.LocalTime.now()
-        val nowMin = now.hour * 60 + now.minute
-        return if (start < end) nowMin in start until end else nowMin >= start || nowMin < end
-    }
+    private fun isQuietHours(): Boolean = config.inQuietHoursNow()
 
     /** Cue: Teya has started listening for your command — see [playTone]'s doc comment. */
     fun playListeningChime() = playTone(freqHz = 880.0, durationMs = 100)
@@ -597,6 +590,11 @@ class VoicePipeline(private val context: Context) {
     fun resumeWakeWord() {
         if (wakeWordActive) wakeWordEngine.start()
     }
+
+    /** Whether the wake-word recorder is actually capturing right now — lets HarnessService
+     *  reconcile the desired listening mode against the real engine state (the per-turn
+     *  pause/resume above changes it behind the mode gate's back). */
+    fun isWakeWordRunning(): Boolean = wakeWordEngine.isCapturing
 
     @SuppressLint("MissingPermission")
     private fun recordWithVad(maxInitialSilenceMs: Int, prefixAudio: ShortArray = ShortArray(0)): File? {

@@ -174,10 +174,12 @@ class ConfigManager(context: Context) {
         set(value) = prefs.edit().putFloat("speaker_id_confident_threshold", value).apply()
 
     /**
-     * Quiet hours: while enabled and the current local time falls in [quietHoursStartMin,
-     * quietHoursEndMin) (wrapping past midnight, e.g. default 00:00-07:00), Teya still responds to
-     * wake word/tap and runs the conversation as normal (STT, tool calls, on-screen text) but stays
-     * silent — no chime, no TTS — see [com.teya.agent.voice.VoicePipeline]'s textToSpeech/playTone.
+     * Quiet hours ("Do Not Disturb"): while enabled and the current local time falls in
+     * [quietHoursStartMin, quietHoursEndMin) (wrapping past midnight, e.g. default 00:00-07:00),
+     * Teya (a) disables the wake word entirely — only a screen tap reaches her, same as manual
+     * [touchModeEnabled] — so ambient audio can't trigger her overnight, and (b) stays silent when
+     * she does respond: no chime, no TTS (see [com.teya.agent.voice.VoicePipeline]'s
+     * textToSpeech/playTone). STT, tool calls and on-screen text still run as normal.
      */
     var quietHoursEnabled: Boolean
         get() = prefs.getBoolean("quiet_hours_enabled", false)
@@ -192,6 +194,34 @@ class ConfigManager(context: Context) {
     var quietHoursEndMin: Int
         get() = prefs.getInt("quiet_hours_end_min", 7 * 60)
         set(value) = prefs.edit().putInt("quiet_hours_end_min", value).apply()
+
+    /**
+     * Touch mode (manual "tap-only"): when on, the wake word is disabled entirely and Teya is
+     * reachable only by tapping the screen — so a podcast/music playing on the speakers can't keep
+     * triggering her. Unlike quiet hours this leaves TTS alone: she still speaks her replies when
+     * you do tap. Toggled from the main screen's corner icon. The effective "auto-listen" state is
+     * `!touchModeEnabled && !inQuietHoursNow()`.
+     */
+    var touchModeEnabled: Boolean
+        get() = prefs.getBoolean("touch_mode_enabled", false)
+        set(value) = prefs.edit().putBoolean("touch_mode_enabled", value).apply()
+
+    /**
+     * True if quiet hours are enabled AND local time currently falls inside the window (handles the
+     * overnight wraparound, e.g. 00:00-07:00, as well as a same-day window). The single source of
+     * truth for "are we in the night window now", shared by [com.teya.agent.voice.VoicePipeline]
+     * (mutes TTS/chime) and [com.teya.agent.harness.HarnessService] (disables the wake word). Read
+     * fresh each call so an Admin change to the window takes effect on the very next check.
+     */
+    fun inQuietHoursNow(): Boolean {
+        if (!quietHoursEnabled) return false
+        val start = quietHoursStartMin
+        val end = quietHoursEndMin
+        if (start == end) return false
+        val now = java.time.LocalTime.now()
+        val nowMin = now.hour * 60 + now.minute
+        return if (start < end) nowMin in start until end else nowMin >= start || nowMin < end
+    }
 
     /** When any Voice tuning knob was last actually changed in Admin; 0 = never. Drives the idle
      *  face's ambient status mote so a retune is visible without opening Admin. */

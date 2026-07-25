@@ -19,6 +19,9 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Hearing
+import androidx.compose.material.icons.filled.HearingDisabled
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -65,6 +68,9 @@ class MainActivity : ComponentActivity() {
     // SetupActivity hands off), the live text is silently missed while the state change survives.
     // Reading the persisted copy in onResume means the real reason still shows, not a placeholder.
     private val _lastAuthErrorNote = mutableStateOf("")
+    // Effective auto-listen state for the corner toggle: false = tap-only (manual touch mode or the
+    // night window). Broadcast live by HarnessService; seeded in onResume for the first paint.
+    private val _autoListen = mutableStateOf(true)
 
     private val stateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -81,6 +87,9 @@ class MainActivity : ComponentActivity() {
                 HarnessService.ACTION_TRANSCRIPT -> {
                     intent.getStringExtra("user")?.let { _userText.value = it }
                     intent.getStringExtra("agent")?.let { _agentText.value = it }
+                }
+                HarnessService.ACTION_LISTENING_MODE -> {
+                    _autoListen.value = intent.getBooleanExtra(HarnessService.EXTRA_AUTO_LISTEN, true)
                 }
             }
         }
@@ -126,6 +135,22 @@ class MainActivity : ComponentActivity() {
                     lastDreamNote = _lastDreamNote.value,
                     lastTuningChangedAt = _lastTuningChangedAt.value,
                     lastAuthErrorNote = _lastAuthErrorNote.value,
+                    autoListen = _autoListen.value,
+                    onToggleListening = {
+                        Log.d("MainActivity", "Listening toggle tapped")
+                        val intent = Intent(this, HarnessService::class.java).apply {
+                            action = HarnessService.ACTION_TOGGLE_TOUCH_MODE
+                        }
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                startForegroundService(intent)
+                            } else {
+                                startService(intent)
+                            }
+                        } catch (e: Exception) {
+                            Log.e("MainActivity", "Failed to toggle listening", e)
+                        }
+                    },
                     onOrbClick = {
                         Log.d("MainActivity", "Orb clicked, triggering voice loop")
                         val intent = Intent(this, HarnessService::class.java).apply {
@@ -155,6 +180,7 @@ class MainActivity : ComponentActivity() {
         val filter = IntentFilter().apply {
             addAction("com.teya.agent.STATE_UPDATE")
             addAction(HarnessService.ACTION_TRANSCRIPT)
+            addAction(HarnessService.ACTION_LISTENING_MODE)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(stateReceiver, filter, RECEIVER_NOT_EXPORTED)
@@ -171,6 +197,8 @@ class MainActivity : ComponentActivity() {
         _lastAuthErrorNote.value = configManager.lastAuthErrorNote
         _visualization.value = AgentVisualizations.byId(configManager.faceStyle)
         applyOrientation(_visualization.value)
+        // Seed the toggle for the first paint before the service's live broadcast lands.
+        _autoListen.value = !configManager.touchModeEnabled && !configManager.inQuietHoursNow()
     }
 
     override fun onStop() {
@@ -249,6 +277,8 @@ fun MainScreen(
     lastDreamNote: String = "",
     lastTuningChangedAt: Long = 0L,
     lastAuthErrorNote: String = "",
+    autoListen: Boolean = true,
+    onToggleListening: () -> Unit = {},
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -274,6 +304,19 @@ fun MainScreen(
                 )
             }
 
+            // Listening toggle (bottom-left, clear of the top status motes and the bottom-center
+            // transcript). Tap = flip manual touch mode. When auto-listen is off (touch mode or the
+            // night window) it shows a struck-through ear tinted with the accent, so a glance tells
+            // you Teya isn't listening for the wake word and only a tap will reach her.
+            ListeningToggle(
+                autoListen = autoListen,
+                onToggle = onToggleListening,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .systemBarsPadding()
+                    .padding(start = 16.dp, bottom = 16.dp),
+            )
+
             // Live transcript (the user's words while listening, Teya's reply while speaking) —
             // each visualization decides where it sits relative to the face.
             val bottomAligned = visualization.transcriptAlignment == Alignment.BottomCenter
@@ -288,6 +331,20 @@ fun MainScreen(
                     .padding(horizontal = 40.dp, vertical = if (bottomAligned) 56.dp else 0.dp)
             )
         }
+    }
+}
+
+/** The main-screen listening switch: an ear icon that toggles manual touch mode. Struck-through +
+ *  accent-tinted when auto-listen is off (touch mode or the night window), muted otherwise. */
+@Composable
+private fun ListeningToggle(autoListen: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+    val tint = if (autoListen) stateColor(AgentState.IDLE).copy(alpha = 0.45f) else stateColor(AgentState.SPEAKING)
+    IconButton(onClick = onToggle, modifier = modifier) {
+        Icon(
+            imageVector = if (autoListen) Icons.Filled.Hearing else Icons.Filled.HearingDisabled,
+            contentDescription = if (autoListen) "Listening — tap for touch-only" else "Touch-only — tap to listen",
+            tint = tint,
+        )
     }
 }
 
