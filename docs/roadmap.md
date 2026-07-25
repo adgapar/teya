@@ -34,6 +34,28 @@ lands it on Teya's calendar too, since `CalendarManager.events()` already reads 
 the device — a free way to add things to Teya's calendar without voice. Full trail:
 `docs/experiments.md` → "Problem: calendar attendees / email invites"._
 
+_2026-07-25 (**released as v1.5** — signed APK via the release workflow): three fixes/features,
+all verified live on-device._
+_• **Calendar context widened.** The ambient calendar line was "today's *remaining* events" —
+now-anchored, so an event earlier in the day was invisible (asked "what do we have today?" at 8pm,
+Teya missed a 6pm event and said the calendar was empty). Now it carries the **whole local day**
+(past events tagged "(earlier today)") plus a new **"Upcoming events (next 7 days)"** ambient line,
+so the coming week rides in context directly instead of depending on the model reaching for
+`get_events` (which it didn't always do). `get_events` now also defaults its range start to the
+start of today, not "now". All boundaries anchor to `ZoneId.systemDefault()` (local days, not UTC)._
+_• **Touch mode + real night Do-Not-Disturb.** A discreet ear icon in the main screen's bottom-left
+toggles **tap-only**: the wake word is disabled entirely (a podcast/music on the speakers can't keep
+triggering her) but TTS is untouched — she still speaks her replies when you tap. Quiet hours were
+upgraded from TTS-mute-only to full **DND** — inside the window the wake word is disabled too, so
+night = tap-only + silent (the previous behavior kept listening all night, the actual complaint).
+`ConfigManager.inQuietHoursNow()` is now the single source of truth for the window (VoicePipeline
+mutes TTS, HarnessService gates the engine); a once-a-minute reconcile loop flips it at the night
+boundaries and skips mid-conversation so barge-in isn't cut. Tap-to-talk always works regardless.
+Verified live: no startup mic flash in tap-only mode, persists across a force-stop restart._
+_• **Admin voice picker fix.** Selecting a TTS actor (Marie/Paul/Jane/Oliver) only moved a local
+highlight and never committed, so the choice reverted to the default `fr_marie_happy` on close.
+An actor tap now commits one of that actor's variants immediately._
+
 ## ✅ Done
 
 - Android app + always-on foreground service (`HarnessService`), **particle-field voice face** (`AgentFace`), centred live transcript.
@@ -284,7 +306,8 @@ Open-Meteo), with location from the household profile or native device location.
 4. **`calendar`** (`calendar/CalendarManager.kt`) — hybrid backing (synced Google calendar if
    present → else existing writable/local calendar). ✅ **Slice 1 verified live**: `add_event`
    (title/start/duration/location + `repeat`→RRULE recurrence), `get_events` (Instances expands
-   recurrences), today's remaining events in the ambient context. ✅ **Slice (b) attendees/email
+   recurrences), the whole of today's events **plus the next 7 days** in the ambient context (widened
+   in v1.5 from "today's remaining" — see the 2026-07-25 note above). ✅ **Slice (b) attendees/email
    invites verified live**: `add_event` invites every household member with an email on file by
    real Google Calendar email, unless `notify_family=false` (personal reminders/chores) or narrowed
    via `attendees`/`exclude_attendees`. Needed the household's own Google account added to the
