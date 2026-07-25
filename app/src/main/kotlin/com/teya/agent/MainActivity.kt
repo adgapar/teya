@@ -325,6 +325,7 @@ fun MainScreen(
                 userText = userText,
                 agentText = agentText,
                 lastAuthErrorNote = lastAuthErrorNote,
+                autoListen = autoListen,
                 modifier = Modifier
                     .align(visualization.transcriptAlignment)
                     .fillMaxWidth()
@@ -354,6 +355,7 @@ private fun CenteredTranscript(
     userText: String,
     agentText: String,
     lastAuthErrorNote: String = "",
+    autoListen: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     // Pick what to show based on the state, like a voice agent's transcript.
@@ -369,7 +371,8 @@ private fun CenteredTranscript(
         AgentState.LISTENING -> { role = ""; line = "Listening…" }
         AgentState.IDLE -> {
             if (agentText.isNotBlank()) { role = "Teya"; line = agentText }
-            else { role = ""; line = "Say “Hey Teya”" }
+            // In touch mode / the night window the wake word is off, so don't invite "Hey Teya".
+            else { role = ""; line = if (autoListen) "Say “Hey Teya”" else "Tap to talk" }
         }
         AgentState.BRAIN_OFF -> {
             role = ""

@@ -246,11 +246,13 @@ class VoicePipeline(private val context: Context) {
     fun isContinuousBargeInActive(): Boolean = webViewAecHost?.isActive() == true
 
     fun startListening(onWakeWord: (audio: ShortArray) -> Unit, onBargeIn: () -> Unit) {
-        Log.d("VoicePipeline", "Wake word detection started")
+        Log.d("VoicePipeline", "Wake word detection armed")
         this.wakeWordCallback = onWakeWord
         this.bargeInCallback = onBargeIn
         wakeWordActive = true
-        wakeWordEngine.start()
+        // Don't start the engine here — the caller (HarnessService.applyListeningMode) decides
+        // whether to actually run it based on touch mode / the night window, so a tap-only mode
+        // doesn't flash the mic on for a moment at startup just to stop it again.
     }
 
     private fun onWakeWord(audio: ShortArray) {
