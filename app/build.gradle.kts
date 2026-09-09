@@ -79,6 +79,9 @@ android {
     }
     buildFeatures {
         compose = true
+        // Generates BuildConfig.DEBUG, so logs that would carry PII (recipients, locations,
+        // memories) can be gated to debug builds — roadmap H2.
+        buildConfig = true
     }
     packaging {
         resources {

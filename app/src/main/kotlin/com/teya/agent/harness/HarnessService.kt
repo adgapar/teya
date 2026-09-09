@@ -29,6 +29,7 @@ import com.teya.agent.household.SpeakerMatch
 import com.teya.agent.persona.AgentTools
 import com.teya.agent.persona.TeyaPersona
 import com.teya.agent.shopping.ShoppingListManager
+import com.teya.agent.messaging.SmsSender
 import com.teya.agent.telephony.TelephonyActuator
 import com.teya.agent.timers.TeyaTimer
 import com.teya.agent.timers.TimerManager
@@ -131,6 +132,7 @@ class HarnessService : Service() {
     private lateinit var voicePipeline: VoicePipeline
     private lateinit var brainClient: BrainClient
     private lateinit var telephonyActuator: TelephonyActuator
+    private lateinit var smsSender: SmsSender
     private lateinit var timerManager: TimerManager
     private lateinit var calendarManager: CalendarManager
     private lateinit var shoppingList: ShoppingListManager
@@ -154,8 +156,9 @@ class HarnessService : Service() {
         shoppingList = ShoppingListManager(this)
         expenseManager = ExpenseManager(this)
         householdManager = HouseholdManager(this)
-        // The household roster is the call allowlist — see TelephonyActuator.
+        // The household roster is both the call allowlist and the SMS peer set.
         telephonyActuator = TelephonyActuator(this, householdManager)
+        smsSender = SmsSender(this, householdManager)
         memoryManager = MemoryManager(this)
         speakerIdManager = SpeakerIdManager(this)
 
@@ -774,6 +777,28 @@ class HarnessService : Service() {
                     "$name is not someone in the household, so the call was not placed."
                 TelephonyActuator.Result.NoNumber ->
                     "I don't have a usable phone number saved for $name."
+            }
+        }
+        "send_message" -> {
+            val recipient = tool.arguments["recipient"] ?: ""
+            val body = tool.arguments["body"] ?: ""
+            // No recipient/body in the log — the no-PII rule covers message contents too.
+            Log.d(TAG, "Actuator: send_message (${body.length} chars)")
+            when (val result = smsSender.send(recipient, body)) {
+                is SmsSender.Result.Sent ->
+                    "Text sent to ${result.displayName}. It cannot be unsent."
+                SmsSender.Result.NoSim ->
+                    "There's no working phone line on this device, so the text was not sent."
+                SmsSender.Result.NoPermission ->
+                    "I'm not allowed to send texts — permission to send SMS is turned off in Android settings."
+                SmsSender.Result.NotAllowed ->
+                    "$recipient is not someone in the household, so no text was sent."
+                SmsSender.Result.NoNumber ->
+                    "I don't have a usable phone number saved for $recipient."
+                SmsSender.Result.EmptyBody ->
+                    "There was nothing to send — the message was empty."
+                is SmsSender.Result.Failed ->
+                    "The text to $recipient could not be sent (${result.reason})."
             }
         }
         "set_timer" -> {

@@ -227,6 +227,7 @@ class MainActivity : ComponentActivity() {
         val permissionsToRequest = mutableListOf(
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.CALL_PHONE,
+            Manifest.permission.SEND_SMS,
             // Household members live in Contacts; location feeds the ambient "home"/weather context.
             // Requested here too so the upgrade path (onboarding already done) still grants them.
             Manifest.permission.READ_CONTACTS,

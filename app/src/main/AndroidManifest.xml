@@ -14,6 +14,9 @@
          from HarnessService with no Activity ever in the foreground. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
+    <!-- Outbound SMS as Teya's second transport (send_message). SEND_SMS is all sending needs —
+         being the default SMS app is only required to *receive* via SMS_DELIVER. -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
     <!-- Set alarms/timers via AlarmClock intents; required to use EXTRA_SKIP_UI (no clock-app UI). -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <!-- Location for the ambient "live device state" (weather, "where am I"). Dedicated device. -->

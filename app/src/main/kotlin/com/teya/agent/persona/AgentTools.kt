@@ -28,6 +28,26 @@ object AgentTools {
         },
     )
 
+    val sendMessage = ToolSpec(
+        name = "send_message",
+        description = "Send a text message (SMS) to a member of the household, so they can read it " +
+            "wherever they are — e.g. sending the shopping list to whoever is at the shop.",
+        parameters = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {
+                putJsonObject("recipient") {
+                    put("type", "string")
+                    put("description", "The household member to text, by the name or nickname the family uses, e.g. 'Dad', 'Mom'.")
+                }
+                putJsonObject("body") {
+                    put("type", "string")
+                    put("description", "The full text to send, already written the way it should be read on a phone screen.")
+                }
+            }
+            putJsonArray("required") { add("recipient"); add("body") }
+        },
+    )
+
     // NOTE: there is deliberately no get_time tool — the current time and location are injected
     // into the model's context every turn as "live device state" (see HarnessService.buildLiveContext),
     // so the model already knows them and needn't spend a tool round-trip. Ambient, not a tool.
@@ -406,7 +426,7 @@ object AgentTools {
 
     /** All tools currently exposed to the brain. */
     val all: List<ToolSpec> = listOf(
-        placeCall, setTimer, cancelTimer, setAlarm, cancelAlarm, addEvent, getEvents, cancelEvent,
+        placeCall, sendMessage, setTimer, cancelTimer, setAlarm, cancelAlarm, addEvent, getEvents, cancelEvent,
         addToShoppingList, removeFromShoppingList, readShoppingList, clearShoppingList,
         logExpense, queryExpenses, deleteExpense,
         remember, forget, searchMemory,
