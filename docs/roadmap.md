@@ -56,6 +56,36 @@ _• **Admin voice picker fix.** Selecting a TTS actor (Marie/Paul/Jane/Oliver) 
 highlight and never committed, so the choice reverted to the default `fr_marie_happy` on close.
 An actor tap now commits one of that actor's variants immediately._
 
+_2026-09-09 (**a SIM went into the device**, which unblocked the two features that were both parked
+on it). **Built, compiles, not yet verified live** — a real call and a real send still need the
+SIM's plan confirmed (voice + SMS, not data-only)._
+_• **Calls: the allowlist was the bug.** `place_call` had never placed a call, and the reason was
+narrower than "non-functional": it gated on `safety/ContactAllowlistManager`, a Room table with
+**zero writers anywhere in the app** — so `isAllowed()` was always false and every call returned
+`NOT_ALLOWED`. Onboarding meanwhile already collects each member's real number into Contacts, and
+`HouseholdManager.resolveMember` already maps "Dad"/"Babcia" onto a member. So the second store was
+deleted rather than seeded (**C1** resolved by removal): **the household roster is the call
+allowlist**. Also: `ACTION_CALL` instead of `TelecomManager.placeCall` (**C2**); number validation
+before dialing, closing the `LIKE` wildcard bypass where `place_call("%")` matched an arbitrary row
+(**C3**); `CALL_PHONE` rechecked at call time and spoken about when missing, since it can be revoked
+while this `START_STICKY` service keeps running (**H11**). The inbound half is gone entirely —
+`TeyaInCallService`, its manifest `IN_CALL_SERVICE_UI` registration, `ANSWER_PHONE_CALLS`,
+`MANAGE_OWN_CALLS`, `FOREGROUND_SERVICE_PHONE_CALL` — per [[device-form-factor]]: a wall appliance
+is not a number anyone dials. `MainActivity` also no longer refuses to start the service when
+`CALL_PHONE` is denied; `RECORD_AUDIO` is the only hard requirement._
+_• **SMS transport, phase 1 (outbound).** `send_message(recipient, body)` via `messaging/SmsSender`
+— multipart-aware (`divideMessage` picks the cuts, so GSM-7 vs UCS-2 isn't guessed at), recipients
+resolved off the same household roster with the same number validation as the call path. This is the
+first fix for a hole that applies to *every* store, not just one: they are all write-only from
+outside the house, so "we need olive oil" is unreadable by the person actually standing in the
+supermarket aisle. `SEND_SMS` is all sending needs — the default-SMS role is only required to
+receive. Sent `PendingIntent`s log the per-part carrier result (debug builds only — the line
+identifies a recipient, H2) rather than letting a late failure vanish; this needed
+`buildFeatures.buildConfig`, never enabled before, which is also what left H2's PII-log gating a
+TODO. The persona now states that a sent text cannot be recalled, per [[create-needs-cancel]] —
+SMS has no inverse, so the prompt says so explicitly instead of letting the model improvise
+"I've unsent it". Design + the remaining phases: `thoughts/shared/plans/2026-08-02-sms-transport.md`._
+
 ## ✅ Done
 
 - Android app + always-on foreground service (`HarnessService`), **particle-field voice face** (`AgentFace`), centred live transcript.
@@ -181,20 +211,12 @@ An actor tap now commits one of that actor's variants immediately._
 
 ## 🔜 Next (recommended order)
 
-1. **Make the call feature actually work** — currently non-functional. **Outbound only**: the device
-   is a personal home assistant, not a number anyone dials, so drop the inbound side —
-   `TeyaInCallService` + `ANSWER_PHONE_CALLS` + default-dialer-for-inbound are dead weight. Just
-   `ACTION_CALL` ("call Grandma"). See [[device-form-factor]].
-   - ⚠️ **Hardware check:** the dev device is a dedicated phone with a **fresh SIM** — confirm the
-     plan actually allows outbound cellular calls before assuming code is the blocker. Calls go over
-     the **native cellular dialer + SIM only** — no Twilio/VoIP (zero-setup principle: no one will
-     configure an account). If the plan can't call, build + test the *plumbing* (allowlist +
-     name→number resolution + call intent) without a live connection until a callable SIM is in.
-   - Populate the allowlist — Teya **seeds** it (blank-slate device has no contacts); parent-gated
-     contact UI or DB seed — **C1**.
-   - Use `ACTION_CALL` for outbound — **C2**. (Default-dialer / `ROLE_DIALER` was for inbound; not needed.)
-   - Exact-match single lookup + phone-number validation (no `LIKE` wildcard bypass) — **C3**.
-   - Runtime permission recheck at call time — **H11**.
+1. **Verify calls + SMS live on the SIM** — both are built and compile (see the 2026-09-09 block);
+   neither has placed a real call or sent a real text. **Do the hardware check first**: confirm the
+   plan actually allows outbound voice *and* SMS before reading any failure as a code bug. Then:
+   "call Dad" out loud → the phone rings; "text me the shopping list" → the text arrives on a real
+   phone. Both need `CALL_PHONE`/`SEND_SMS` granted, which means a permission prompt on the next
+   install.
 2. **Make interruption work well** — ✅ continuous mid-sentence barge-in during Teya's own speech
    now ships as the default, via a WebView/Chromium-hosted AEC (`getUserMedia`'s own echo
    cancellation). `NativeAec3` (vendored WebRTC AEC3, never achieved real suppression on this
@@ -338,7 +360,11 @@ Open-Meteo), with location from the household profile or native device location.
    fruits and then 19 euros for groceries" logged two independent rows in one turn (parallel tool
    calls), both categorized `groceries`; "how much do you guys spend?" correctly answered "31 euros
    total, all on groceries" via `query_expenses(period=month)` — no LLM arithmetic.
-7. **`send_message`** — SMS / messenger intent to an allowlisted contact; safety-gated like calls.
+7. ✅ **`send_message`** — outbound SMS to a household member, sharing the call path's roster and
+   number validation (2026-09-09; built, not yet verified live). The async *inbound* side — texting
+   Teya and getting an answer back — is phases 2–4 of
+   `thoughts/shared/plans/2026-08-02-sms-transport.md`, and needs the transport-agnostic tool loop
+   extracted out of the voice-shaped `respond()` first.
 8. Device state & control — battery, volume/DND, open-app/launch intents.
 
 ## 🧊 Backlog / ideas

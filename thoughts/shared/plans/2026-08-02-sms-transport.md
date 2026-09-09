@@ -2,7 +2,7 @@
 date: 2026-08-02T00:00:00Z
 topic: "SMS as a second transport — talking to Teya when you're not standing in front of her"
 tags: [sms, transport, messaging, telephony, harnessservice, household, security]
-status: design — parked, nothing built yet (waiting on an SMS-capable SIM in the device)
+status: phase 1 (outbound) built 2026-09-09, not yet verified live; phases 2-4 not started
 ---
 
 # SMS Transport: Teya's Async Channel
@@ -183,11 +183,14 @@ Per the no-PII rule: inbound bodies and sender numbers must **not** be logged ou
 
 Each phase ends at something observable, so a broken phase is caught before the next builds on it.
 
-**Phase 1 — outbound only.** `send_message(recipient, body)` `ToolSpec` → `executeTool` branch →
-`TeyaPersona` mention. Resolves recipient via `HouseholdManager.resolveMember`, sends via
-`SmsManager`, multipart-aware.
-*Checkpoint*: "Teya, text me the shopping list" out loud at the wall → the text arrives on a real
-phone. This alone closes the olive-oil hole in one direction.
+**Phase 1 — outbound only.** ✅ **Built 2026-09-09**, exactly as designed: `send_message(recipient,
+body)` `ToolSpec` → `executeTool` branch → `TeyaPersona` mention, recipient via
+`HouseholdManager.resolveMember`, sent by `messaging/SmsSender` (multipart-aware). Two things the
+design didn't call: it shares the call path's number validation (one rule for "is this diallable"),
+and the sent `PendingIntent` logging needed `buildFeatures.buildConfig` turned on for the first time.
+Open question #4 answered in the persona: SMS has no inverse and the prompt says so outright.
+*Checkpoint*: **not yet run** — "Teya, text me the shopping list" out loud at the wall → the text
+arrives on a real phone. This alone closes the olive-oil hole in one direction.
 
 **Phase 2 — extract the transport-agnostic tool loop.** Refactor only; `respond()` keeps its exact
 current behavior on top of the extracted core.
@@ -212,9 +215,10 @@ that has proven itself first.
 
 ## Open questions
 
-1. ~~**Does the SIM's plan send SMS?**~~ Resolved: no SIM in the device yet, but the one going in
-   will have SMS. This is why the slice is parked at design — Phase 1's checkpoint can't run until
-   it's in. Phases 2–3 aren't blocked and could be built ahead on injected messages.
+1. ~~**Does the SIM's plan send SMS?**~~ A SIM is now in the device (2026-09-09) and Phase 1 is
+   built, so the design is no longer parked. **Still unconfirmed: whether the plan actually
+   allows SMS** — that is the first thing to check when Phase 1's checkpoint fails, before
+   reading any failure as a code bug.
 2. **Speak inbound texts aloud in the house?** Deliberately out of scope; flagged so it isn't
    half-built by accident.
 3. **Session idle timeout** — 30 min is a guess. Needs real use to tune.
