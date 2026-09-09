@@ -15,13 +15,13 @@ object AgentTools {
 
     val placeCall = ToolSpec(
         name = "place_call",
-        description = "Place a phone call to one of the family's approved contacts.",
+        description = "Place a phone call to a member of the household.",
         parameters = buildJsonObject {
             put("type", "object")
             putJsonObject("properties") {
                 putJsonObject("name") {
                     put("type", "string")
-                    put("description", "The name of the person to call, e.g. 'Dad', 'Mom', 'Grandma'.")
+                    put("description", "The household member to call, by the name or nickname the family uses, e.g. 'Dad', 'Mom', 'Grandma'.")
                 }
             }
             putJsonArray("required") { add("name") }

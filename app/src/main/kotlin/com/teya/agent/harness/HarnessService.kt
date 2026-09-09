@@ -28,9 +28,7 @@ import com.teya.agent.household.SpeakerIdManager
 import com.teya.agent.household.SpeakerMatch
 import com.teya.agent.persona.AgentTools
 import com.teya.agent.persona.TeyaPersona
-import com.teya.agent.safety.ContactAllowlistManager
 import com.teya.agent.shopping.ShoppingListManager
-import com.teya.agent.telephony.CallResult
 import com.teya.agent.telephony.TelephonyActuator
 import com.teya.agent.timers.TeyaTimer
 import com.teya.agent.timers.TimerManager
@@ -133,7 +131,6 @@ class HarnessService : Service() {
     private lateinit var voicePipeline: VoicePipeline
     private lateinit var brainClient: BrainClient
     private lateinit var telephonyActuator: TelephonyActuator
-    private lateinit var allowlistManager: ContactAllowlistManager
     private lateinit var timerManager: TimerManager
     private lateinit var calendarManager: CalendarManager
     private lateinit var shoppingList: ShoppingListManager
@@ -151,14 +148,14 @@ class HarnessService : Service() {
         createNotificationChannel()
         
         configManager = ConfigManager(this)
-        allowlistManager = ContactAllowlistManager(this)
-        telephonyActuator = TelephonyActuator(this, allowlistManager)
         voicePipeline = VoicePipeline(this)
         timerManager = TimerManager(this)
         calendarManager = CalendarManager(this)
         shoppingList = ShoppingListManager(this)
         expenseManager = ExpenseManager(this)
         householdManager = HouseholdManager(this)
+        // The household roster is the call allowlist — see TelephonyActuator.
+        telephonyActuator = TelephonyActuator(this, householdManager)
         memoryManager = MemoryManager(this)
         speakerIdManager = SpeakerIdManager(this)
 
@@ -766,12 +763,17 @@ class HarnessService : Service() {
     private suspend fun executeTool(tool: ToolCall): String = when (tool.functionName) {
         "place_call" -> {
             val name = tool.arguments["name"] ?: ""
-            Log.d(TAG, "Actuator: Placing call to $name")
-            when (telephonyActuator.placeCall(name)) {
-                CallResult.SUCCESS -> "Calling $name now."
-                CallResult.NO_SIM -> "I don't have a number to call from yet — there's no working phone line on this device."
-                CallResult.NOT_ALLOWED -> "$name is not on the family's approved contacts, so the call was not placed."
-                CallResult.NO_NUMBER -> "I don't have a phone number saved for $name."
+            Log.d(TAG, "Actuator: place_call")
+            when (val result = telephonyActuator.placeCall(name)) {
+                is TelephonyActuator.Result.Placed -> "Calling ${result.displayName} now."
+                TelephonyActuator.Result.NoSim ->
+                    "There's no working phone line on this device, so the call was not placed."
+                TelephonyActuator.Result.NoPermission ->
+                    "I'm not allowed to place calls — permission to make phone calls is turned off in Android settings."
+                TelephonyActuator.Result.NotAllowed ->
+                    "$name is not someone in the household, so the call was not placed."
+                TelephonyActuator.Result.NoNumber ->
+                    "I don't have a usable phone number saved for $name."
             }
         }
         "set_timer" -> {

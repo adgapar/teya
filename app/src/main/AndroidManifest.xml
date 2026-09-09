@@ -6,7 +6,6 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Needed for the WebView AEC's getUserMedia({echoCancellation:true}) to select a
          communication audio device (Chromium's own audio_manager_android.cc requires this). -->
@@ -15,8 +14,6 @@
          from HarnessService with no Activity ever in the foreground. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
-    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
-    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
     <!-- Set alarms/timers via AlarmClock intents; required to use EXTRA_SKIP_UI (no clock-app UI). -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <!-- Location for the ambient "live device state" (weather, "where am I"). Dedicated device. -->
@@ -74,19 +71,7 @@
             android:name=".harness.HarnessService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="microphone|phoneCall" />
-
-        <service
-            android:name=".telephony.TeyaInCallService"
-            android:permission="android.permission.BIND_INCALL_SERVICE"
-            android:exported="true">
-            <meta-data
-                android:name="android.telecom.IN_CALL_SERVICE_UI"
-                android:value="true" />
-            <intent-filter>
-                <action android:name="android.telecom.InCallService" />
-            </intent-filter>
-        </service>
+            android:foregroundServiceType="microphone" />
 
     </application>
 

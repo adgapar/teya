@@ -15,12 +15,16 @@ import com.teya.agent.household.PersonaDao
 import com.teya.agent.household.VoiceSample
 import com.teya.agent.household.VoiceSampleDao
 
+/**
+ * The `contact_allowlist` table ([Contact]) is **legacy and unread**: the call allowlist is now the
+ * household roster (see `telephony.TelephonyActuator`). The entity stays declared so the schema is
+ * unchanged and no migration is needed; nothing reads or writes the table.
+ */
 @Database(
     entities = [Contact::class, Persona::class, MemoryEntry::class, ContactExtra::class, VoiceSample::class],
     version = 4,
 )
 abstract class TeyaDatabase : RoomDatabase() {
-    abstract fun contactDao(): ContactDao
     abstract fun personaDao(): PersonaDao
     abstract fun memoryDao(): MemoryDao
     abstract fun contactExtraDao(): ContactExtraDao

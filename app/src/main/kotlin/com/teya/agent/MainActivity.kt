@@ -98,13 +98,14 @@ class MainActivity : ComponentActivity() {
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val recordAudioGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
-        val callPhoneGranted = permissions[Manifest.permission.CALL_PHONE] ?: false
-        
-        if (recordAudioGranted && callPhoneGranted) {
+        // RECORD_AUDIO is the only hard requirement — without a mic there is no assistant at all.
+        // Every other permission degrades one feature: place_call rechecks CALL_PHONE at call time
+        // (TelephonyActuator) and says so out loud, so a denied call permission must not keep the
+        // whole voice loop from starting.
+        if (permissions[Manifest.permission.RECORD_AUDIO] == true) {
             startHarnessService()
         } else {
-            Toast.makeText(this, "Permissions required for Teya to work", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Teya needs microphone access to work", Toast.LENGTH_LONG).show()
         }
     }
 
