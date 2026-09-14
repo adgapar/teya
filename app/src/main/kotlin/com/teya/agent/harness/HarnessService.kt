@@ -19,7 +19,11 @@ import androidx.core.app.NotificationCompat
 import com.teya.agent.R
 import com.teya.agent.brain.*
 import com.teya.agent.calendar.CalendarManager
-import com.teya.agent.calendar.WhenResolver
+import com.teya.agent.harness.actuators.CalendarActuator
+import com.teya.agent.harness.actuators.HomeActuator
+import com.teya.agent.harness.actuators.MemoryActuator
+import com.teya.agent.harness.actuators.ReachActuator
+import com.teya.agent.harness.actuators.TimeActuator
 import com.teya.agent.expenses.ExpenseManager
 import com.teya.agent.household.HouseholdManager
 import com.teya.agent.household.Languages
@@ -104,6 +108,14 @@ class HarnessService : Service() {
         private const val MAX_HISTORY = 10           // bounded conversation history sent to the model
         private const val MAX_TOOL_ROUNDS = 4        // cap tool→result→model loops per user turn
         private const val MAX_DESTRUCTIVE_PER_TURN = 3  // calendar deletions before a turn must check in
+        private val REACH_TOOLS = setOf("place_call", "send_message")
+        private val TIME_TOOLS = setOf("set_timer", "cancel_timer", "set_alarm", "cancel_alarm")
+        private val CALENDAR_TOOLS = setOf("add_event", "get_events", "cancel_event", "move_event")
+        private val HOME_TOOLS = setOf(
+            "add_to_shopping_list", "remove_from_shopping_list", "read_shopping_list",
+            "clear_shopping_list", "log_expense", "query_expenses", "delete_expense",
+        )
+        private val MEMORY_TOOLS = setOf("remember", "forget", "search_memory")
         private const val DREAM_REQUEST_CODE = 7     // PendingIntent id for the nightly dream alarm
         private const val DREAM_HOUR = 3             // run the dreamer at ~3 AM (device idle + charging)
     }
@@ -117,8 +129,8 @@ class HarnessService : Service() {
     // Only one ever runs — it re-reads TimerManager.ringing() each cycle, so timers that fire while
     // it's already going just get folded into the next announcement, no need for a loop per timer.
     @Volatile private var timerNagJob: Job? = null
-    // Reset by respond/respondText; capped at MAX_DESTRUCTIVE_PER_TURN.
-    private var destructiveCallsThisTurn = 0
+    // One budget per turn, created by respond/respondText and spent by the calendar actuator.
+    @Volatile private var deletionBudget = CalendarActuator.DeletionBudget(MAX_DESTRUCTIVE_PER_TURN)
 
     // Minute-tick reconcile of idle wake-word listening with touch mode / the quiet-hours window
     // (see ensureListeningModeLoopRunning).
@@ -142,7 +154,6 @@ class HarnessService : Service() {
 
     private lateinit var voicePipeline: VoicePipeline
     private lateinit var brainClient: BrainClient
-    private lateinit var telephonyActuator: TelephonyActuator
     private lateinit var smsSender: SmsSender
     private lateinit var textSessions: TextSessionStore
     // Serializes text turns against each other only, never against the voice loop.
@@ -150,8 +161,11 @@ class HarnessService : Service() {
     private val inboundRateLimiter = InboundRateLimiter()
     private lateinit var timerManager: TimerManager
     private lateinit var calendarManager: CalendarManager
-    private lateinit var shoppingList: ShoppingListManager
-    private lateinit var expenseManager: ExpenseManager
+    private lateinit var calendarActuator: CalendarActuator
+    private lateinit var reachActuator: ReachActuator
+    private lateinit var timeActuator: TimeActuator
+    private lateinit var homeActuator: HomeActuator
+    private lateinit var memoryActuator: MemoryActuator
     private lateinit var householdManager: HouseholdManager
     private lateinit var memoryManager: MemoryManager
     private lateinit var configManager: ConfigManager
@@ -168,12 +182,15 @@ class HarnessService : Service() {
         voicePipeline = VoicePipeline(this)
         timerManager = TimerManager(this)
         calendarManager = CalendarManager(this)
-        shoppingList = ShoppingListManager(this)
-        expenseManager = ExpenseManager(this)
+        val shoppingList = ShoppingListManager(this)
+        val expenseManager = ExpenseManager(this)
         householdManager = HouseholdManager(this)
+        calendarActuator = CalendarActuator(calendarManager, householdManager)
+        timeActuator = TimeActuator(this, timerManager)
+        homeActuator = HomeActuator(shoppingList, expenseManager, configManager)
         // The household roster is both the call allowlist and the SMS peer set.
-        telephonyActuator = TelephonyActuator(this, householdManager)
         smsSender = SmsSender(this, householdManager)
+        reachActuator = ReachActuator(TelephonyActuator(this, householdManager), smsSender)
         textSessions = TextSessionStore(this)
         memoryManager = MemoryManager(this)
         speakerIdManager = SpeakerIdManager(this)
@@ -193,6 +210,7 @@ class HarnessService : Service() {
         )
         mistralClient.onAuthError = ::onMistralAuthError
         brainClient = mistralClient
+        memoryActuator = MemoryActuator(memoryManager, householdManager, brainClient)
         voicePipeline.setMistralClient(mistralClient)
         scope.launch { mistralClient.warmUp() }  // warm the TLS/connection pool at startup
 
@@ -635,7 +653,7 @@ class HarnessService : Service() {
      * context is preserved across the round-trip and into later turns.
      */
     private suspend fun respond(history: MutableList<ChatMessage>) {
-        destructiveCallsThisTurn = 0
+        deletionBudget = CalendarActuator.DeletionBudget(MAX_DESTRUCTIVE_PER_TURN)
         // Refresh live device state once per user turn; the same snapshot is used across any tool
         // rounds within this turn (time won't drift meaningfully over a few seconds).
         val liveContext = buildLiveContext()
@@ -807,7 +825,7 @@ class HarnessService : Service() {
         liveContext: String,
         allowedTools: Set<String>,
     ): String {
-        destructiveCallsThisTurn = 0
+        deletionBudget = CalendarActuator.DeletionBudget(MAX_DESTRUCTIVE_PER_TURN)
         for (round in 0 until MAX_TOOL_ROUNDS) {
             val response = brainClient.processText(history, liveContext, allowedTools)
             if (response.toolCalls.isEmpty()) {
@@ -870,456 +888,19 @@ class HarnessService : Service() {
         }
     }
 
-    /**
-     * The actuator: run one tool and return a short natural-language result for the model to
-     * phrase (never spoken directly). Add a `when` branch here for each new [AgentTools] entry.
-     */
+    /** Route one tool to its domain actuator; each returns a short result for the model to phrase. */
     private suspend fun executeTool(tool: ToolCall): String = when (tool.functionName) {
-        "place_call" -> {
-            val name = tool.arguments["name"] ?: ""
-            Log.d(TAG, "Actuator: place_call")
-            when (val result = telephonyActuator.placeCall(name)) {
-                is TelephonyActuator.Result.Placed -> "Calling ${result.displayName} now."
-                TelephonyActuator.Result.NoSim ->
-                    "There's no working phone line on this device, so the call was not placed."
-                TelephonyActuator.Result.NoPermission ->
-                    "I'm not allowed to place calls — permission to make phone calls is turned off in Android settings."
-                TelephonyActuator.Result.NotAllowed ->
-                    "$name is not someone in the household, so the call was not placed."
-                TelephonyActuator.Result.NoNumber ->
-                    "I don't have a usable phone number saved for $name."
-            }
-        }
-        "send_message" -> {
-            val recipient = tool.arguments["recipient"] ?: ""
-            val body = tool.arguments["body"] ?: ""
-            // No recipient/body in the log — the no-PII rule covers message contents too.
-            Log.d(TAG, "Actuator: send_message (${body.length} chars)")
-            when (val result = smsSender.send(recipient, body)) {
-                is SmsSender.Result.Sent ->
-                    "Text sent to ${result.displayName}. It cannot be unsent."
-                SmsSender.Result.NoSim ->
-                    "There's no working phone line on this device, so the text was not sent."
-                SmsSender.Result.NoPermission ->
-                    "I'm not allowed to send texts — permission to send SMS is turned off in Android settings."
-                SmsSender.Result.NotAllowed ->
-                    "$recipient is not someone in the household, so no text was sent."
-                SmsSender.Result.NoNumber ->
-                    "I don't have a usable phone number saved for $recipient."
-                SmsSender.Result.EmptyBody ->
-                    "There was nothing to send — the message was empty."
-                is SmsSender.Result.Failed ->
-                    "The text to $recipient could not be sent (${result.reason})."
-            }
-        }
-        "set_timer" -> {
-            val seconds = tool.arguments["duration_seconds"]?.toIntOrNull()
-            if (seconds == null || seconds <= 0) {
-                "Could not set the timer — I need a positive duration in seconds."
-            } else {
-                val label = tool.arguments["label"].orEmpty()
-                // Teya-owned (AlarmManager) so it's cancellable and she announces it herself.
-                timerManager.start(seconds, label)
-                val mins = seconds / 60
-                val secs = seconds % 60
-                val dur = buildString {
-                    if (mins > 0) append("$mins min ")
-                    if (secs > 0 || mins == 0) append("$secs sec")
-                }.trim()
-                "Timer started for $dur" + if (label.isNotBlank()) " ($label)." else "."
-            }
-        }
-        "cancel_timer" -> {
-            val cancelled = timerManager.cancel(tool.arguments["label"])
-            when {
-                cancelled.isEmpty() -> "There's nothing to cancel."
-                cancelled.size == 1 -> "Cancelled the ${cancelled[0].label.ifBlank { "timer" }}."
-                else -> "Cancelled ${cancelled.size} timers."
-            }
-        }
-        "cancel_alarm" -> {
-            val label = tool.arguments["label"]
-            val hour = tool.arguments["hour"]?.toIntOrNull()
-            val minute = tool.arguments["minute"]?.toIntOrNull() ?: 0
-            val all = tool.arguments["all"]?.toBoolean() ?: false
-            val intent = Intent(AlarmClock.ACTION_DISMISS_ALARM).apply {
-                putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-                when {
-                    !label.isNullOrBlank() -> {
-                        putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_LABEL)
-                        putExtra(AlarmClock.EXTRA_MESSAGE, label)
-                    }
-                    hour != null -> {
-                        putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_TIME)
-                        putExtra(AlarmClock.EXTRA_HOUR, hour)
-                        putExtra(AlarmClock.EXTRA_MINUTES, minute)
-                    }
-                    all -> putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_ALL)
-                    else -> putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_NEXT)
-                }
-            }
-            if (!startSystemActivity(intent)) {
-                "I couldn't reach the clock to cancel the alarm."
-            } else when {
-                !label.isNullOrBlank() -> "Asked the clock to cancel the $label alarm."
-                hour != null -> "Asked the clock to cancel the %02d:%02d alarm.".format(hour, minute)
-                all -> "Asked the clock to cancel all alarms."
-                else -> "Asked the clock to cancel the next alarm."
-            }
-        }
-        "set_alarm" -> {
-            val hour = tool.arguments["hour"]?.toIntOrNull()
-            val minute = tool.arguments["minute"]?.toIntOrNull() ?: 0
-            if (hour == null || hour !in 0..23 || minute !in 0..59) {
-                "Could not set the alarm — I need a valid time (hour 0-23, minute 0-59)."
-            } else {
-                val label = tool.arguments["label"].orEmpty()
-                val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
-                    putExtra(AlarmClock.EXTRA_HOUR, hour)
-                    putExtra(AlarmClock.EXTRA_MINUTES, minute)
-                    putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-                    if (label.isNotBlank()) putExtra(AlarmClock.EXTRA_MESSAGE, label)
-                }
-                if (startSystemActivity(intent)) {
-                    "Alarm set for %02d:%02d".format(hour, minute) +
-                        if (label.isNotBlank()) " ($label)." else "."
-                } else {
-                    "I couldn't set the alarm — no clock app handled it."
-                }
-            }
-        }
-        "add_event" -> {
-            val title = tool.arguments["title"]?.takeIf { it.isNotBlank() }
-            val day = tool.arguments["day"]
-            val startMillis = WhenResolver.resolve(day, tool.arguments["time"])
-                ?: tool.arguments["start"]?.let { parseIsoToMillis(it) }
-            if (title == null || startMillis == null) {
-                "I couldn't add it — I need a title, which day, and what time."
-            } else {
-                val duration = tool.arguments["duration_minutes"]?.toIntOrNull()?.takeIf { it > 0 } ?: 60
-                val location = tool.arguments["location"]?.takeIf { it.isNotBlank() }
-                val rrule = repeatToRrule(tool.arguments["repeat"], tool.arguments["until"])
-
-                // Default: invite the whole family (minus any excluded) on shared events; explicit
-                // `attendees` narrows to just those people; `notify_family=false` (personal reminders,
-                // chores) invites nobody.
-                val notifyFamily = tool.arguments["notify_family"]?.toBooleanStrictOrNull() ?: true
-                val explicitNames = splitItems(tool.arguments["attendees"])
-                val excludeNames = splitItems(tool.arguments["exclude_attendees"])
-                val members = if (notifyFamily || explicitNames.isNotEmpty()) householdManager.members() else emptyList()
-
-                val invited: List<Member> = when {
-                    explicitNames.isNotEmpty() -> explicitNames.mapNotNull { householdManager.resolveMember(it, members) }
-                    notifyFamily -> {
-                        val excludedKeys = excludeNames.mapNotNull { householdManager.resolveMember(it, members)?.lookupKey }.toSet()
-                        members.filter { it.lookupKey !in excludedKeys }
-                    }
-                    else -> emptyList()
-                }
-                val invitable = invited.filter { it.email.isNotBlank() }
-                // Only surface a "couldn't invite" note when specific people were named — silently
-                // skipping members with no email during the invite-everyone default is expected
-                // (e.g. kids), not worth mentioning every time.
-                val missingEmail = if (explicitNames.isNotEmpty()) invited.filter { it.email.isBlank() }.map { it.displayName } else emptyList()
-
-                val existing = withContext(Dispatchers.IO) { calendarManager.findEventsByTitle(title) }
-                    .firstOrNull { kotlin.math.abs(it.startMillis - startMillis) < 60_000L }
-                if (existing != null) {
-                    "\"$title\" is ALREADY on the calendar at ${spellOut(startMillis)} — nothing added, " +
-                        "there is no second copy. If the details need to change, use move_event on it."
-                } else {
-                    val id = withContext(Dispatchers.IO) {
-                        calendarManager.addEvent(title, startMillis, duration, location, rrule, invitable.map { it.email })
-                    }
-                    if (id != null) {
-                        "Added \"$title\" on ${spellOut(startMillis)}" + (if (rrule != null) ", repeating" else "") +
-                            (location?.let { " at $it" } ?: "") +
-                            (if (invitable.isNotEmpty()) ", invited ${invitable.joinToString(", ") { it.displayName }}" else "") +
-                            "." +
-                            (if (missingEmail.isNotEmpty()) " I couldn't invite ${missingEmail.joinToString(", ")} — no email on file." else "")
-                    } else {
-                        "I couldn't add that to the calendar."
-                    }
-                }
-            }
-        }
-        "get_events" -> {
-            // Default the range start to the START of today, not "now" — a bare "what's on today?"
-            // must include events earlier in the day (the 6pm event asked about at 8pm), not just
-            // what's still ahead.
-            val start = tool.arguments["start"]?.let { parseIsoToMillis(it) }
-                ?: LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            val end = tool.arguments["end"]?.let { parseIsoToMillis(it) } ?: (start + 7 * 24 * 3600_000L)
-            val trustedEmails = trustedOrganizerEmails(householdManager.members())
-            val events = withContext(Dispatchers.IO) { calendarManager.events(start, end, trustedEmails) }
-            if (events.isEmpty()) {
-                "Nothing is scheduled in that period."
-            } else {
-                events.joinToString("; ") { e ->
-                    val whenStr = Instant.ofEpochMilli(e.beginMillis).atZone(ZoneId.systemDefault())
-                        .format(DateTimeFormatter.ofPattern("EEE d MMM, h:mm a", Locale.ENGLISH))
-                    "${e.title} — $whenStr" + (e.location?.let { " at $it" } ?: "")
-                }
-            }
-        }
-        "cancel_event" -> {
-            val query = tool.arguments["title"]?.takeIf { it.isNotBlank() }
-            if (query == null) {
-                "Which event should I cancel? Tell me its name."
-            } else withContext(Dispatchers.IO) {
-                val matches = calendarManager.findEventsByTitle(query)
-                val picked = pickEvent(matches, tool.arguments["start"])
-                val all = tool.arguments["all"]?.toBoolean() == true
-                destructiveCallsThisTurn++
-                when {
-                    destructiveCallsThisTurn > MAX_DESTRUCTIVE_PER_TURN ->
-                        "STOP — nothing was cancelled. You have already removed " +
-                            "${MAX_DESTRUCTIVE_PER_TURN} things from the calendar in this one turn, " +
-                            "which is as many as you may do without checking. Tell the person what " +
-                            "you have removed so far and what is still left to do, and wait for " +
-                            "them to confirm before removing anything else."
-                    matches.isEmpty() -> "I couldn't find an event matching \"$query\" to cancel."
-                    all -> {
-                        val removed = matches.count { calendarManager.deleteEvent(it.id) }
-                        "Removed all $removed events matching \"$query\"."
-                    }
-                    picked == null -> "STOP — nothing was cancelled, and you must not run any more " +
-                        "calendar calls this turn. Several events match \"$query\". Reply asking " +
-                        "which one, and wait for the answer before doing anything else: " +
-                        describeMatches(matches)
-                    calendarManager.deleteEvent(picked.id) ->
-                        "Removed \"${picked.title}\" (${spellOut(picked.startMillis)})" +
-                            (if (picked.recurring) " and the whole repeating series" else "") + " from the calendar."
-                    else -> "I couldn't remove \"${picked.title}\" — the calendar refused the change."
-                }
-            }
-        }
-        "move_event" -> {
-            val query = tool.arguments["title"]?.takeIf { it.isNotBlank() }
-            if (query == null) {
-                "Which event should I change? Tell me its name."
-            } else withContext(Dispatchers.IO) {
-                val matches = calendarManager.findEventsByTitle(query)
-                val picked = pickEvent(matches, tool.arguments["start"])
-                val newStart = WhenResolver.resolve(tool.arguments["new_day"], tool.arguments["new_time"])
-                    ?: tool.arguments["new_start"]?.let { parseIsoToMillis(it) }
-                    // A time with no day means "same day, new time".
-                    ?: WhenResolver.parseTime(tool.arguments["new_time"])?.let { t ->
-                        picked?.let {
-                            Instant.ofEpochMilli(it.startMillis).atZone(ZoneId.systemDefault())
-                                .with(t).toInstant().toEpochMilli()
-                        }
-                    }
-                val duration = tool.arguments["duration_minutes"]?.toIntOrNull()?.takeIf { it > 0 }
-                val location = tool.arguments["location"]?.takeIf { it.isNotBlank() }
-                val newTitle = tool.arguments["new_title"]?.takeIf { it.isNotBlank() }
-                when {
-                    matches.isEmpty() -> "There's no event matching \"$query\" on the calendar to change."
-                    picked == null -> "STOP — nothing was changed, and you must not run any more " +
-                        "calendar calls this turn. Several events match \"$query\". Reply asking " +
-                        "which one, and wait for the answer: " + describeMatches(matches)
-                    newStart == null && duration == null && location == null && newTitle == null ->
-                        "Nothing to change — tell me what about \"${picked.title}\" is different now."
-                    calendarManager.moveEvent(picked.id, picked.recurring, newStart, duration, location, newTitle) -> {
-                        val what = listOfNotNull(
-                            newStart?.let { "now ${spellOut(it)}" },
-                            duration?.let { "$it minutes long" },
-                            location?.let { "at $it" },
-                            newTitle?.let { "called \"$it\"" },
-                        ).joinToString(", ")
-                        "Updated \"${picked.title}\": $what." +
-                            if (picked.recurring) " That's a repeating event, so every occurrence moved." else ""
-                    }
-                    else -> "I couldn't change \"${picked.title}\" — the calendar refused the update."
-                }
-            }
-        }
-        "add_to_shopping_list" -> {
-            val items = splitItems(tool.arguments["items"])
-            if (items.isEmpty()) {
-                "What should I add to the shopping list?"
-            } else {
-                val added = shoppingList.add(items)
-                when {
-                    added.isEmpty() -> "That's already on the list."
-                    added.size == 1 -> "Added ${added[0]} to the shopping list."
-                    else -> "Added ${added.joinToString(", ")} to the shopping list."
-                }
-            }
-        }
-        "remove_from_shopping_list" -> {
-            val removed = shoppingList.remove(splitItems(tool.arguments["items"]))
-            if (removed.isEmpty()) "I didn't find that on the list."
-            else "Removed ${removed.joinToString(", ")} from the shopping list."
-        }
-        "read_shopping_list" -> {
-            val items = shoppingList.items()
-            if (items.isEmpty()) "The shopping list is empty."
-            // Hand the model the raw list; it groups by category (dairy, produce, …) when speaking.
-            else "Shopping list (${items.size} items): ${items.joinToString(", ")}."
-        }
-        "clear_shopping_list" -> {
-            val n = shoppingList.clear()
-            if (n == 0) "The shopping list was already empty." else "Cleared the shopping list ($n items)."
-        }
-        "log_expense" -> {
-            val amount = tool.arguments["amount"]?.toDoubleOrNull()
-            val item = tool.arguments["item"]?.trim()
-            if (amount == null || amount <= 0 || item.isNullOrBlank()) {
-                "I need an amount and what it was for to log that expense."
-            } else {
-                val currency = tool.arguments["currency"]?.trim()?.takeIf { it.isNotBlank() }?.uppercase()
-                    ?: configManager.expenseCurrency
-                val timestamp = tool.arguments["date"]?.let { parseIsoToMillis(it) } ?: System.currentTimeMillis()
-                val entry = expenseManager.log(amount, currency, tool.arguments["category"], item, timestamp)
-                val whenStr = if (tool.arguments["date"] != null) {
-                    " on " + Instant.ofEpochMilli(entry.timestampMillis).atZone(ZoneId.systemDefault())
-                        .format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH))
-                } else ""
-                "Logged ${ExpenseManager.formatCents(entry.amountCents)} $currency for $item (${entry.category})$whenStr."
-            }
-        }
-        "query_expenses" -> {
-            val now = ZonedDateTime.now()
-            val period = tool.arguments["period"]?.trim()?.lowercase() ?: "month"
-            val startDate = when (period) {
-                "today" -> now.toLocalDate()
-                "week" -> now.toLocalDate().minusDays(6)
-                "year" -> now.toLocalDate().withDayOfYear(1)
-                "all" -> null
-                else -> now.toLocalDate().withDayOfMonth(1)
-            }
-            val startMillis = startDate?.atStartOfDay(now.zone)?.toInstant()?.toEpochMilli() ?: 0L
-            val endMillis = now.toInstant().toEpochMilli() + 1
-            val category = tool.arguments["category"]
-            val summary = expenseManager.query(startMillis, endMillis, category)
-            if (summary.count == 0) {
-                "No expenses logged for that period" + (category?.let { " in $it" } ?: "") + "."
-            } else {
-                val breakdown = summary.byCategory.entries.joinToString(", ") {
-                    "${it.key}: ${ExpenseManager.formatCents(it.value)} ${summary.currency}"
-                }
-                "Total ${ExpenseManager.formatCents(summary.totalCents)} ${summary.currency} over " +
-                    "${summary.count} expense(s). By category: $breakdown."
-            }
-        }
-        "delete_expense" -> {
-            val removed = expenseManager.delete(tool.arguments["item"])
-            if (removed == null) "I couldn't find an expense to remove."
-            else "Removed ${ExpenseManager.formatCents(removed.amountCents)} ${removed.currency} for ${removed.item}."
-        }
-        "remember" -> {
-            val fact = tool.arguments["fact"]?.trim().orEmpty()
-            if (fact.isEmpty()) {
-                "I need to know what to remember."
-            } else {
-                // Link to a member when `about` names one; otherwise store it as a family-wide fact.
-                val about = tool.arguments["about"]?.trim().orEmpty()
-                val member = about.takeIf { it.isNotEmpty() }
-                    ?.let { householdManager.resolveMember(it, householdManager.members()) }
-                // Embed every memory so it stays semantically searchable once it cools out of the
-                // always-loaded block (persona) or lives in the search-only general pool.
-                val embedding = brainClient.embed(fact)
-                val id = if (member?.lookupKey != null) {
-                    memoryManager.remember(fact, MemoryManager.SUBJECT_CONTACT, member.lookupKey, tool.arguments["category"], embedding)
-                } else {
-                    memoryManager.remember(fact, MemoryManager.SUBJECT_GENERAL, null, tool.arguments["category"], embedding)
-                }
-                if (id < 0) "I couldn't save that."
-                else "Saved to memory" + (member?.displayName?.let { " (about $it)" } ?: "") + "."
-            }
-        }
-        "forget" -> {
-            val fact = tool.arguments["fact"]?.trim().orEmpty()
-            if (fact.isEmpty()) {
-                "Tell me what to forget."
-            } else {
-                val about = tool.arguments["about"]?.trim().orEmpty()
-                val member = about.takeIf { it.isNotEmpty() }
-                    ?.let { householdManager.resolveMember(it, householdManager.members()) }
-                val n = memoryManager.forget(fact, member?.lookupKey)
-                if (n == 0) "I didn't have anything like that saved." else "Forgotten."
-            }
-        }
-        "search_memory" -> {
-            val query = tool.arguments["query"]?.trim().orEmpty()
-            if (query.isEmpty()) {
-                "What should I look for in my memory?"
-            } else {
-                val hits = memoryManager.search(query, brainClient.embed(query))
-                if (hits.isEmpty()) "I don't have anything about that saved."
-                else hits.joinToString("; ") { it.text }
-            }
-        }
+        in REACH_TOOLS -> reachActuator.run(tool)
+        in TIME_TOOLS -> timeActuator.run(tool)
+        in CALENDAR_TOOLS -> calendarActuator.run(tool, deletionBudget)
+        in HOME_TOOLS -> homeActuator.run(tool)
+        in MEMORY_TOOLS -> memoryActuator.run(tool)
         else -> "Unknown tool: ${tool.functionName}"
     }
 
     /** Household member emails, lowercased — the calendar's organizer allowlist (see [CalendarManager.events]). */
-    /** The only match, or the one whose start was named. Null = ambiguous, and the caller must ask. */
-    private fun pickEvent(
-        matches: List<CalendarManager.EventMatch>,
-        startArg: String?,
-    ): CalendarManager.EventMatch? {
-        if (matches.size == 1) return matches.first()
-        val wanted = startArg?.let { parseIsoToMillis(it) } ?: return null
-        return matches.firstOrNull { kotlin.math.abs(it.startMillis - wanted) < 60_000L }
-    }
-
-    /** Weekday-first timestamp; every calendar result names the day it landed on, not an ISO echo. */
-    private fun spellOut(millis: Long): String =
-        Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
-            .format(DateTimeFormatter.ofPattern("EEEE d MMMM, h:mm a", Locale.ENGLISH))
-
-    /** The ambiguity list; the ISO start is what the model hands back to pick a row. */
-    private fun describeMatches(matches: List<CalendarManager.EventMatch>): String =
-        matches.joinToString("; ") { m ->
-            val iso = Instant.ofEpochMilli(m.startMillis).atZone(ZoneId.systemDefault())
-                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm"))
-            "\"${m.title}\" ${spellOut(m.startMillis)} (start=$iso)" + if (m.recurring) " (repeating)" else ""
-        }
-
     private fun trustedOrganizerEmails(members: List<Member>): Set<String> =
         members.mapNotNull { it.email.takeIf { e -> e.isNotBlank() }?.lowercase() }.toSet()
-
-    /** Split a free-text item string ("milk, eggs and bread") into individual trimmed items. */
-    private fun splitItems(raw: String?): List<String> =
-        raw?.split(Regex("\\s*(?:,|;|\\band\\b|\\n)\\s*"))?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
-
-    /** Parse an ISO local date-time ("2026-07-14T17:30") or date to epoch millis; null if unparseable. */
-    private fun parseIsoToMillis(iso: String): Long? {
-        val zone = ZoneId.systemDefault()
-        return runCatching { LocalDateTime.parse(iso).atZone(zone).toInstant().toEpochMilli() }
-            .recoverCatching { LocalDate.parse(iso).atStartOfDay(zone).toInstant().toEpochMilli() }
-            .getOrNull()
-    }
-
-    /**
-     * Map a friendly repeat word (+ optional end date) to an RFC-5545 RRULE (weekday of a weekly
-     * rule comes from the start). [until] is the last local calendar day the series should still
-     * happen on ("until end of July" → that day) — folded in as an inclusive UNTIL bound, one
-     * second before local midnight, converted to UTC as RFC-5545 requires. Without it the series
-     * repeats forever, which is only right when nobody gave an end point.
-     */
-    private fun repeatToRrule(repeat: String?, until: String?): String? {
-        val freq = when (repeat?.lowercase()?.trim()) {
-            "daily" -> "FREQ=DAILY"
-            "weekly" -> "FREQ=WEEKLY"
-            "monthly" -> "FREQ=MONTHLY"
-            "yearly" -> "FREQ=YEARLY"
-            "weekdays" -> "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
-            else -> null
-        } ?: return null
-        val untilPart = until?.let { untilToRruleClause(it) }
-        return if (untilPart != null) "$freq;$untilPart" else freq
-    }
-
-    /** "YYYY-MM-DD" (last day the series still runs) -> "UNTIL=<UTC instant of that day's end>". */
-    private fun untilToRruleClause(untilDate: String): String? = runCatching {
-        val endOfDayLocal = LocalDate.parse(untilDate).atTime(23, 59, 59).atZone(ZoneId.systemDefault())
-        val utcStamp = endOfDayLocal.withZoneSameInstant(ZoneId.of("UTC"))
-            .format(DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'"))
-        "UNTIL=$utcStamp"
-    }.getOrNull()
 
     /**
      * The "live device state" block injected into the model's context every turn (ambient facts,
@@ -1329,8 +910,7 @@ class HarnessService : Service() {
      * rather than padding every turn with an always-empty "none"/"nothing scheduled" line — the
      * header itself states that an absent category means there's currently none, so omission stays
      * unambiguous. Runs off the main thread (location + calendar are content-provider reads).
-     */
-    /**
+     *
      * @param textSender on the SMS transport: replaces the voice speaker guess and appends
      * [TeyaPersona.textTransportBlock].
      */
@@ -1497,16 +1077,6 @@ class HarnessService : Service() {
     } catch (e: Exception) {
         Log.e(TAG, "Failed to read location", e)
         null
-    }
-
-    /** Fire a system intent (e.g. AlarmClock) from the service. Returns false if nothing handled it. */
-    private fun startSystemActivity(intent: Intent): Boolean = try {
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        startActivity(intent)
-        true
-    } catch (e: Exception) {
-        Log.e(TAG, "Failed to start activity for ${intent.action}", e)
-        false
     }
 
     private fun trimHistory(history: MutableList<ChatMessage>) {

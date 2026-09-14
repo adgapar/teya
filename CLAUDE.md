@@ -13,7 +13,8 @@ On-device Android app (the "harness") + Mistral cloud (the "brain"). Voice loop:
 
 Key files:
 - `harness/HarnessService.kt` — the agent loop. `onTrigger()` → `runConversation()` (multi-turn, re-entrancy guard,
-  conversation history), `handleToolCall()`, foreground service, UI state broadcasts.
+  conversation history), `respond()`/`respondText()` over the shared `runToolRound()`, `executeTool()` routing to
+  `harness/actuators/`, foreground service, UI state broadcasts.
 - `brain/MistralClient.kt` — Mistral provider only. `processText(List<ChatMessage>)` (chat + tools),
   `transcribe()` (Voxtral STT), `synthesizeSpeech()` (mp3) + `streamSpeechPcm()` (streaming TTS), `warmUp()`.
   Interface + types in `brain/BrainClient.kt`, wire types in `brain/MistralModels.kt`.
@@ -44,8 +45,11 @@ Key files:
   `AgentFace.kt`/`OnboardingParticles.kt` particle engine) and `FormedFaceVisualization` (`FormedFace.kt`
   — isolated vector eyes+mouth, no particles, no shared internals with the other one).
 
-### Adding a tool (the next phase)
-1. Add a `ToolSpec` to `AgentTools.all`. 2. Handle it in `HarnessService.handleToolCall()`. 3. Mention it in `TeyaPersona`.
+### Adding a tool
+1. Add a `ToolSpec` to `AgentTools.all`. 2. Handle it in the matching
+`harness/actuators/*Actuator` (Reach · Time · Calendar · Home · Memory) and add its name to that
+domain's set in `HarnessService`'s companion — `executeTool` is a router, not a `when` over tools.
+3. Mention it in `TeyaPersona`.
 
 ### Adding a visualization
 1. Implement `AgentVisualization` (`ui/face/AgentVisualization.kt`) — `id`, `displayName`, `Face()`,
