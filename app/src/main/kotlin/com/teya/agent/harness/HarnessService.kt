@@ -712,24 +712,8 @@ class HarnessService : Service() {
                 return
             }
 
-            // Tools requested: record the assistant turn (with any spoken preamble + ALL calls),
-            // run each sequentially (no races on shared stores), feed results back, then loop.
-            history.add(ChatMessage(
-                role = "assistant",
-                content = fullText.toString().ifBlank { null },
-                toolCalls = response.toolCalls,
-            ))
-            for (toolCall in response.toolCalls) {
-                Log.d(TAG, "Tool call: ${toolCall.functionName}(${toolCall.arguments})")
-                val result = executeTool(toolCall)
-                Log.d(TAG, "Tool result: $result")
-                history.add(ChatMessage(
-                    role = "tool",
-                    content = result,
-                    toolCallId = toolCall.id,
-                    name = toolCall.functionName,
-                ))
-            }
+            // Tools requested — hand the round to the shared runner and loop.
+            runToolRound(fullText.toString(), response.toolCalls, history)
         }
         if (interrupted) return
         // All tool rounds exhausted without a text answer.
@@ -757,6 +741,46 @@ class HarnessService : Service() {
             i++
         }
         return end
+    }
+
+    /**
+     * One tool round, with no transport in it — the part [respond] (voice) and [respondText] (SMS)
+     * genuinely share. Records the assistant turn (whatever it said or wrote, plus EVERY call it
+     * asked for), runs the calls **sequentially in code** so two of them can't race on the same
+     * store, and feeds each result back by `tool_call_id`.
+     *
+     * [allowedTools], when given, is a second line of defence for the text transport: those tools
+     * were never offered to the model for that call (see [AgentTools.withheldFromText]), so a call
+     * to one means something is wrong — refuse it here rather than execute it, and let the model
+     * phrase the refusal.
+     */
+    private suspend fun runToolRound(
+        assistantText: String,
+        toolCalls: List<ToolCall>,
+        history: MutableList<ChatMessage>,
+        allowedTools: Set<String>? = null,
+    ) {
+        history.add(ChatMessage(
+            role = "assistant",
+            content = assistantText.ifBlank { null },
+            toolCalls = toolCalls,
+        ))
+        for (toolCall in toolCalls) {
+            Log.d(TAG, "Tool call: ${toolCall.functionName}(${toolCall.arguments})")
+            val result = if (allowedTools != null && toolCall.functionName !in allowedTools) {
+                Log.w(TAG, "Refused ${toolCall.functionName} — not available on this transport")
+                "That isn't something you can do in this conversation — it has to be asked at the home device."
+            } else {
+                executeTool(toolCall)
+            }
+            Log.d(TAG, "Tool result: $result")
+            history.add(ChatMessage(
+                role = "tool",
+                content = result,
+                toolCallId = toolCall.id,
+                name = toolCall.functionName,
+            ))
+        }
     }
 
     /**
