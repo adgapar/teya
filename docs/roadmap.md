@@ -86,6 +86,57 @@ TODO. The persona now states that a sent text cannot be recalled, per [[create-n
 SMS has no inverse, so the prompt says so explicitly instead of letting the model improvise
 "I've unsent it". Design + the remaining phases: `thoughts/shared/plans/2026-08-02-sms-transport.md`._
 
+_2026-09-14 (**the SIM is in and the plan is being exercised**): **SMS became a real second
+transport — you can text Teya and she answers.** Phases 2–4 of
+`thoughts/shared/plans/2026-08-02-sms-transport.md`, built together._
+_• **Phase 2, the refactor.** The transport-agnostic part of a turn came out of the voice-shaped
+`respond()` as `runToolRound()` — record the assistant turn with every call it asked for, run them
+sequentially (no store races), feed each result back by `tool_call_id`. It's smaller than "the
+loop", deliberately: streaming, sentence cutting, `AgentState` and barge-in are all transport, so
+the voice and text paths each keep their own loop over the shared round rather than sharing one
+parameterized loop that would have to fake a speaker for text. `respond()` behaves exactly as
+before._
+_• **Phase 3, inbound.** `messaging/SmsReceiver` (manifest-registered on `SMS_RECEIVED`, guarded by
+the system-only `BROADCAST_SMS`; multipart parts concatenated before anything downstream sees a
+half sentence) hands the text to `HarnessService`, which resolves the sender's number to a household
+member (`PhoneNumberUtils.compare` — `0612345678` and `+33612345678` are one person), loads that
+member's persisted session (`messaging/TextSessionStore` → Room `text_session`, v4→v5, 30-minute
+idle timeout), runs the turn through `respondText()`, and replies via `SmsSender.sendTo`. **Teya is
+still not the default SMS app** — `RECEIVE_SMS` + `SMS_RECEIVED` is enough to observe messages;
+`SMS_DELIVER` (owning the family's whole messaging experience) is the `ROLE_DIALER` trap again._
+_Identity here is caller ID, which is spoofable, so: an unknown number gets **silence** (a reply
+confirms to a stranger that something is listening, and costs a segment to say so), a sender past
+20 messages/hour gets silence too (`messaging/InboundRateLimiter`), and the irreversible/
+outward-facing tools are withheld — `AgentTools.withheldFromText` (`place_call`, `send_message`,
+`clear_shopping_list`, `cancel_event`, `delete_expense`, `forget`), enforced twice: never offered to
+the model on this transport (new per-call `allowedTools` on `BrainClient.processText`) and refused
+by `runToolRound` if one is somehow asked for anyway. Text turns serialize against each other but
+deliberately **not** against the voice loop — a texted question must not wait out a conversation at
+the wall, and the wall face never flickers because someone texted._
+_• **Phase 4, written shaping.** `TeyaPersona.textTransportBlock(sender)` rides in the live context
+like the household profile: it describes the *medium* (read on a screen, costs money per 160
+characters, list-shaped things on their own lines) and suspends the spoken one-sentence rule, while
+naming no per-tool format — same generic/derived discipline as the reply-language directive. It also
+states who is asking as **fact**, not the voice path's soft guess: inbound SMS gives identity for
+free. A session that idles out is handed to `captureEpisodic` before being replaced, so texted
+conversations feed memory like spoken ones do._
+_• **All three checkpoints verified live the same day**, on the O2 SIM: "call Adilet" out loud →
+`place_call({name=Dad})` resolved through the roster and the phone **rang for real**; "text the
+shopping list" → arrived and read well on the receiving phone; a text **to** the device → answered
+by SMS in ~1.0s, and a second text 8s later came back as `Processing 3 message(s)`, i.e. the
+persisted session reloaded and continued (so the v4→v5 migration and `text_session` are exercised
+too). The adversarial check passed as well: "call Dad" **by text** was refused, as designed._
+_• **Real bug found on the way in, unrelated to SMS and worth its own note**:
+`startForegroundService()` was still passing `FOREGROUND_SERVICE_TYPE_PHONE_CALL`, which stopped
+being declared in the manifest when the inbound-call half was removed on 2026-09-09. Every start
+since then threw `IllegalArgumentException` → caught → logged → **the service ran in the background
+the whole time**, killable at any moment and (as of this slice) unable to legally start itself from
+the SMS receiver. Now microphone-only; `isForeground=true` confirmed on-device. The lesson worth
+keeping: `startForeground`'s type argument must stay a subset of the manifest's, and removing a
+manifest type silently breaks it at runtime rather than at build time._
+_• Also fixed: the sent-`PendingIntent` log read its result backwards — `-1` is `Activity.RESULT_OK`,
+not a failure (`SmsManager`'s error codes are the small positive ones)._
+
 ## ✅ Done
 
 - Android app + always-on foreground service (`HarnessService`), **particle-field voice face** (`AgentFace`), centred live transcript.
@@ -211,12 +262,11 @@ SMS has no inverse, so the prompt says so explicitly instead of letting the mode
 
 ## 🔜 Next (recommended order)
 
-1. **Verify calls + SMS live on the SIM** — both are built and compile (see the 2026-09-09 block);
-   neither has placed a real call or sent a real text. **Do the hardware check first**: confirm the
-   plan actually allows outbound voice *and* SMS before reading any failure as a code bug. Then:
-   "call Dad" out loud → the phone rings; "text me the shopping list" → the text arrives on a real
-   phone. Both need `CALL_PHONE`/`SEND_SMS` granted, which means a permission prompt on the next
-   install.
+1. ✅ **Calls + SMS verified live on the SIM** (2026-09-14) — a real call rang, a real text arrived,
+   a text to the device was answered by text, and the withheld-tool refusal held. See the dated
+   block above. Open follow-on: **the call hands the screen to the platform dialer** — hosting it
+   inside Teya's own interface needs `ROLE_DIALER` + an `InCallService`, which means owning the
+   device's entire telephony UX (incoming calls included). Not started; decide before building.
 2. **Make interruption work well** — ✅ continuous mid-sentence barge-in during Teya's own speech
    now ships as the default, via a WebView/Chromium-hosted AEC (`getUserMedia`'s own echo
    cancellation). `NativeAec3` (vendored WebRTC AEC3, never achieved real suppression on this
@@ -360,11 +410,10 @@ Open-Meteo), with location from the household profile or native device location.
    fruits and then 19 euros for groceries" logged two independent rows in one turn (parallel tool
    calls), both categorized `groceries`; "how much do you guys spend?" correctly answered "31 euros
    total, all on groceries" via `query_expenses(period=month)` — no LLM arithmetic.
-7. ✅ **`send_message`** — outbound SMS to a household member, sharing the call path's roster and
-   number validation (2026-09-09; built, not yet verified live). The async *inbound* side — texting
-   Teya and getting an answer back — is phases 2–4 of
-   `thoughts/shared/plans/2026-08-02-sms-transport.md`, and needs the transport-agnostic tool loop
-   extracted out of the voice-shaped `respond()` first.
+7. ✅ **SMS, both directions** — outbound `send_message` to a household member, sharing the call
+   path's roster and number validation (2026-09-09), and the inbound side — texting Teya and getting
+   an answer back, on the same brain, tools and stores through a different pipe (2026-09-14, phases
+   2–4; see the dated block above). **All verified live on 2026-09-14.**
 8. Device state & control — battery, volume/DND, open-app/launch intents.
 
 ## 🧊 Backlog / ideas

@@ -2,7 +2,7 @@
 date: 2026-08-02T00:00:00Z
 topic: "SMS as a second transport — talking to Teya when you're not standing in front of her"
 tags: [sms, transport, messaging, telephony, harnessservice, household, security]
-status: phase 1 (outbound) built 2026-09-09, not yet verified live; phases 2-4 not started
+status: complete — phases 1-4 built and verified live on-device 2026-09-14
 ---
 
 # SMS Transport: Teya's Async Channel
@@ -189,23 +189,44 @@ body)` `ToolSpec` → `executeTool` branch → `TeyaPersona` mention, recipient 
 design didn't call: it shares the call path's number validation (one rule for "is this diallable"),
 and the sent `PendingIntent` logging needed `buildFeatures.buildConfig` turned on for the first time.
 Open question #4 answered in the persona: SMS has no inverse and the prompt says so outright.
-*Checkpoint*: **not yet run** — "Teya, text me the shopping list" out loud at the wall → the text
-arrives on a real phone. This alone closes the olive-oil hole in one direction.
+*Checkpoint*: ✅ **passed 2026-09-14** — "text the shopping list" out loud at the wall; it arrived on
+a real phone and read well there. This alone closes the olive-oil hole in one direction.
 
-**Phase 2 — extract the transport-agnostic tool loop.** Refactor only; `respond()` keeps its exact
-current behavior on top of the extracted core.
+**Phase 2 — extract the transport-agnostic tool loop.** ✅ **Built 2026-09-14.** The extracted core
+turned out to be smaller than "the loop": it is `HarnessService.runToolRound()` — record the
+assistant turn with every call it asked for, run them sequentially, feed each result back by
+`tool_call_id`. Everything around it (streaming, sentence cutting, `AgentState`, barge-in on one
+side; nothing at all on the other) is transport, so `respond()` and the new `respondText()` each
+keep their own loop over it rather than sharing a parameterized one that would have to fake a
+speaker for the text path. `respond()`'s behavior is unchanged — it lost sixteen lines to the call.
 *Checkpoint*: full voice conversation with tool calls and barge-in behaves identically to before.
 No new feature ships in this phase — that's the point.
 
-**Phase 3 — inbound.** Receiver → number→`Member` resolution → persisted per-member session →
-text turn on the extracted core → SMS reply. Queueing against `conversationActive`, rate limit,
-the irreversible-tool carve-out.
-*Checkpoint*: text "what's on the shopping list?" from a household phone → correct reply by SMS,
-with the wall device idle and its face never leaving IDLE. Then: "add olive oil" by text → visible
-at the wall.
+**Phase 3 — inbound.** ✅ **Built 2026-09-14**, as designed: `messaging/SmsReceiver` (manifest-
+registered on `SMS_RECEIVED`, guarded by the system-only `BROADCAST_SMS`, multipart parts
+concatenated before anything downstream sees them) → `HarnessService.ACTION_SMS_RECEIVED` →
+`HouseholdManager.resolveMemberByNumber` (`PhoneNumberUtils.compare`, so `0612345678` and
+`+33612345678` are one person) → `messaging/TextSessionStore` (Room `text_session`, v4→v5, keyed by
+the member's Contacts lookupKey, 30-minute idle timeout) → `respondText` on the extracted core →
+reply via `SmsSender.sendTo`. `messaging/InboundRateLimiter` caps a sender at 20 messages/hour;
+`AgentTools.withheldFromText` is the carve-out, enforced twice — those tools are never offered to
+the model on this transport, and `runToolRound` refuses one anyway if it somehow gets asked for.
+Two things the design didn't call: an unknown number and a rate-limited one both get **silence**,
+not a refusal (a reply confirms to a stranger that something is listening, and costs a segment to
+do it); and text turns serialize against each other (`textTurnMutex`) but deliberately **not**
+against the voice loop — a texted question must not wait out a conversation at the wall.
+*Checkpoint*: ✅ **passed 2026-09-14** — a text to the device came back answered by SMS in ~1.0s with
+the wall idle, and a second text 8s later logged `Processing 3 message(s)`: the persisted session
+reloaded and continued. "call Dad" **by text** was refused, so the carve-out holds in practice.
 
-**Phase 4 — written-output shaping.** Transport-aware prompt addendum, length targets, session
-idle-timeout tuning, `captureEpisodic` on text sessions.
+**Phase 4 — written-output shaping.** ✅ **Built 2026-09-14.** `TeyaPersona.textTransportBlock(sender)`
+rides in the live context the same way the household profile does — it describes the *medium* (read
+on a screen, costs money per 160 characters, list-shaped things belong on their own lines) and
+explicitly suspends the spoken one-sentence rule, but names no per-tool format, same discipline as
+the reply-language directive. It also states the sender by name as **fact**, not as the voice path's
+soft guess: inbound SMS gives identity for free. `captureEpisodic` runs on the stale history when an
+idle-timed-out session is replaced, so texted conversations feed memory like spoken ones. The
+30-minute timeout is still the original guess (open question 3).
 *Checkpoint*: a texted list reads like a list; a texted answer reads like a message, not a
 transcript of speech.
 

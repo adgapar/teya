@@ -48,13 +48,14 @@ Right now, that's:
 - **Timers & alarms** — set one, and it announces out loud, in its own voice, when time's up.
 - **Reminders** — "remind me to call the plumber in twenty minutes" or "remind me to bring cupcakes to the school run" becomes a timer or a quiet calendar entry, whichever actually fits.
 - **Expenses** — "12 euros for fruit" gets logged and categorized on the spot; ask "how much have we spent this month" and it adds the numbers up exactly, never guessing.
-- **Calls** — "Call Grandma," spoken by a five-year-old who can't navigate a dialer, places a normal, hands-free cellular call, but only to someone on an approved family contacts allowlist: no path to dialing an unknown, arbitrary, or premium number.
+- **Calls** — "Call Grandma," spoken by a five-year-old who can't navigate a dialer, places a normal, hands-free cellular call, but only to someone in the household: no path to dialing an unknown, arbitrary, or premium number.
+- **Text messages, both ways** — everything above is bolted to a wall, which is no help to the person standing in the supermarket aisle. So Teya sends texts ("text Dad the shopping list") and answers them: text the house from anywhere and you get a reply, from the same assistant, with the same lists, calendar and memory behind it. Plain SMS, so there is nothing to install and no account to make. Only household numbers get an answer, and the things that can't be undone or that reach outside the house — placing a call, wiping a list, deleting a memory — are deliberately not available over text, because a text message isn't proof of who sent it.
 
 The biggest beneficiary is whoever in the house carries the mental load: the appointments, the meals, the logistics, the school admin nobody else tracks. Teya becomes a second brain for the household, running quietly in the background. The fuller list, including what's still ahead, lives in [docs/roadmap.md](./docs/roadmap.md).
 
-It's locked down by design: a boxed home appliance fixed in place, running on fresh accounts created solely to operate it, never the family's personal Google, social, or banking logins. **There's nothing personal on it to hijack or steal.** Combined with the calling allowlist, that's what makes it safe to leave on a wall within reach of kids and guests.
+It's locked down by design: a boxed home appliance fixed in place, running on fresh accounts created solely to operate it, never the family's personal Google, social, or banking logins. **There's nothing personal on it to hijack or steal.** Combined with calls and texts reaching only the household itself, that's what makes it safe to leave on a wall within reach of kids and guests.
 
-Privacy works the same way: it's built into the architecture itself. The household roster, per-person memory, and the contacts allowlist live on the device. Raw conversation transcripts stay unwritten, never touching disk. Only what a turn needs to think and speak, or what the nightly dream needs to consolidate memories, goes to the model.
+Privacy works the same way: it's built into the architecture itself. The household roster, per-person memory, and the text conversations live on the device. Raw conversation transcripts stay unwritten, never touching disk. Only what a turn needs to think and speak, or what the nightly dream needs to consolidate memories, goes to the model.
 
 ## part of the family
 
@@ -91,13 +92,13 @@ There's no backend server behind any of this: family data and device control sta
 
 The app is native Kotlin, because it needs deep access to Android's own APIs: reading notifications, acting inside other apps, placing calls, running as an always-on foreground service. Hardware cost and iOS's own lockdown on that kind of background and permission access ruled that platform out. And the app never goes through Play Store or the App Store, so cross-platform's real selling point, one codebase shipped to both stores, was never relevant here.
 
-A call gets placed and then left alone: when a kid says "call Dad," the app dials a normal cellular call and steps aside. It never joins the conversation, and stops managing the call once dialed. A plain cellular call on the SIM: no VoIP, no audio capture, no root.
+A call gets placed and then left alone: when a kid says "call Dad," the app dials a normal cellular call and steps aside. It never joins the conversation, and stops managing the call once dialed. A plain cellular call on the SIM: no VoIP, no audio capture, no root. Texting is the mirror image and the reason it exists — the call hands the phone over to the person, the text hands the answer to someone who isn't in the room.
 
 What actually runs where:
 
-- **On-device (local, no network round-trip):** the wake word (a self-trained `hey_teya` model), barge-in/VAD and echo cancellation for mid-sentence interruption, per-speaker voice ID, the animated on-screen presence, the shopping list, the expense log, and all of family memory, the household roster, aliases, and the contacts allowlist.
+- **On-device (local, no network round-trip):** the wake word (a self-trained `hey_teya` model), barge-in/VAD and echo cancellation for mid-sentence interruption, per-speaker voice ID, the animated on-screen presence, the shopping list, the expense log, and all of family memory, the household roster, aliases, and the text-message conversations.
 - **Cloud, via Mistral:** reasoning (the tool-use loop), speech-to-text, and text-to-speech. This is the only mandatory cloud dependency in the system.
-- **Phone APIs:** telephony (outbound calls), calendar and alarms/timers (shipped), and, still ahead, reading other apps' notifications, acting inside other apps, and smart-home control over BLE/Matter.
+- **Phone APIs:** telephony (outbound calls), SMS in both directions, calendar and alarms/timers (shipped), and, still ahead, reading other apps' notifications, acting inside other apps, and smart-home control over BLE/Matter.
 
 None of this needs to be impressive on paper. It needs to work quietly enough that nobody in the house thinks about it.
 

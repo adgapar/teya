@@ -29,7 +29,12 @@ Key files:
 - `voice/WakeWordEngine.kt` — microWakeWord: our own `hey_teya.tflite` classifier fed by
   `voice/MicroFrontend.kt` (JNI wrapper around the vendored native `app/src/main/cpp/microfrontend/`
   feature extractor); `NoiseSuppressor` + software input gain/threshold/patience (`ConfigManager`).
-- `safety/` — Room contact allowlist (call safety). `telephony/` — dialer/actuator (call feature).
+- `telephony/` — dialer/actuator (outbound calls; the household roster is the allowlist).
+  `safety/` — Room DB (`TeyaDatabase`); its `contact_allowlist` table is legacy and unread.
+- `messaging/` — SMS, Teya's **second transport**: `SmsSender` (outbound), `SmsReceiver` +
+  `TextSessionStore` + `InboundRateLimiter` (inbound — text her, she answers, on the same brain and
+  tools via `HarnessService.handleInboundText` → `respondText` → the shared `runToolRound`).
+  Design: `thoughts/shared/plans/2026-08-02-sms-transport.md`.
 - `MainActivity` (orb + dev overlay), `SetupActivity` (LAUNCHER; API-key entry), `SettingsActivity`.
 - `ui/face/AgentVisualization.kt` — the pluggable presence design: `Face()` (conversation, driven by
   `AgentState`) + `Ambient()` (Admin/onboarding background, driven by `OnboardingCategory`), plus
