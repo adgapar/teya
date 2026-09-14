@@ -1400,7 +1400,9 @@ class HarnessService : Service() {
             if (profile.isNotBlank()) append("\n\n").append(profile)
             if (memory.isNotBlank()) append("\n\n").append(memory)
             if (speaker.isNotBlank()) append("\n\n").append(speaker)
-            if (textSender != null) append("\n\n").append(TeyaPersona.textTransportBlock(textSender.displayName))
+            if (textSender != null) append("\n\n").append(
+                TeyaPersona.textTransportBlock(textSender.displayName, AgentTools.withheldFromText)
+            )
         }
         // TODO: gate behind BuildConfig.DEBUG — this line logs location + memory (PII).
         Log.d(TAG, "Live context: ${full.replace("\n", " | ")}")

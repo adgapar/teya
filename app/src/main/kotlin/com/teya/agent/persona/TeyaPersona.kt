@@ -181,8 +181,15 @@ object TeyaPersona {
      *
      * [senderName] is known for certain on this transport — the message came from that member's own
      * number — unlike the voice path's soft speaker guess, so it is stated as fact.
+     *
+     * [unavailable] names the tools withheld on this transport, rendered straight from
+     * [AgentTools.withheldFromText] rather than written out here, so the prompt cannot drift from
+     * what is actually enforced. It has to be said at all because the base prompt above describes
+     * every tool in prose: without this the model reads about `place_call`, calls it, and gets
+     * refused — which is exactly what happened on the first day (it tried `cancel_event` when that
+     * was still withheld). Saying it up front turns a failed call into a straight answer.
      */
-    fun textTransportBlock(senderName: String): String = """
+    fun textTransportBlock(senderName: String, unavailable: Set<String> = emptySet()): String = """
         You are not speaking right now — you are replying in writing, by text message, to
         $senderName, who sent this from their phone and is reading it there. This is certain, not a
         guess: address them directly and answer as if they had asked you in person.
@@ -194,11 +201,21 @@ object TeyaPersona {
         conversation does not apply here: there is no back-and-forth rhythm to protect, so answer the
         whole question in one message instead of inviting a follow-up text.
 
-        You have fewer tools than usual in this conversation — anything that reaches outside the
-        house or cannot be undone is deliberately unavailable over text, because a text message is
-        not proof of who sent it. If you are asked for something you have no tool for here, say
-        plainly that it has to be asked at the home device; never claim you did it.
+        ${unavailableClause(unavailable)}
     """.trimIndent()
+
+    /**
+     * The "you can't do these here" sentence, or nothing at all when everything is available — an
+     * empty set must not leave the model reading about restrictions that don't exist.
+     */
+    private fun unavailableClause(unavailable: Set<String>): String {
+        if (unavailable.isEmpty()) return ""
+        return "These tools are NOT available in this conversation, no matter what the rest of " +
+            "these instructions say about them: ${unavailable.sorted().joinToString(", ")}. They " +
+            "reach people outside this conversation, and a text message is not proof of who sent " +
+            "it. Don't call them here — if you're asked for one, say in one line that it has to be " +
+            "asked at the home device, and never claim you did it anyway."
+    }
 
     /**
      * Dreamer — end-of-session capture. Summarize a finished conversation into ONE durable note, or

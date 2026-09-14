@@ -107,8 +107,7 @@ still not the default SMS app** — `RECEIVE_SMS` + `SMS_RECEIVED` is enough to 
 _Identity here is caller ID, which is spoofable, so: an unknown number gets **silence** (a reply
 confirms to a stranger that something is listening, and costs a segment to say so), a sender past
 20 messages/hour gets silence too (`messaging/InboundRateLimiter`), and the irreversible/
-outward-facing tools are withheld — `AgentTools.withheldFromText` (`place_call`, `send_message`,
-`clear_shopping_list`, `cancel_event`, `delete_expense`, `forget`), enforced twice: never offered to
+outward-facing tools are withheld — `AgentTools.withheldFromText`, enforced twice: never offered to
 the model on this transport (new per-call `allowedTools` on `BrainClient.processText`) and refused
 by `runToolRound` if one is somehow asked for anyway. Text turns serialize against each other but
 deliberately **not** against the voice loop — a texted question must not wait out a conversation at
@@ -134,6 +133,18 @@ the whole time**, killable at any moment and (as of this slice) unable to legall
 the SMS receiver. Now microphone-only; `isForeground=true` confirmed on-device. The lesson worth
 keeping: `startForeground`'s type argument must stay a subset of the manifest's, and removing a
 manifest type silently breaks it at runtime rather than at build time._
+_• **The carve-out was too wide, and real use said so within the hour.** It first withheld six
+tools — the outward-facing ones plus `cancel_event`/`clear_shopping_list`/`delete_expense`/`forget`
+on irreversibility grounds — and a genuine "clean up the calendar" text was refused the same
+afternoon (the logs show the model calling `cancel_event` anyway and `runToolRound` catching it,
+which is the second layer working, but the right outcome was to allow it). Narrowed to **reach
+only**: `place_call` and `send_message`, the two where a spoofed number would make Teya act on
+someone outside the conversation. The rest destroys household data the sender could equally destroy
+by walking up to the wall and saying so out loud, and "someone spoofs a family number to vandalise
+the shopping list" is not a threat a home appliance needs to price in. Same episode surfaced a
+second thing: the base persona describes every tool in prose, so on the text transport the model was
+reading about tools it hadn't been given — `textTransportBlock` now names the withheld ones,
+rendered straight from `AgentTools.withheldFromText` so the prompt can't drift from what's enforced._
 _• Also fixed: the sent-`PendingIntent` log read its result backwards — `-1` is `Activity.RESULT_OK`,
 not a failure (`SmsManager`'s error codes are the small positive ones)._
 

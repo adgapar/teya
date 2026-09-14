@@ -428,19 +428,24 @@ object AgentTools {
      * Withheld from the **inbound text transport** (someone texting Teya) — the one carve-out in an
      * otherwise identical tool set. Not a sensitivity ranking: a household has no internal
      * need-to-know boundary, and gating "private" tools when the only reader is the person whose
-     * data it is would be theatre. The line is **irreversibility and reach**, because an inbound
-     * text is authenticated by nothing stronger than its originating number, which is spoofable.
-     * The blast radius of a spoofed "add olive oil" is olive oil; a spoofed `place_call` or
-     * `forget` does damage the attacker never has to see a reply to collect.
-     * See `thoughts/shared/plans/2026-08-02-sms-transport.md` → Security.
+     * data it is would be theatre.
+     *
+     * The line is **reach**: an inbound text is authenticated by nothing stronger than its
+     * originating number, which is spoofable, so what a spoofer must not get is the ability to make
+     * Teya act on the world *outside* the house — ring a real person's phone, or relay a message as
+     * the family. Those two, and only those two.
+     *
+     * Deliberately narrower than it first shipped (2026-09-14). It also withheld `cancel_event`,
+     * `clear_shopping_list`, `delete_expense` and `forget` on irreversibility grounds, and that
+     * blocked a real household request ("clean up the calendar") within an hour of shipping. The
+     * reasoning didn't hold: those destroy household data the sender could equally destroy by
+     * walking up to the wall and saying so out loud, and the attacker who spoofs a family number to
+     * vandalise a shopping list is not a threat a home appliance needs to price in. Full reasoning:
+     * `thoughts/shared/plans/2026-08-02-sms-transport.md` → Security.
      */
     val withheldFromText: Set<String> = setOf(
-        "place_call",            // reaches outside the house, and rings someone's real phone
-        "send_message",          // ditto — would make Teya a relay for whoever spoofed the number
-        "clear_shopping_list",   // wipes a shared store in one call
-        "cancel_event",          // removes something from everyone's real calendar
-        "delete_expense",        // no undo
-        "forget",                // no undo, and deletes what Teya knows about a person
+        "place_call",     // rings a real person's phone, outside the house and outside the reply
+        "send_message",   // would make Teya a relay for whoever spoofed the number
     )
 
     /** The tool names offered on the text transport — everything except [withheldFromText]. */

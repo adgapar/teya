@@ -147,10 +147,18 @@ household number can drive every tool Teya has — including `place_call`, `canc
 Proportionate response for a home appliance, in order:
 
 1. **Accept it for read/append operations.** The blast radius of a spoofed "add olive oil" is olive oil.
-2. **Do not expose destructive or outward-facing tools on the inbound text path.** Not "gating by
-   sensitivity" (rejected above) — gating by *irreversibility and reach*. `place_call`,
-   `clear_shopping_list`, `cancel_event`, `forget` are a different risk class from reading a list,
-   because their damage doesn't need the attacker to see any reply. This is the one carve-out.
+2. **Do not expose outward-facing tools on the inbound text path.** Not "gating by sensitivity"
+   (rejected above) — gating by *reach*. This is the one carve-out.
+   **Revised 2026-09-14, after a day of real use.** It shipped as "irreversibility *and* reach" —
+   `place_call`, `send_message`, `clear_shopping_list`, `cancel_event`, `delete_expense`, `forget` —
+   and within the hour it refused a genuine "clean up the calendar" text from a household member.
+   The irreversibility half doesn't survive contact: those tools destroy household data that the
+   same person could destroy by walking up to the wall and saying so, and an attacker who spoofs a
+   family number to vandalise a shopping list is not a threat a home appliance needs to price in.
+   What *does* survive is reach — `place_call` and `send_message` make Teya act on someone outside
+   the conversation entirely (a phone rings, a message arrives as the family), and the attacker
+   never needs to see a reply to collect that. Those two stay withheld; everything else matches the
+   voice transport exactly, which is what the no-gating argument above wanted all along.
 3. **Rate-limit inbound**, per number. Cheap, and blunts both spoofing and a stuck sender loop.
 
 **Carrier plaintext** is the other one: SMS transits the carrier in the clear and lands in their
@@ -217,7 +225,11 @@ do it); and text turns serialize against each other (`textTurnMutex`) but delibe
 against the voice loop — a texted question must not wait out a conversation at the wall.
 *Checkpoint*: ✅ **passed 2026-09-14** — a text to the device came back answered by SMS in ~1.0s with
 the wall idle, and a second text 8s later logged `Processing 3 message(s)`: the persisted session
-reloaded and continued. "call Dad" **by text** was refused, so the carve-out holds in practice.
+reloaded and continued. "call Dad" **by text** was refused, so the carve-out holds in practice — and
+a "clean up the calendar" text refused the same afternoon is what narrowed the carve-out to reach
+only (see Security). That episode also showed the model calling a withheld tool it had never been
+offered, because the base persona describes every tool in prose: the transport block now names the
+withheld ones, rendered from `AgentTools.withheldFromText` so prompt and enforcement can't drift.
 
 **Phase 4 — written-output shaping.** ✅ **Built 2026-09-14.** `TeyaPersona.textTransportBlock(sender)`
 rides in the live context the same way the household profile does — it describes the *medium* (read
