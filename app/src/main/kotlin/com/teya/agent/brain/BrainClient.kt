@@ -24,9 +24,10 @@ interface BrainClient {
     suspend fun streamChat(
         history: List<ChatMessage>,
         liveContext: String? = null,
+        allowedTools: Set<String>? = null,
         onText: suspend (String) -> Unit,
     ): BrainResponse {
-        val response = processText(history, liveContext)
+        val response = processText(history, liveContext, allowedTools)
         if (response.speechResponse.isNotBlank()) onText(response.speechResponse)
         return response
     }

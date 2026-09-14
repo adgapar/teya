@@ -8,6 +8,8 @@ import android.content.Context
 import android.os.Bundle
 import android.provider.CalendarContract
 import android.util.Log
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.TimeZone
 
 /** One calendar event instance (a recurrence is expanded into instances). */
@@ -152,6 +154,7 @@ class CalendarManager(private val context: Context) {
         location: String?,
         rrule: String?,
         attendeeEmails: List<String> = emptyList(),
+        reminderMinutes: Int? = null,
     ): Long? = try {
         val calId = targetCalendarId()
         if (calId < 0) {
@@ -171,9 +174,15 @@ class CalendarManager(private val context: Context) {
                 } else {
                     put(CalendarContract.Events.DTEND, startMillis + durationMinutes * 60_000L)
                 }
+                if (reminderMinutes != null && reminderMinutes >= 0) {
+                    put(CalendarContract.Events.HAS_ALARM, 1)
+                }
             }
             val eventId = resolver.insert(CalendarContract.Events.CONTENT_URI, values)?.let { ContentUris.parseId(it) }
-            if (eventId != null) addAttendees(eventId, attendeeEmails)
+            if (eventId != null) {
+                addAttendees(eventId, attendeeEmails)
+                reminderMinutes?.takeIf { it >= 0 }?.let { replaceReminders(eventId, it) }
+            }
             eventId
         }
     } catch (e: SecurityException) {
@@ -182,6 +191,38 @@ class CalendarManager(private val context: Context) {
     } catch (e: Exception) {
         Log.e(TAG, "Failed to add event", e)
         null
+    }
+
+    /**
+     * Google calendars attach the account's default reminders (typically 10 and 30 min) on
+     * insert. Wipe those, then write only the minutes we were asked for, or the UI shows the
+     * defaults and not the one they named.
+     */
+    private fun replaceReminders(eventId: Long, minutesBefore: Int) {
+        try {
+            resolver.delete(
+                CalendarContract.Reminders.CONTENT_URI,
+                "${CalendarContract.Reminders.EVENT_ID}=?",
+                arrayOf(eventId.toString()),
+            )
+            val uri = resolver.insert(
+                CalendarContract.Reminders.CONTENT_URI,
+                ContentValues().apply {
+                    put(CalendarContract.Reminders.EVENT_ID, eventId)
+                    put(CalendarContract.Reminders.MINUTES, minutesBefore)
+                    put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT)
+                },
+            )
+            if (uri == null) Log.w(TAG, "Reminder insert returned null for event $eventId")
+            resolver.update(
+                ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId),
+                ContentValues().apply { put(CalendarContract.Events.HAS_ALARM, 1) },
+                null,
+                null,
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set reminder", e)
+        }
     }
 
     private fun addAttendees(eventId: Long, emails: List<String>) {
@@ -212,7 +253,8 @@ class CalendarManager(private val context: Context) {
     /** Events whose title contains [query], scoped to Teya's own calendar so a search never reaches birthdays. */
     fun findEventsByTitle(query: String): List<EventMatch> = try {
         val calId = targetCalendarId()
-        val selection = "${CalendarContract.Events.CALENDAR_ID} = ? AND ${CalendarContract.Events.TITLE} LIKE ?"
+        val selection = "${CalendarContract.Events.CALENDAR_ID} = ? AND ${CalendarContract.Events.TITLE} LIKE ?" +
+            " AND ${CalendarContract.Events.DELETED} = 0"
         // A title's own % or _ would otherwise make this a match-everything query.
         val escaped = query.replace("!", "!!").replace("%", "!%").replace("_", "!_")
         val args = arrayOf(calId.toString(), "%$escaped%")
@@ -245,6 +287,47 @@ class CalendarManager(private val context: Context) {
         emptyList()
     }
 
+    /**
+     * The stored event whose [instance] time matches [instanceStartMillis] (a recurrence's
+     * DTSTART is the first occurrence, so "this Tuesday" has to go through Instances).
+     */
+    fun findEventOn(query: String, date: LocalDate): EventMatch? {
+        val zone = ZoneId.systemDefault()
+        val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
+        val end = date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        return findInstance(query, start, end)
+    }
+
+    fun findEventAt(query: String, instanceStartMillis: Long): EventMatch? =
+        findInstance(query, instanceStartMillis - 60_000L, instanceStartMillis + 60_000L)
+
+    private fun findInstance(query: String, windowStart: Long, windowEnd: Long): EventMatch? = try {
+        val projection = arrayOf(
+            CalendarContract.Instances.EVENT_ID,
+            CalendarContract.Instances.TITLE,
+            CalendarContract.Instances.BEGIN,
+            CalendarContract.Instances.RRULE,
+        )
+        var match: EventMatch? = null
+        CalendarContract.Instances.query(resolver, projection, windowStart, windowEnd)?.use { c ->
+            while (c.moveToNext()) {
+                val title = c.getString(1) ?: continue
+                if (!title.contains(query, ignoreCase = true)) continue
+                match = EventMatch(
+                    id = c.getLong(0),
+                    title = title,
+                    startMillis = c.getLong(2),
+                    recurring = !c.getString(3).isNullOrBlank(),
+                )
+                break
+            }
+        }
+        match
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to resolve instance", e)
+        null
+    }
+
     /** Deletes one row; for a recurring event that is the whole series. */
     fun deleteEvent(id: Long): Boolean = try {
         resolver.delete(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id), null, null) > 0
@@ -253,14 +336,15 @@ class CalendarManager(private val context: Context) {
         false
     }
 
-    /** Writes only the non-null fields. Moving a recurring event moves the whole series. */
-    fun moveEvent(
+    /** Writes only the non-null fields. Updating a recurring event updates the whole series. */
+    fun updateEvent(
         id: Long,
         recurring: Boolean,
         newStartMillis: Long?,
         durationMinutes: Int?,
         location: String?,
         title: String?,
+        reminderMinutes: Int? = null,
     ): Boolean = try {
         val values = ContentValues().apply {
             newStartMillis?.let {
@@ -272,21 +356,23 @@ class CalendarManager(private val context: Context) {
             if (recurring) {
                 durationMinutes?.let { put(CalendarContract.Events.DURATION, "P${it * 60}S") }
             } else if (durationMinutes != null || newStartMillis != null) {
-                // A one-off stores DTEND, not DURATION, so it has to move with DTSTART.
+                // A one-off stores DTEND, not DURATION, so it has to follow DTSTART.
                 val start = newStartMillis ?: eventStart(id)
                 val minutes = durationMinutes ?: existingDurationMinutes(id) ?: 60
                 if (start != null) put(CalendarContract.Events.DTEND, start + minutes * 60_000L)
             }
         }
-        if (values.size() == 0) false
+        val wrote = if (values.size() == 0) reminderMinutes != null
         else resolver.update(
             ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id), values, null, null
         ) > 0
+        if (wrote) reminderMinutes?.takeIf { it >= 0 }?.let { replaceReminders(id, it) }
+        wrote
     } catch (e: SecurityException) {
         Log.w(TAG, "Calendar write permission not granted", e)
         false
     } catch (e: Exception) {
-        Log.e(TAG, "Failed to move event", e)
+        Log.e(TAG, "Failed to update event", e)
         false
     }
 

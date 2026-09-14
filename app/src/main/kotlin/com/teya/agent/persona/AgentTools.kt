@@ -54,8 +54,10 @@ object AgentTools {
 
     val setTimer = ToolSpec(
         name = "set_timer",
-        description = "Start a countdown timer on the device, e.g. for cooking. Convert the spoken " +
-            "duration to whole seconds yourself (10 minutes = 600). Optionally give it a label.",
+        description = "Start a countdown timer on the device, e.g. for cooking or 'remind me in " +
+            "twenty minutes'. Convert the spoken duration to whole seconds yourself (10 minutes = 600). " +
+            "Optionally give it a label. Not for reminders attached to a calendar event — those use " +
+            "add_event reminder_minutes.",
         parameters = buildJsonObject {
             put("type", "object")
             putJsonObject("properties") {
@@ -140,8 +142,9 @@ object AgentTools {
 
     val addEvent = ToolSpec(
         name = "add_event",
-        description = "Add an event to the family calendar. Resolve relative dates ('tomorrow', " +
-            "'next Tuesday') against the current date/time in the live device state.",
+        description = "Add an event to the family calendar. Pass weekday as the day they said " +
+            "('monday', 'tomorrow') and start as the clock time ('17:30'). The device sets the date. " +
+            "A full ISO start is only for when they gave an actual calendar date.",
         parameters = buildJsonObject {
             put("type", "object")
             putJsonObject("properties") {
@@ -149,17 +152,18 @@ object AgentTools {
                     put("type", "string")
                     put("description", "What the event is, e.g. 'Football' or 'Dentist'.")
                 }
-                putJsonObject("day") {
+                putJsonObject("start") {
                     put("type", "string")
-                    put("description", "WHICH DAY, in the person's own words: a weekday name " +
-                        "('monday', 'next friday'), 'today'/'tomorrow', or a plain date " +
-                        "'YYYY-MM-DD'. Do NOT work out the date for a weekday yourself — pass the " +
-                        "weekday word and the device resolves it. Getting this wrong is the single " +
-                        "most common calendar mistake.")
+                    put("description", "Clock time, '17:30' or '5:30pm', or a full ISO datetime. " +
+                        "When weekday is set, only this clock time is used — do not compute a date.")
                 }
-                putJsonObject("time") {
+                putJsonObject("weekday") {
                     put("type", "string")
-                    put("description", "Time of day, e.g. '17:30' or '5:30pm'.")
+                    put("description", "Copy the day word they used, unchanged: 'monday', " +
+                        "'wednesday', 'tomorrow', 'today'. Do not shift it to the next day. The " +
+                        "device turns this into the real date; start's clock time is kept, start's " +
+                        "date is ignored when weekday is set. Omit only when they gave a calendar " +
+                        "date, not a day name.")
                 }
                 putJsonObject("duration_minutes") {
                     put("type", "integer")
@@ -182,6 +186,13 @@ object AgentTools {
                         "gave any end point ('until...', 'through...', 'for the next N weeks'), always " +
                         "resolve it into this field rather than leaving the series open-ended.")
                 }
+                putJsonObject("reminder_minutes") {
+                    put("type", "integer")
+                    put("description", "Minutes before the event to fire a calendar reminder, e.g. " +
+                        "30 for '30 minutes before', 60 for 'an hour in advance'. A clock time " +
+                        "before the start is the difference in minutes. Omit if they didn't ask " +
+                        "for a reminder. Not a timer — this is the phone's calendar alert.")
+                }
                 putJsonObject("notify_family") {
                     put("type", "boolean")
                     put("description", "Whether this is a shared family event worth telling everyone " +
@@ -203,25 +214,32 @@ object AgentTools {
                         "get the invite. Ignored if 'attendees' is set.")
                 }
             }
-            putJsonArray("required") { add("title"); add("day"); add("time") }
+            putJsonArray("required") { add("title"); add("start") }
         },
     )
 
     val getEvents = ToolSpec(
         name = "get_events",
-        description = "Look up calendar events in a date range to answer 'what's on'. Compute the " +
-            "range from the live device state (e.g. 'Saturday' → that day 00:00 to 23:59).",
+        description = "Look up calendar events in a date range to answer 'what's on'. For a named " +
+            "day pass weekday ('saturday') — the device sets that day's range. Today and the next " +
+            "7 days are already in live state.",
         parameters = buildJsonObject {
             put("type", "object")
             putJsonObject("properties") {
+                putJsonObject("weekday") {
+                    put("type", "string")
+                    put("description", "The day they asked about, copied ('friday', 'tomorrow', " +
+                        "'today'). The device looks up that date. Prefer this over computing ISO.")
+                }
                 putJsonObject("start") {
                     put("type", "string")
-                    put("description", "Range start, ISO 'YYYY-MM-DDTHH:MM'. Defaults to the start " +
-                        "of today (so 'what's on today?' includes events earlier in the day).")
+                    put("description", "Range start, ISO 'YYYY-MM-DDTHH:MM', when they gave a date " +
+                        "not a day name. Defaults to the start of today.")
                 }
                 putJsonObject("end") {
                     put("type", "string")
-                    put("description", "Range end, ISO 'YYYY-MM-DDTHH:MM'. Defaults to a week ahead.")
+                    put("description", "Range end, ISO 'YYYY-MM-DDTHH:MM'. Defaults to a week ahead, " +
+                        "or the end of weekday's day when weekday is set.")
                 }
             }
         },
@@ -231,7 +249,8 @@ object AgentTools {
         name = "cancel_event",
         description = "Remove an event from the family calendar. This is the ONLY way to cancel " +
             "one — never re-add an event to try to remove it. If several events match the name, " +
-            "this does NOT delete them: it returns the list so you can ask which one is meant.",
+            "pass all=true when they asked to clear/replace/fix the calendar; otherwise this does " +
+            "NOT delete them and returns the list so you can ask which one is meant.",
         parameters = buildJsonObject {
             put("type", "object")
             putJsonObject("properties") {
@@ -241,26 +260,31 @@ object AgentTools {
                 }
                 putJsonObject("start") {
                     put("type", "string")
-                    put("description", "Which one, when several share the name: copy its exact " +
-                        "start=... value from the list this tool gave you. Never invent one.")
+                    put("description", "Clock time or ISO, when several share the name. Prefer " +
+                        "weekday. Copy start=... from a tool list only when you have that list.")
+                }
+                putJsonObject("weekday") {
+                    put("type", "string")
+                    put("description", "Which day, copied from them ('wednesday'). The device " +
+                        "looks up that date. Prefer this over ISO.")
                 }
                 putJsonObject("all") {
                     put("type", "boolean")
-                    put("description", "Delete EVERY event matching the name. Only pass true when " +
-                        "the person has clearly asked to remove all of them (e.g. after you listed " +
-                        "them and they said 'yes, all of them'). Never guess this.")
+                    put("description", "Delete EVERY event matching the name. Pass true when they " +
+                        "asked to clear or replace the calendar, or said all of them. Never guess " +
+                        "this for a single named event.")
                 }
             }
             putJsonArray("required") { add("title") }
         },
     )
 
-    val moveEvent = ToolSpec(
-        name = "move_event",
-        description = "Change an event that already exists — its time, length, place or name. Use " +
-            "this whenever something on the calendar is wrong or needs to shift ('make it half an " +
-            "hour later', 'it's at the studio now'). NEVER call add_event to correct an existing " +
-            "event: that leaves the wrong one in place and creates a duplicate beside it.",
+    val updateEvent = ToolSpec(
+        name = "update_event",
+        description = "Change an existing calendar event — its time, length, place, or name. Use " +
+            "this for any correction ('half an hour later', 'it's at the studio now', 'call it " +
+            "swimming'). NEVER call add_event to correct an existing event: that leaves the old " +
+            "one in place and creates a duplicate beside it.",
         parameters = buildJsonObject {
             put("type", "object")
             putJsonObject("properties") {
@@ -270,18 +294,23 @@ object AgentTools {
                 }
                 putJsonObject("start") {
                     put("type", "string")
-                    put("description", "Which one, when several share the name: copy its exact " +
-                        "start=... value from the list this tool gave you. Never invent one.")
+                    put("description", "Which one, when several share the name: clock time or ISO. " +
+                        "Prefer weekday for the existing event.")
                 }
-                putJsonObject("new_day") {
+                putJsonObject("weekday") {
                     put("type", "string")
-                    put("description", "The new day, in the person's own words ('friday', " +
-                        "'tomorrow') or 'YYYY-MM-DD'. Leave out to keep the same day. Never work " +
-                        "out a weekday's date yourself.")
+                    put("description", "Which existing event, when several share the name: the day " +
+                        "they named ('wednesday'). Copied, not computed.")
                 }
-                putJsonObject("new_time") {
+                putJsonObject("new_start") {
                     put("type", "string")
-                    put("description", "The new time of day, e.g. '18:00'. Leave out to keep it.")
+                    put("description", "The new clock time ('18:00') or ISO. Leave out to keep " +
+                        "the current time. When new_weekday is set, only the clock time is used.")
+                }
+                putJsonObject("new_weekday") {
+                    put("type", "string")
+                    put("description", "The new day they named ('friday', 'tomorrow'), copied. " +
+                        "The device sets the date. Omit when only the clock time or name/place changes.")
                 }
                 putJsonObject("duration_minutes") {
                     put("type", "integer")
@@ -294,6 +323,11 @@ object AgentTools {
                 putJsonObject("new_title") {
                     put("type", "string")
                     put("description", "New name for the event. Leave out to keep the current one.")
+                }
+                putJsonObject("reminder_minutes") {
+                    put("type", "integer")
+                    put("description", "Minutes before the event for the calendar reminder. " +
+                        "Replaces any existing reminders on that event.")
                 }
             }
             putJsonArray("required") { add("title") }
@@ -491,12 +525,24 @@ object AgentTools {
     /** Not offered over SMS: an inbound number is spoofable, and these two act outside the conversation. */
     val withheldFromText: Set<String> = setOf("place_call", "send_message")
 
+    /**
+     * Tool names the brain may see this turn. Calls and texts both need a working SIM;
+     * each also needs its permission (CALL_PHONE / SEND_SMS). Without those, the tool is omitted
+     * rather than advertised and then refused.
+     */
+    fun offered(canCall: Boolean, canSendSms: Boolean): Set<String> {
+        val names = all.map { it.name }.toMutableSet()
+        if (!canCall) names.remove(placeCall.name)
+        if (!canSendSms) names.remove(sendMessage.name)
+        return names
+    }
+
     /** Tool names offered on the text transport. */
-    val textTransport: Set<String> by lazy { all.map { it.name }.toSet() - withheldFromText }
+    val textTransport: Set<String> by lazy { offered(canCall = true, canSendSms = true) - withheldFromText }
 
     /** All tools currently exposed to the brain. */
     val all: List<ToolSpec> = listOf(
-        placeCall, sendMessage, setTimer, cancelTimer, setAlarm, cancelAlarm, addEvent, getEvents, cancelEvent, moveEvent,
+        placeCall, sendMessage, setTimer, cancelTimer, setAlarm, cancelAlarm, addEvent, getEvents, cancelEvent, updateEvent,
         addToShoppingList, removeFromShoppingList, readShoppingList, clearShoppingList,
         logExpense, queryExpenses, deleteExpense,
         remember, forget, searchMemory,

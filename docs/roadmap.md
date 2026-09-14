@@ -151,30 +151,42 @@ not a failure (`SmsManager`'s error codes are the small positive ones)._
 _2026-09-14, later: **calendar tool fixes.** SMS made the existing calendar bugs easy to hit — an
 afternoon of texting produced duplicate events, "Friday" football on Saturday, and one 270-char
 message that ran 8 `cancel_event` + 6 `add_event` calls in 4 seconds._
-_• **`move_event` added.** There was no way to change an event, so every correction became a
-duplicate. Handles the recurring-`DURATION` vs one-off-`DTEND` split. (Pattern note: create needs
-*edit*, not just an inverse.)_
+_• **`update_event` added** (first as `move_event`, renamed the same day). There was no way to
+change an event, so every correction became a duplicate. One tool for any change — time, length,
+place, or name. Handles the recurring-`DURATION` vs one-off-`DTEND` split. (Pattern note: create
+needs *edit*, not just an inverse.) Named update, not move: a rename or a new location is not a
+move, and the wrong name made the model reach for the wrong tool._
 _• **`cancel_event` no longer bulk-deletes.** Was one `DELETE ... WHERE TITLE LIKE '%q%'`; now
 `findEventsByTitle` → `deleteEvent(id)`, and >1 match deletes nothing and returns the list with
 exact `start=` values. `all=true` is opt-in; LIKE wildcards escaped._
-_• **Dates resolved in code** (`calendar/WhenResolver`, `WhenResolverTest`). Tools take a day word
-("friday", "tomorrow") + time instead of an ISO datetime the model computed — it wrote Sat 19 Sep
-for Friday, and Tue/Thu for Mon/Wed. Results now spell the weekday back._
-_• **Duplicate guard** in `add_event` (same title within a minute of the same start → refused) and
-**`MAX_DESTRUCTIVE_PER_TURN = 3`** before a turn must stop and report._
+_• **Dates: the model labels, code dates.** mistral-small treats ISO weekdays as Monday=1 and
+indexes a Monday-first week list as 0-based, so "Friday" always landed on Saturday. `WhenResolver`
+(a parallel day+time dialect next to ISO) is gone. Calendar tools take `weekday` as the word they
+said (`monday`, `tomorrow`) and `start` as a clock time (`17:30`); the device maps that onto This
+week. A real calendar date still goes in as ISO. Same split on add / cancel / update / get_events.
+This week in live state is `Monday = 14 Sep (today)`, not a comma list to index. Confirmations have
+to quote the weekday the tool result named._
+_• **`reminder_minutes`** on add/update writes `CalendarContract.Reminders` (and wipes the Google
+calendar's default 10+30 on that event first). Those minutes live on Teya's calendar only —
+Google does not copy organizer reminders onto invitees._
+_• **Reach tools follow the SIM.** `place_call` and `send_message` are omitted from the tool list
+and the prompt unless a working SIM and the matching permission are there._
+_• **Duplicate guard** in `add_event` (same title within a minute of the same start → refused; a
+requested reminder is applied on the existing row). A full-week replacement may delete several
+titles (`MAX_DESTRUCTIVE_PER_TURN = 12`); the budget only spends on actual deletes._
 _• **Text sessions persist tool rounds.** They were dropped, so a disambiguation list was gone by
 the next text (invented dates) and Teya had no record of her own actions (re-adds). Also the voice
 loop's 10-message cap was being applied to hour-long threads — every inbound logged `Processing 9
 messages`. Trim keeps call/result pairs intact (an orphaned result 400s the request)._
 _• **Evals** (`app/src/test/.../evals/`) — live Mistral calls asserting which tools get chosen, one
-case per failure above. Opt-in on `MISTRAL_API_KEY`. 8/8 pass. One of them is deliberately aimed at
-the recovery rather than the model's restraint: prompting Teya to check the events already in her
+case per failure above. Opt-in on `MISTRAL_API_KEY`. One of them is deliberately aimed at the
+recovery rather than the model's restraint: prompting Teya to check the events already in her
 context before adding does **not** work reliably (strengthening the wording only moved the
 behaviour — she began calling `get_events` first when the calendar was empty, and still skipped the
 check when the event was actually there), so the duplicate guarantee is the store's refusal, and
-what the eval pins is that she reports it and doesn't retry. Same lesson as the dates: a check the
-code can do must not be delegated to the model. Note also the live state only carries **7 days**,
-so beyond that she genuinely cannot know what exists — the code guard is the only defence there._
+what the eval pins is that she reports it and doesn't retry. Note also the live state only carries
+**7 days**, so beyond that she genuinely cannot know what exists — the code guard is the only
+defence there._
 
 ## ✅ Done
 

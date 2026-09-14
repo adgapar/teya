@@ -7,7 +7,6 @@ import com.teya.agent.evals.EvalHarness.names
 import com.teya.agent.evals.EvalHarness.toolRound
 import com.teya.agent.evals.EvalHarness.user
 import com.teya.agent.persona.AgentTools
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -16,13 +15,13 @@ class CalendarEvals {
 
     @Before fun requireKey() { EvalHarness.requireKey() }
 
-    @Test fun `changing an existing event moves it instead of adding another`() {
+    @Test fun `changing an existing event updates it instead of adding another`() {
         val response = ask(
             listOf(
                 user("add kids breakdance on wednesday at 5pm at the dance studio"),
             ) + toolRound(
                 "add_event",
-                mapOf("title" to "Kids breakdance", "day" to "wednesday", "time" to "17:00"),
+                mapOf("title" to "Kids breakdance", "start" to "2026-09-16T17:00"),
                 "Added \"Kids breakdance\" on Wednesday 16 September, 5:00 PM at the dance studio.",
             ) + listOf(
                 user("actually it's at 5:30, not 5"),
@@ -30,8 +29,8 @@ class CalendarEvals {
             liveContext(upcoming = listOf("Kids breakdance — Wed 16 Sep, 5:00 PM at dance studio")),
         )
         assertTrue(
-            "Correcting an event must move it, not add a duplicate. Got: ${response.names()}",
-            response.callsTo("move_event").isNotEmpty(),
+            "Correcting an event must update it, not add a duplicate. Got: ${response.names()}",
+            response.callsTo("update_event").isNotEmpty(),
         )
         assertTrue(
             "A correction must never create a second event. Got: ${response.names()}",
@@ -39,10 +38,39 @@ class CalendarEvals {
         )
     }
 
-    @Test fun `a weekday is passed as a word, not as a date the model computed`() {
+    @Test fun `a location or name correction updates the event, it does not add another`() {
+        val response = ask(
+            listOf(
+                user("add swimming on tuesday at 4:35 at the pool"),
+            ) + toolRound(
+                "add_event",
+                mapOf("title" to "Swimming", "start" to "2026-09-15T16:35"),
+                "Added \"Swimming\" on Tuesday 15 September, 4:35 PM at the pool.",
+            ) + listOf(
+                user("it's at the studio now, and call it Asier swimming"),
+            ),
+            liveContext(upcoming = listOf("Swimming — Tue 15 Sep, 4:35 PM at the pool")),
+        )
+        assertTrue(
+            "A place/name correction is update_event, not add_event. Got: ${response.names()}",
+            response.callsTo("update_event").isNotEmpty(),
+        )
+        assertTrue(
+            "A correction must never create a second event. Got: ${response.names()}",
+            response.callsTo("add_event").isEmpty(),
+        )
+        val call = response.callsTo("update_event").first()
+        val loc = call.arguments["location"].orEmpty().lowercase()
+        val newTitle = call.arguments["new_title"].orEmpty().lowercase()
+        assertTrue(
+            "Should pass the new place and/or name. Got: ${call.arguments}",
+            loc.contains("studio") || newTitle.contains("asier") || newTitle.contains("swimming"),
+        )
+    }
+
+    @Test fun `a named weekday is copied as a word, not computed as a date`() {
         var history = listOf(user("put kids football on friday at 5:30pm at the football field, every week"))
         var response = ask(history, liveContext())
-        // A get_events round before adding is correct, not a miss; feed it back and look again.
         response.callsTo("get_events").firstOrNull()?.let { check ->
             history = history + toolRound(
                 "get_events", check.arguments, "No events found in that range.",
@@ -51,12 +79,16 @@ class CalendarEvals {
         }
         val call = response.callsTo("add_event").firstOrNull()
         assertTrue("Expected an add_event call, got: ${response.names()}", call != null)
-        val day = call!!.arguments["day"].orEmpty().lowercase()
+        val weekday = call!!.arguments["weekday"].orEmpty().lowercase()
         assertTrue(
-            "add_event must receive the weekday word ('friday'), not a computed date. Got day='$day'",
-            day.contains("friday") || day.contains("fri"),
+            "weekday must be the word they used ('friday'), not a shifted day. Got weekday='$weekday' start='${call.arguments["start"]}'",
+            weekday.contains("friday") || weekday.contains("fri"),
         )
-        if (day.startsWith("2026")) assertEquals("2026-09-18", day)
+        val start = call.arguments["start"].orEmpty().lowercase()
+        assertTrue(
+            "start should be a clock time (or ISO that still has 17:30). Got start='$start'",
+            start.contains("17:30") || start.contains("5:30"),
+        )
     }
 
     @Test fun `an ambiguous cancel stops and asks instead of guessing`() {
@@ -96,9 +128,11 @@ class CalendarEvals {
         )
         val call = response.callsTo("cancel_event").firstOrNull()
         assertTrue("Expected a cancel_event call, got: ${response.names()}", call != null)
-        assertEquals(
-            "It must reuse the exact start it was given for the Wednesday row",
-            "2026-09-16T17:30", call!!.arguments["start"],
+        val weekday = call!!.arguments["weekday"].orEmpty().lowercase()
+        val start = call.arguments["start"].orEmpty()
+        assertTrue(
+            "It should pick Wednesday by weekday word, or the Wednesday start it was given. Got weekday='$weekday' start='$start'",
+            weekday.contains("wednesday") || weekday.contains("wed") || start.contains("2026-09-16"),
         )
         assertTrue("all=true must not appear — only one was asked for",
             call.arguments["all"]?.lowercase() != "true")
@@ -109,10 +143,10 @@ class CalendarEvals {
         val response = ask(
             listOf(user("add kids football on friday at 5:30pm")) + toolRound(
                 "add_event",
-                mapOf("title" to "Kids football", "day" to "friday", "time" to "17:30"),
+                mapOf("title" to "Kids football", "start" to "2026-09-18T17:30"),
                 "\"Kids football\" is ALREADY on the calendar at Friday 18 September, 5:30 PM — " +
                     "nothing added, there is no second copy. If the details need to change, use " +
-                    "move_event on it.",
+                    "update_event on it.",
             ),
             liveContext(upcoming = listOf("Kids football — Fri 18 Sep, 5:30 PM at football field")),
         )
@@ -127,32 +161,50 @@ class CalendarEvals {
         )
     }
 
-    @Test fun `a whole-week schedule is not executed in one burst`() {
-        val response = ask(
-            listOf(user(
-                "here's our week: breakdance monday and wednesday 5:30 at the studio, " +
-                    "swimming tuesday 4:35, football thursday 5:30 at the field. " +
-                    "clear whatever is there now and set this up"
-            )),
+    @Test fun `a whole-week schedule is applied in one turn, including reminders`() {
+        var history = listOf(user(
+            "Lets fix everything.\n" +
+                "Mondays and Wednesdays 5:30-6:30 pm kids breakdance. Reminder 30 mins advance.\n" +
+                "Tuesdays 16:35 Asier swimming. Reminder at 16:00.\n" +
+                "Thursdays 17:30 kids football, reminder 1 hour in advance.\n" +
+                "Nothing else should be on the calendar."
+        ))
+        var response = ask(
+            history,
             liveContext(upcoming = listOf(
                 "Kids breakdance — Wed 16 Sep, 5:30 PM",
                 "Kids football — Fri 18 Sep, 5:30 PM",
                 "Asier swimming — Tue 15 Sep, 4:35 PM",
             )),
         )
-        val destructive = response.callsTo("cancel_event").size
+        response.callsTo("get_events").firstOrNull()?.let { check ->
+            history = history + toolRound("get_events", check.arguments, "No events found in that range.")
+            response = ask(history, liveContext())
+        }
+        val names = response.names()
         assertTrue(
-            "No more than 3 deletions may be attempted in one turn (the harness refuses past that). Got $destructive",
-            destructive <= 3,
+            "A full week in one message must start changing the calendar, not only ask. Got: $names / '${response.speechResponse}'",
+            response.callsTo("add_event").isNotEmpty() || response.callsTo("cancel_event").isNotEmpty(),
         )
-        assertTrue(
-            "A full rewrite should not fire more than a handful of calls before checking in. Got: ${response.names()}",
-            response.toolCalls.size <= 6,
-        )
+        val cancels = response.callsTo("cancel_event")
+        if (cancels.isNotEmpty()) {
+            assertTrue(
+                "A replace-everything cancel should pass all=true, not ask which copy. Got: ${cancels.map { it.arguments }}",
+                cancels.any { it.arguments["all"]?.lowercase() == "true" },
+            )
+        }
+        val adds = response.callsTo("add_event")
+        if (adds.isNotEmpty()) {
+            val reminders = adds.mapNotNull { it.arguments["reminder_minutes"] }
+            assertTrue(
+                "The asked-for advance reminders must land on add_event. Got: ${adds.map { it.arguments }}",
+                reminders.any { it == "30" || it == "35" || it == "60" },
+            )
+        }
     }
 
     private companion object {
-        val CALENDAR_TOOLS = setOf("add_event", "cancel_event", "move_event")
+        val CALENDAR_TOOLS = setOf("add_event", "cancel_event", "update_event")
     }
 }
 

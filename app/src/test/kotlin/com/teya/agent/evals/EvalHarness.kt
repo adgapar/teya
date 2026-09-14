@@ -58,17 +58,22 @@ object EvalHarness {
         upcoming: List<String> = emptyList(),
         textTransport: Boolean = false,
     ): String {
-        val dayFmt = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)
-        fun week(monday: LocalDate) = (0..6L).joinToString(", ") { i ->
-            val d = monday.plusDays(i)
-            d.format(dayFmt) + if (d == NOW) " (today)" else ""
+        val nameFmt = DateTimeFormatter.ofPattern("EEEE", Locale.ENGLISH)
+        val dateFmt = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
+        fun weekLines(label: String, monday: LocalDate) = buildList {
+            add("$label (look up the name, do not count):")
+            (0..6L).forEach { i ->
+                val d = monday.plusDays(i)
+                val tag = if (d == NOW) " (today)" else ""
+                add("${d.format(nameFmt)} = ${d.format(dateFmt)}$tag")
+            }
         }
         val monday = NOW.with(DayOfWeek.MONDAY)
         val lines = buildList {
             add("Now: ${NOW.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.ENGLISH))}, 12:51 PM (Europe/Madrid)")
-            add("This week: ${week(monday)}")
-            add("Next week: ${week(monday.plusWeeks(1))}")
-            add("Last week: ${week(monday.minusWeeks(1))}")
+            addAll(weekLines("This week", monday))
+            addAll(weekLines("Next week", monday.plusWeeks(1)))
+            addAll(weekLines("Last week", monday.minusWeeks(1)))
             if (todaysEvents.isNotEmpty()) add("Today's events: ${todaysEvents.joinToString("; ")}")
             if (upcoming.isNotEmpty()) add("Upcoming events (next 7 days): ${upcoming.joinToString("; ")}")
         }

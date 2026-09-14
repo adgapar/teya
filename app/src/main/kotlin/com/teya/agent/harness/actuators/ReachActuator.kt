@@ -10,6 +10,10 @@ class ReachActuator(
     private val telephony: TelephonyActuator,
     private val sms: SmsSender,
 ) {
+    fun canCall(): Boolean = telephony.canCall()
+    fun canSendSms(): Boolean = sms.canSend()
+    fun canReceiveSms(): Boolean = sms.canReceive()
+
     suspend fun run(tool: ToolCall): String = when (tool.functionName) {
         "place_call" -> {
             val name = tool.arguments["name"] ?: ""

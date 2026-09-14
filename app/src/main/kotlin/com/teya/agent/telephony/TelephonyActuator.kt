@@ -33,6 +33,8 @@ class TelephonyActuator(
         object NoNumber : Result
     }
 
+    fun canCall(): Boolean = hasWorkingSim() && hasCallPermission()
+
     // getLine1Number() (the device's own number) is unreliable — carriers often leave it
     // blank even on a working SIM — so "can we call at all" is a SIM-readiness check, not
     // a number lookup.

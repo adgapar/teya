@@ -107,10 +107,10 @@ class HarnessService : Service() {
         // "Voice tuning" section — see ConfigManager.bargeInGapMs.
         private const val MAX_HISTORY = 10           // bounded conversation history sent to the model
         private const val MAX_TOOL_ROUNDS = 4        // cap tool→result→model loops per user turn
-        private const val MAX_DESTRUCTIVE_PER_TURN = 3  // calendar deletions before a turn must check in
+        private const val MAX_DESTRUCTIVE_PER_TURN = 12  // one family-week rewrite is several titles
         private val REACH_TOOLS = setOf("place_call", "send_message")
         private val TIME_TOOLS = setOf("set_timer", "cancel_timer", "set_alarm", "cancel_alarm")
-        private val CALENDAR_TOOLS = setOf("add_event", "get_events", "cancel_event", "move_event")
+        private val CALENDAR_TOOLS = setOf("add_event", "get_events", "cancel_event", "update_event")
         private val HOME_TOOLS = setOf(
             "add_to_shopping_list", "remove_from_shopping_list", "read_shopping_list",
             "clear_shopping_list", "log_expense", "query_expenses", "delete_expense",
@@ -657,6 +657,7 @@ class HarnessService : Service() {
         // Refresh live device state once per user turn; the same snapshot is used across any tool
         // rounds within this turn (time won't drift meaningfully over a few seconds).
         val liveContext = buildLiveContext()
+        val allowedTools = AgentTools.offered(reachActuator.canCall(), reachActuator.canSendSms())
         var interrupted = false
         for (round in 0 until MAX_TOOL_ROUNDS) {
             updateUiState(AgentState.THINKING)
@@ -708,7 +709,7 @@ class HarnessService : Service() {
                         }
                     }
 
-                    response = brainClient.streamChat(history, liveContext) { soFar ->
+                    response = brainClient.streamChat(history, liveContext, allowedTools) { soFar ->
                         fullText.setLength(0); fullText.append(soFar)
                         val cut = lastSentenceEnd(soFar, queued) // hand any completed sentence(s) to TTS
                         if (cut > queued) {
@@ -755,7 +756,7 @@ class HarnessService : Service() {
                 return
             }
 
-            runToolRound(fullText.toString(), response.toolCalls, history)
+            runToolRound(fullText.toString(), response.toolCalls, history, allowedTools)
         }
         if (interrupted) return
         // All tool rounds exhausted without a text answer.
@@ -922,19 +923,23 @@ class HarnessService : Service() {
         val time = now.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy, h:mm a", Locale.ENGLISH))
         val lines = mutableListOf("Now: $time ($zone)")
 
-        // Models are unreliable at weekday<->date arithmetic ("last Tuesday", "next Friday") from a
-        // single "Now:" line alone — spelling out this week and last week's actual dates lets it look
-        // the answer up instead of computing it, for get_events/add_event/log_expense date resolution.
+        // Named lookup, not a 7-item list. mistral-small treats ISO weekdays as Monday=1 and
+        // indexes a Monday-first comma list as 0-based, so "Friday" (5) becomes Saturday.
         val today = now.toLocalDate()
-        val dayFmt = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)
+        val nameFmt = DateTimeFormatter.ofPattern("EEEE", Locale.ENGLISH)
+        val dateFmt = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
         val monday = today.with(java.time.DayOfWeek.MONDAY)
-        fun weekLine(weekMonday: LocalDate) = (0..6L).joinToString(", ") { offset ->
-            val d = weekMonday.plusDays(offset)
-            d.format(dayFmt) + (if (d == today) " (today)" else "")
+        fun addWeek(label: String, weekMonday: LocalDate) {
+            lines += "$label (look up the name, do not count):"
+            (0..6L).forEach { offset ->
+                val d = weekMonday.plusDays(offset)
+                val tag = if (d == today) " (today)" else ""
+                lines += "${d.format(nameFmt)} = ${d.format(dateFmt)}$tag"
+            }
         }
-        lines += "This week: ${weekLine(monday)}"
-        lines += "Next week: ${weekLine(monday.plusWeeks(1))}"
-        lines += "Last week: ${weekLine(monday.minusWeeks(1))}"
+        addWeek("This week", monday)
+        addWeek("Next week", monday.plusWeeks(1))
+        addWeek("Last week", monday.minusWeeks(1))
 
         lastKnownLocation()?.let { loc ->
             lines += "Location: %.4f, %.4f (latitude, longitude)".format(loc.latitude, loc.longitude)
@@ -1046,6 +1051,10 @@ class HarnessService : Service() {
             if (profile.isNotBlank()) append("\n\n").append(profile)
             if (memory.isNotBlank()) append("\n\n").append(memory)
             if (speaker.isNotBlank()) append("\n\n").append(speaker)
+            val reachBlock = TeyaPersona.reachCapabilityBlock(
+                reachActuator.canCall(), reachActuator.canSendSms(), reachActuator.canReceiveSms(),
+            )
+            if (reachBlock.isNotBlank()) append("\n\n").append(reachBlock)
             if (textSender != null) append("\n\n").append(
                 TeyaPersona.textTransportBlock(textSender.displayName, AgentTools.withheldFromText)
             )

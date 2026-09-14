@@ -43,6 +43,10 @@ class SmsSender(
         data class Failed(val reason: String) : Result
     }
 
+    fun canSend(): Boolean = hasWorkingSim() && hasSendPermission()
+
+    fun canReceive(): Boolean = hasWorkingSim() && hasReceivePermission()
+
     private fun hasWorkingSim(): Boolean {
         val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
         return telephonyManager.simState == TelephonyManager.SIM_STATE_READY &&
@@ -51,6 +55,10 @@ class SmsSender(
 
     private fun hasSendPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun hasReceivePermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) ==
             PackageManager.PERMISSION_GRANTED
 
     suspend fun send(recipientNameOrAlias: String, body: String): Result {

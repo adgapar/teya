@@ -253,6 +253,7 @@ class MistralClient(
     override suspend fun streamChat(
         history: List<ChatMessage>,
         liveContext: String?,
+        allowedTools: Set<String>?,
         onText: suspend (String) -> Unit,
     ): BrainResponse {
         Log.d("MistralClient", "Streaming ${history.size} message(s)")
@@ -269,7 +270,7 @@ class MistralClient(
                 setBody(MistralChatStreamRequest(
                     model = chatModel,
                     messages = messages,
-                    tools = mistralTools,
+                    tools = toolsFor(allowedTools),
                     toolChoice = "auto",
                     stream = true,
                 ))
