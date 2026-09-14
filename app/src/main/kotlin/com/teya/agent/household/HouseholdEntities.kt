@@ -66,3 +66,22 @@ data class VoiceSample(
     val embedding: ByteArray,
     val recordedAt: Long,
 )
+
+/**
+ * A text (SMS) conversation with one household member — the transport's session state.
+ *
+ * Voice conversations end on silence and live entirely in a local inside `runConversation()`; a
+ * texted one has neither property. Turns can be hours apart and the service can be killed between
+ * them, so the history has to outlive the process — hence a table rather than a field. Keyed by the
+ * member's Contacts [lookupKey], so two people texting at once are two independent conversations.
+ *
+ * [transcript] is a JSON array of `{role, content}` — deliberately only the user/assistant turns,
+ * not the tool round-trips, which are meaningful only inside the turn that ran them (see
+ * `messaging.TextSessionStore`).
+ */
+@Entity(tableName = "text_session")
+data class TextSession(
+    @PrimaryKey val lookupKey: String,
+    val transcript: String = "[]",
+    val lastActivityAt: Long = 0L,
+)

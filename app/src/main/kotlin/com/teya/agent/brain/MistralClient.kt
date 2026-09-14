@@ -66,6 +66,11 @@ class MistralClient(
         MistralTool(function = MistralFunctionDef(it.name, it.description, it.parameters))
     }
 
+    /** The tool list for one call — everything, or only [allowedTools] (see [processText]). */
+    private fun toolsFor(allowedTools: Set<String>?): List<MistralTool> =
+        if (allowedTools == null) mistralTools
+        else mistralTools.filter { it.function.name in allowedTools }
+
     /**
      * [contextBias] maps to Mistral's `context_bias` multipart field (array of bias terms), sent
      * as one repeated form part per term — unverified against Mistral's exact wire format, since
@@ -153,7 +158,11 @@ class MistralClient(
         }
     }
 
-    override suspend fun processText(history: List<ChatMessage>, liveContext: String?): BrainResponse {
+    override suspend fun processText(
+        history: List<ChatMessage>,
+        liveContext: String?,
+        allowedTools: Set<String>?,
+    ): BrainResponse {
         Log.d("MistralClient", "Processing ${history.size} message(s)")
         val messages = buildMistralMessages(history, liveContext)
         val httpResponse = httpClient.post("${baseUrl}/chat/completions") {
@@ -162,7 +171,7 @@ class MistralClient(
             setBody(MistralChatRequest(
                 model = chatModel,
                 messages = messages,
-                tools = mistralTools,
+                tools = toolsFor(allowedTools),
                 toolChoice = "auto"
             ))
         }

@@ -12,6 +12,8 @@ import com.teya.agent.household.MemoryDao
 import com.teya.agent.household.MemoryEntry
 import com.teya.agent.household.Persona
 import com.teya.agent.household.PersonaDao
+import com.teya.agent.household.TextSession
+import com.teya.agent.household.TextSessionDao
 import com.teya.agent.household.VoiceSample
 import com.teya.agent.household.VoiceSampleDao
 
@@ -21,14 +23,18 @@ import com.teya.agent.household.VoiceSampleDao
  * unchanged and no migration is needed; nothing reads or writes the table.
  */
 @Database(
-    entities = [Contact::class, Persona::class, MemoryEntry::class, ContactExtra::class, VoiceSample::class],
-    version = 4,
+    entities = [
+        Contact::class, Persona::class, MemoryEntry::class, ContactExtra::class, VoiceSample::class,
+        TextSession::class,
+    ],
+    version = 5,
 )
 abstract class TeyaDatabase : RoomDatabase() {
     abstract fun personaDao(): PersonaDao
     abstract fun memoryDao(): MemoryDao
     abstract fun contactExtraDao(): ContactExtraDao
     abstract fun voiceSampleDao(): VoiceSampleDao
+    abstract fun textSessionDao(): TextSessionDao
 
     companion object {
         @Volatile
@@ -93,11 +99,22 @@ abstract class TeyaDatabase : RoomDatabase() {
             }
         }
 
+        /** v4→v5: add `text_session` (the SMS transport's per-member conversation state). */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `text_session` " +
+                        "(`lookupKey` TEXT NOT NULL, `transcript` TEXT NOT NULL, " +
+                        "`lastActivityAt` INTEGER NOT NULL, PRIMARY KEY(`lookupKey`))"
+                )
+            }
+        }
+
         /** Single shared instance so every manager opens the same migrated DB (name: "teya-db"). */
         fun get(context: Context): TeyaDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext, TeyaDatabase::class.java, "teya-db"
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { instance = it }
         }
     }
 }

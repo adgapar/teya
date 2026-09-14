@@ -13,6 +13,7 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import com.teya.agent.BuildConfig
 import com.teya.agent.household.HouseholdManager
+import com.teya.agent.household.Member
 
 /**
  * Outbound SMS — Teya's second transport, so what she knows is reachable from outside the house
@@ -25,6 +26,10 @@ import com.teya.agent.household.HouseholdManager
  *
  * Teya does not need to be the default SMS app: sending needs only SEND_SMS. (Same trap the call
  * feature hit with ROLE_DIALER — no role required.)
+ *
+ * This class is the sending half only; the inbound half — someone texting Teya and getting an
+ * answer — arrives via [SmsReceiver] and is answered by `HarnessService.handleInboundText`, which
+ * comes back here through [sendTo].
  */
 class SmsSender(
     private val context: Context,
@@ -52,16 +57,25 @@ class SmsSender(
             PackageManager.PERMISSION_GRANTED
 
     suspend fun send(recipientNameOrAlias: String, body: String): Result {
-        if (body.isBlank()) return Result.EmptyBody
         if (recipientNameOrAlias.isBlank()) return Result.NotAllowed
+        val member = householdManager.resolveMember(
+            recipientNameOrAlias, householdManager.members()
+        ) ?: return Result.NotAllowed
+        return sendTo(member, body)
+    }
+
+    /**
+     * Send to an already-resolved member — the inbound transport's reply path, where the recipient
+     * came from the sender's own number rather than a name the model said (see
+     * [HouseholdManager.resolveMemberByNumber]). Same checks, one dispatch.
+     */
+    suspend fun sendTo(member: Member, body: String): Result {
+        if (body.isBlank()) return Result.EmptyBody
         if (!hasWorkingSim()) return Result.NoSim
         // Rechecked at send time for the same reason place_call rechecks CALL_PHONE: this
         // START_STICKY service outlives a permission revoked from Settings.
         if (!hasSendPermission()) return Result.NoPermission
 
-        val member = householdManager.resolveMember(
-            recipientNameOrAlias, householdManager.members()
-        ) ?: return Result.NotAllowed
         val number = normalizeDiallable(member.phone) ?: return Result.NoNumber
 
         return try {
@@ -101,7 +115,10 @@ class SmsSender(
         var remaining = partCount
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
-                Log.d(TAG, "SMS part result: $resultCode (0 = OK)")
+                // Activity.RESULT_OK (-1) is success here, NOT 0 — SmsManager's own RESULT_ERROR_*
+                // codes are the small positive ones, so a plain number in the log reads backwards.
+                val outcome = if (resultCode == android.app.Activity.RESULT_OK) "OK" else "FAILED ($resultCode)"
+                Log.d(TAG, "SMS part result: $outcome")
                 if (--remaining <= 0) runCatching { ctx.unregisterReceiver(this) }
             }
         }

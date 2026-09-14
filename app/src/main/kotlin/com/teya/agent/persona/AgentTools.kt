@@ -424,6 +424,28 @@ object AgentTools {
         },
     )
 
+    /**
+     * Withheld from the **inbound text transport** (someone texting Teya) — the one carve-out in an
+     * otherwise identical tool set. Not a sensitivity ranking: a household has no internal
+     * need-to-know boundary, and gating "private" tools when the only reader is the person whose
+     * data it is would be theatre. The line is **irreversibility and reach**, because an inbound
+     * text is authenticated by nothing stronger than its originating number, which is spoofable.
+     * The blast radius of a spoofed "add olive oil" is olive oil; a spoofed `place_call` or
+     * `forget` does damage the attacker never has to see a reply to collect.
+     * See `thoughts/shared/plans/2026-08-02-sms-transport.md` → Security.
+     */
+    val withheldFromText: Set<String> = setOf(
+        "place_call",            // reaches outside the house, and rings someone's real phone
+        "send_message",          // ditto — would make Teya a relay for whoever spoofed the number
+        "clear_shopping_list",   // wipes a shared store in one call
+        "cancel_event",          // removes something from everyone's real calendar
+        "delete_expense",        // no undo
+        "forget",                // no undo, and deletes what Teya knows about a person
+    )
+
+    /** The tool names offered on the text transport — everything except [withheldFromText]. */
+    val textTransport: Set<String> by lazy { all.map { it.name }.toSet() - withheldFromText }
+
     /** All tools currently exposed to the brain. */
     val all: List<ToolSpec> = listOf(
         placeCall, sendMessage, setTimer, cancelTimer, setAlarm, cancelAlarm, addEvent, getEvents, cancelEvent,

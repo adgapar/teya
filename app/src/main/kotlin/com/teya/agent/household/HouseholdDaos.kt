@@ -107,3 +107,15 @@ interface VoiceSampleDao {
     @Query("UPDATE voice_sample SET lookupKey = :new WHERE lookupKey = :old")
     suspend fun remapMember(old: String, new: String)
 }
+
+@Dao
+interface TextSessionDao {
+    @Query("SELECT * FROM text_session WHERE lookupKey = :lookupKey LIMIT 1")
+    suspend fun find(lookupKey: String): TextSession?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(session: TextSession)
+
+    @Query("DELETE FROM text_session WHERE lookupKey = :lookupKey")
+    suspend fun delete(lookupKey: String)
+}

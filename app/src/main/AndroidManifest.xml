@@ -17,6 +17,9 @@
     <!-- Outbound SMS as Teya's second transport (send_message). SEND_SMS is all sending needs —
          being the default SMS app is only required to *receive* via SMS_DELIVER. -->
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <!-- The inbound half (text Teya, she answers). RECEIVE_SMS + SMS_RECEIVED is enough to observe
+         messages; SMS_DELIVER (being the family's default SMS app) is deliberately not taken. -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <!-- Set alarms/timers via AlarmClock intents; required to use EXTRA_SKIP_UI (no clock-app UI). -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <!-- Location for the ambient "live device state" (weather, "where am I"). Dedicated device. -->
@@ -69,6 +72,17 @@
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:theme="@style/Theme.Teya" />
+
+        <!-- Exported by necessity: the platform delivers SMS_RECEIVED. Guarded by BROADCAST_SMS,
+             which only the system holds, so no other app can fake an inbound message. -->
+        <receiver
+            android:name=".messaging.SmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
 
         <service
             android:name=".harness.HarnessService"

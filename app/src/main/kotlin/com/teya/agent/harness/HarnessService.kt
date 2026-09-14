@@ -29,7 +29,9 @@ import com.teya.agent.household.SpeakerMatch
 import com.teya.agent.persona.AgentTools
 import com.teya.agent.persona.TeyaPersona
 import com.teya.agent.shopping.ShoppingListManager
+import com.teya.agent.messaging.InboundRateLimiter
 import com.teya.agent.messaging.SmsSender
+import com.teya.agent.messaging.TextSessionStore
 import com.teya.agent.telephony.TelephonyActuator
 import com.teya.agent.timers.TeyaTimer
 import com.teya.agent.timers.TimerManager
@@ -41,6 +43,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -62,6 +66,10 @@ class HarnessService : Service() {
         const val ACTION_RUN_DREAM = "com.teya.agent.action.RUN_DREAM"
         /** Sent by the main screen's corner icon to flip manual touch mode (tap-only). */
         const val ACTION_TOGGLE_TOUCH_MODE = "com.teya.agent.action.TOGGLE_TOUCH_MODE"
+        /** An inbound text handed over by [com.teya.agent.messaging.SmsReceiver]. */
+        const val ACTION_SMS_RECEIVED = "com.teya.agent.action.SMS_RECEIVED"
+        const val EXTRA_SMS_SENDER = "sms_sender"
+        const val EXTRA_SMS_BODY = "sms_body"
         /** Broadcast to the UI with boolean extra [EXTRA_AUTO_LISTEN] = effective auto-listen state. */
         const val ACTION_LISTENING_MODE = "com.teya.agent.LISTENING_MODE"
         const val EXTRA_AUTO_LISTEN = "auto_listen"
@@ -133,6 +141,13 @@ class HarnessService : Service() {
     private lateinit var brainClient: BrainClient
     private lateinit var telephonyActuator: TelephonyActuator
     private lateinit var smsSender: SmsSender
+    private lateinit var textSessions: TextSessionStore
+    // Inbound text turns are serialized against each other: two members texting at the same moment
+    // would otherwise run tool calls concurrently against the same shared stores. Deliberately NOT
+    // held against the voice loop — a texted question must not wait out a conversation at the wall
+    // (and must never block the wake word), which is the whole point of it being a second transport.
+    private val textTurnMutex = Mutex()
+    private val inboundRateLimiter = InboundRateLimiter()
     private lateinit var timerManager: TimerManager
     private lateinit var calendarManager: CalendarManager
     private lateinit var shoppingList: ShoppingListManager
@@ -159,6 +174,7 @@ class HarnessService : Service() {
         // The household roster is both the call allowlist and the SMS peer set.
         telephonyActuator = TelephonyActuator(this, householdManager)
         smsSender = SmsSender(this, householdManager)
+        textSessions = TextSessionStore(this)
         memoryManager = MemoryManager(this)
         speakerIdManager = SpeakerIdManager(this)
 
@@ -197,6 +213,15 @@ class HarnessService : Service() {
                 Log.d(TAG, "Timer fired: id=$id label='$label'")
                 if (id != -1) timerManager.onFired(id)
                 ensureTimerNagLoopRunning()
+            }
+            ACTION_SMS_RECEIVED -> {
+                val sender = intent.getStringExtra(EXTRA_SMS_SENDER).orEmpty()
+                val body = intent.getStringExtra(EXTRA_SMS_BODY).orEmpty()
+                // Neither value is ever logged — an inbound number and body are both PII (H2).
+                Log.d(TAG, "Inbound text received (${body.length} chars)")
+                if (sender.isNotBlank() && body.isNotBlank()) {
+                    scope.launch { handleInboundText(sender, body) }
+                }
             }
             ACTION_RUN_DREAM -> {
                 Log.d(TAG, "Dream alarm fired — running memory decay")
@@ -784,6 +809,90 @@ class HarnessService : Service() {
     }
 
     /**
+     * The written sibling of [respond]: the same tool-round loop, ending in a string instead of
+     * speech. No streaming, no sentence splitting, no barge-in, no [AgentState] — none of which mean
+     * anything for a text message, and all of which is why [respond] could not simply be reused.
+     * The wall face must not so much as flicker because someone texted.
+     */
+    private suspend fun respondText(
+        history: MutableList<ChatMessage>,
+        liveContext: String,
+        allowedTools: Set<String>,
+    ): String {
+        for (round in 0 until MAX_TOOL_ROUNDS) {
+            val response = brainClient.processText(history, liveContext, allowedTools)
+            if (response.toolCalls.isEmpty()) {
+                val text = response.speechResponse.trim()
+                if (text.isNotBlank()) history.add(ChatMessage(role = "assistant", content = text))
+                return text
+            }
+            runToolRound(response.speechResponse, response.toolCalls, history, allowedTools)
+        }
+        val fallback = "Sorry, I got a bit tangled up just now."
+        history.add(ChatMessage(role = "assistant", content = fallback))
+        return fallback
+    }
+
+    /**
+     * A text message arrived: answer it as a conversation, by text. Same brain, same tools, same
+     * stores as the wall device — a different pipe, not a second agent.
+     *
+     * Silence is the right answer twice here, and both are deliberate: a number that isn't a
+     * household member gets **nothing** (a reply would confirm to a stranger that something is
+     * listening, and cost a segment to do it), and so does a sender past their rate limit (answering
+     * a flood feeds it).
+     */
+    private suspend fun handleInboundText(sender: String, body: String) {
+        val members = householdManager.members()
+        val member = householdManager.resolveMemberByNumber(sender, members)
+        if (member == null) {
+            Log.d(TAG, "Inbound text from a number that isn't in the household — ignored")
+            return
+        }
+        val sessionKey = member.lookupKey
+        if (sessionKey == null) {
+            Log.w(TAG, "Household member has no Contacts key — cannot hold a text session")
+            return
+        }
+        if (!inboundRateLimiter.allow(sessionKey)) {
+            Log.w(TAG, "Inbound text dropped — sender is over the rate limit")
+            return
+        }
+
+        textTurnMutex.withLock {
+            try {
+                val session = textSessions.load(sessionKey)
+                // The previous conversation timed out rather than ended — hand it to episodic memory
+                // on the way past, the same way a finished spoken conversation is captured.
+                if (session.staleHistory.isNotEmpty()) captureEpisodic(session.staleHistory)
+
+                val history = session.history
+                history.add(ChatMessage(role = "user", content = body))
+                trimHistory(history)
+
+                val reply = respondText(
+                    history,
+                    buildLiveContext(textSender = member),
+                    AgentTools.textTransport,
+                )
+                trimHistory(history)
+                textSessions.save(sessionKey, history)
+
+                if (reply.isBlank()) {
+                    Log.w(TAG, "No reply produced for the inbound text — nothing sent")
+                    return@withLock
+                }
+                when (val result = smsSender.sendTo(member, reply)) {
+                    is SmsSender.Result.Sent -> Log.d(TAG, "Replied by text (${result.segments} segment(s))")
+                    else -> Log.w(TAG, "Text reply not sent: ${result.javaClass.simpleName}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Inbound text turn failed", e)
+            }
+        }
+    }
+
+    /**
      * The actuator: run one tool and return a short natural-language result for the model to
      * phrase (never spoken directly). Add a `when` branch here for each new [AgentTools] entry.
      */
@@ -1152,7 +1261,13 @@ class HarnessService : Service() {
      * header itself states that an absent category means there's currently none, so omission stays
      * unambiguous. Runs off the main thread (location + calendar are content-provider reads).
      */
-    private suspend fun buildLiveContext(): String = withContext(Dispatchers.IO) {
+    /**
+     * @param textSender set on the SMS transport to the member who sent the message. It replaces the
+     * voice path's soft speaker guess (inbound SMS gives identity for free, and the wall device's
+     * mic has nothing to do with it) and appends the written-medium addendum — see
+     * [TeyaPersona.textTransportBlock].
+     */
+    private suspend fun buildLiveContext(textSender: Member? = null): String = withContext(Dispatchers.IO) {
         val now = LocalDateTime.now()
         val zone = ZoneId.systemDefault()
         // 12-hour format ("9:05 PM") so the model never has to do a 24h→12h conversion (it fumbles
@@ -1264,22 +1379,28 @@ class HarnessService : Service() {
         // identification failures are swallowed (no speaker line that turn) rather than breaking
         // the conversation. See pendingSpeakerAudio/pendingCommandAudio/currentTurnSpeaker's doc
         // comments.
-        val wakeAudio = pendingSpeakerAudio
-        if (wakeAudio != null) {
-            pendingSpeakerAudio = null
-            currentTurnSpeaker = identifySpeaker(wakeAudio, members)
+        // On the text transport none of this applies: who sent the message is known for certain
+        // from their number, and the mic's current speaker guess (a voice conversation may well be
+        // running at the wall right now) belongs to that other conversation, not this one.
+        val speaker = if (textSender != null) "" else {
+            val wakeAudio = pendingSpeakerAudio
+            if (wakeAudio != null) {
+                pendingSpeakerAudio = null
+                currentTurnSpeaker = identifySpeaker(wakeAudio, members)
+            }
+            val commandAudio = pendingCommandAudio
+            if (commandAudio != null) {
+                pendingCommandAudio = null
+                identifySpeaker(commandAudio, members)?.let { currentTurnSpeaker = it }
+            }
+            householdManager.speakerContextBlock(currentTurnSpeaker)
         }
-        val commandAudio = pendingCommandAudio
-        if (commandAudio != null) {
-            pendingCommandAudio = null
-            identifySpeaker(commandAudio, members)?.let { currentTurnSpeaker = it }
-        }
-        val speaker = householdManager.speakerContextBlock(currentTurnSpeaker)
         val full = buildString {
             append(context)
             if (profile.isNotBlank()) append("\n\n").append(profile)
             if (memory.isNotBlank()) append("\n\n").append(memory)
             if (speaker.isNotBlank()) append("\n\n").append(speaker)
+            if (textSender != null) append("\n\n").append(TeyaPersona.textTransportBlock(textSender.displayName))
         }
         // TODO: gate behind BuildConfig.DEBUG — this line logs location + memory (PII).
         Log.d(TAG, "Live context: ${full.replace("\n", " | ")}")
