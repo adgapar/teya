@@ -149,9 +149,17 @@ object AgentTools {
                     put("type", "string")
                     put("description", "What the event is, e.g. 'Football' or 'Dentist'.")
                 }
-                putJsonObject("start") {
+                putJsonObject("day") {
                     put("type", "string")
-                    put("description", "Local start date-time, ISO 'YYYY-MM-DDTHH:MM' (e.g. 2026-07-14T17:30).")
+                    put("description", "WHICH DAY, in the person's own words: a weekday name " +
+                        "('monday', 'next friday'), 'today'/'tomorrow', or a plain date " +
+                        "'YYYY-MM-DD'. Do NOT work out the date for a weekday yourself — pass the " +
+                        "weekday word and the device resolves it. Getting this wrong is the single " +
+                        "most common calendar mistake.")
+                }
+                putJsonObject("time") {
+                    put("type", "string")
+                    put("description", "Time of day, e.g. '17:30' or '5:30pm'.")
                 }
                 putJsonObject("duration_minutes") {
                     put("type", "integer")
@@ -195,7 +203,7 @@ object AgentTools {
                         "get the invite. Ignored if 'attendees' is set.")
                 }
             }
-            putJsonArray("required") { add("title"); add("start") }
+            putJsonArray("required") { add("title"); add("day"); add("time") }
         },
     )
 
@@ -221,15 +229,71 @@ object AgentTools {
 
     val cancelEvent = ToolSpec(
         name = "cancel_event",
-        description = "Remove an event from the family calendar by its title (e.g. 'football'). " +
-            "Removes the whole series if it repeats. This is the ONLY way to cancel an event — " +
-            "never re-add an event to try to remove it.",
+        description = "Remove an event from the family calendar. This is the ONLY way to cancel " +
+            "one — never re-add an event to try to remove it. If several events match the name, " +
+            "this does NOT delete them: it returns the list so you can ask which one is meant.",
         parameters = buildJsonObject {
             put("type", "object")
             putJsonObject("properties") {
                 putJsonObject("title") {
                     put("type", "string")
                     put("description", "The event to remove, matched by name, e.g. 'dentist'.")
+                }
+                putJsonObject("start") {
+                    put("type", "string")
+                    put("description", "Which one, when several share the name: copy its exact " +
+                        "start=... value from the list this tool gave you. Never invent one.")
+                }
+                putJsonObject("all") {
+                    put("type", "boolean")
+                    put("description", "Delete EVERY event matching the name. Only pass true when " +
+                        "the person has clearly asked to remove all of them (e.g. after you listed " +
+                        "them and they said 'yes, all of them'). Never guess this.")
+                }
+            }
+            putJsonArray("required") { add("title") }
+        },
+    )
+
+    val moveEvent = ToolSpec(
+        name = "move_event",
+        description = "Change an event that already exists — its time, length, place or name. Use " +
+            "this whenever something on the calendar is wrong or needs to shift ('make it half an " +
+            "hour later', 'it's at the studio now'). NEVER call add_event to correct an existing " +
+            "event: that leaves the wrong one in place and creates a duplicate beside it.",
+        parameters = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {
+                putJsonObject("title") {
+                    put("type", "string")
+                    put("description", "The event to change, matched by its CURRENT name.")
+                }
+                putJsonObject("start") {
+                    put("type", "string")
+                    put("description", "Which one, when several share the name: copy its exact " +
+                        "start=... value from the list this tool gave you. Never invent one.")
+                }
+                putJsonObject("new_day") {
+                    put("type", "string")
+                    put("description", "The new day, in the person's own words ('friday', " +
+                        "'tomorrow') or 'YYYY-MM-DD'. Leave out to keep the same day. Never work " +
+                        "out a weekday's date yourself.")
+                }
+                putJsonObject("new_time") {
+                    put("type", "string")
+                    put("description", "The new time of day, e.g. '18:00'. Leave out to keep it.")
+                }
+                putJsonObject("duration_minutes") {
+                    put("type", "integer")
+                    put("description", "New length in minutes. Leave out to keep the current one.")
+                }
+                putJsonObject("location") {
+                    put("type", "string")
+                    put("description", "New location. Leave out to keep the current one.")
+                }
+                putJsonObject("new_title") {
+                    put("type", "string")
+                    put("description", "New name for the event. Leave out to keep the current one.")
                 }
             }
             putJsonArray("required") { add("title") }
@@ -424,36 +488,15 @@ object AgentTools {
         },
     )
 
-    /**
-     * Withheld from the **inbound text transport** (someone texting Teya) — the one carve-out in an
-     * otherwise identical tool set. Not a sensitivity ranking: a household has no internal
-     * need-to-know boundary, and gating "private" tools when the only reader is the person whose
-     * data it is would be theatre.
-     *
-     * The line is **reach**: an inbound text is authenticated by nothing stronger than its
-     * originating number, which is spoofable, so what a spoofer must not get is the ability to make
-     * Teya act on the world *outside* the house — ring a real person's phone, or relay a message as
-     * the family. Those two, and only those two.
-     *
-     * Deliberately narrower than it first shipped (2026-09-14). It also withheld `cancel_event`,
-     * `clear_shopping_list`, `delete_expense` and `forget` on irreversibility grounds, and that
-     * blocked a real household request ("clean up the calendar") within an hour of shipping. The
-     * reasoning didn't hold: those destroy household data the sender could equally destroy by
-     * walking up to the wall and saying so out loud, and the attacker who spoofs a family number to
-     * vandalise a shopping list is not a threat a home appliance needs to price in. Full reasoning:
-     * `thoughts/shared/plans/2026-08-02-sms-transport.md` → Security.
-     */
-    val withheldFromText: Set<String> = setOf(
-        "place_call",     // rings a real person's phone, outside the house and outside the reply
-        "send_message",   // would make Teya a relay for whoever spoofed the number
-    )
+    /** Not offered over SMS: an inbound number is spoofable, and these two act outside the conversation. */
+    val withheldFromText: Set<String> = setOf("place_call", "send_message")
 
-    /** The tool names offered on the text transport — everything except [withheldFromText]. */
+    /** Tool names offered on the text transport. */
     val textTransport: Set<String> by lazy { all.map { it.name }.toSet() - withheldFromText }
 
     /** All tools currently exposed to the brain. */
     val all: List<ToolSpec> = listOf(
-        placeCall, sendMessage, setTimer, cancelTimer, setAlarm, cancelAlarm, addEvent, getEvents, cancelEvent,
+        placeCall, sendMessage, setTimer, cancelTimer, setAlarm, cancelAlarm, addEvent, getEvents, cancelEvent, moveEvent,
         addToShoppingList, removeFromShoppingList, readShoppingList, clearShoppingList,
         logExpense, queryExpenses, deleteExpense,
         remember, forget, searchMemory,

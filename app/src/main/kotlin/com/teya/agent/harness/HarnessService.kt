@@ -19,6 +19,7 @@ import androidx.core.app.NotificationCompat
 import com.teya.agent.R
 import com.teya.agent.brain.*
 import com.teya.agent.calendar.CalendarManager
+import com.teya.agent.calendar.WhenResolver
 import com.teya.agent.expenses.ExpenseManager
 import com.teya.agent.household.HouseholdManager
 import com.teya.agent.household.Languages
@@ -66,7 +67,6 @@ class HarnessService : Service() {
         const val ACTION_RUN_DREAM = "com.teya.agent.action.RUN_DREAM"
         /** Sent by the main screen's corner icon to flip manual touch mode (tap-only). */
         const val ACTION_TOGGLE_TOUCH_MODE = "com.teya.agent.action.TOGGLE_TOUCH_MODE"
-        /** An inbound text handed over by [com.teya.agent.messaging.SmsReceiver]. */
         const val ACTION_SMS_RECEIVED = "com.teya.agent.action.SMS_RECEIVED"
         const val EXTRA_SMS_SENDER = "sms_sender"
         const val EXTRA_SMS_BODY = "sms_body"
@@ -103,6 +103,7 @@ class HarnessService : Service() {
         // "Voice tuning" section — see ConfigManager.bargeInGapMs.
         private const val MAX_HISTORY = 10           // bounded conversation history sent to the model
         private const val MAX_TOOL_ROUNDS = 4        // cap tool→result→model loops per user turn
+        private const val MAX_DESTRUCTIVE_PER_TURN = 3  // calendar deletions before a turn must check in
         private const val DREAM_REQUEST_CODE = 7     // PendingIntent id for the nightly dream alarm
         private const val DREAM_HOUR = 3             // run the dreamer at ~3 AM (device idle + charging)
     }
@@ -116,6 +117,8 @@ class HarnessService : Service() {
     // Only one ever runs — it re-reads TimerManager.ringing() each cycle, so timers that fire while
     // it's already going just get folded into the next announcement, no need for a loop per timer.
     @Volatile private var timerNagJob: Job? = null
+    // Reset by respond/respondText; capped at MAX_DESTRUCTIVE_PER_TURN.
+    private var destructiveCallsThisTurn = 0
 
     // Minute-tick reconcile of idle wake-word listening with touch mode / the quiet-hours window
     // (see ensureListeningModeLoopRunning).
@@ -142,10 +145,7 @@ class HarnessService : Service() {
     private lateinit var telephonyActuator: TelephonyActuator
     private lateinit var smsSender: SmsSender
     private lateinit var textSessions: TextSessionStore
-    // Inbound text turns are serialized against each other: two members texting at the same moment
-    // would otherwise run tool calls concurrently against the same shared stores. Deliberately NOT
-    // held against the voice loop — a texted question must not wait out a conversation at the wall
-    // (and must never block the wake word), which is the whole point of it being a second transport.
+    // Serializes text turns against each other only, never against the voice loop.
     private val textTurnMutex = Mutex()
     private val inboundRateLimiter = InboundRateLimiter()
     private lateinit var timerManager: TimerManager
@@ -217,7 +217,6 @@ class HarnessService : Service() {
             ACTION_SMS_RECEIVED -> {
                 val sender = intent.getStringExtra(EXTRA_SMS_SENDER).orEmpty()
                 val body = intent.getStringExtra(EXTRA_SMS_BODY).orEmpty()
-                // Neither value is ever logged — an inbound number and body are both PII (H2).
                 Log.d(TAG, "Inbound text received (${body.length} chars)")
                 if (sender.isNotBlank() && body.isNotBlank()) {
                     scope.launch { handleInboundText(sender, body) }
@@ -636,6 +635,7 @@ class HarnessService : Service() {
      * context is preserved across the round-trip and into later turns.
      */
     private suspend fun respond(history: MutableList<ChatMessage>) {
+        destructiveCallsThisTurn = 0
         // Refresh live device state once per user turn; the same snapshot is used across any tool
         // rounds within this turn (time won't drift meaningfully over a few seconds).
         val liveContext = buildLiveContext()
@@ -737,7 +737,6 @@ class HarnessService : Service() {
                 return
             }
 
-            // Tools requested — hand the round to the shared runner and loop.
             runToolRound(fullText.toString(), response.toolCalls, history)
         }
         if (interrupted) return
@@ -769,15 +768,9 @@ class HarnessService : Service() {
     }
 
     /**
-     * One tool round, with no transport in it — the part [respond] (voice) and [respondText] (SMS)
-     * genuinely share. Records the assistant turn (whatever it said or wrote, plus EVERY call it
-     * asked for), runs the calls **sequentially in code** so two of them can't race on the same
-     * store, and feeds each result back by `tool_call_id`.
-     *
-     * [allowedTools], when given, is a second line of defence for the text transport: those tools
-     * were never offered to the model for that call (see [AgentTools.withheldFromText]), so a call
-     * to one means something is wrong — refuse it here rather than execute it, and let the model
-     * phrase the refusal.
+     * The transport-agnostic half of a turn, shared by [respond] and [respondText]: record the
+     * assistant turn, run its calls sequentially, feed each result back by `tool_call_id`.
+     * A call outside [allowedTools] is refused rather than executed.
      */
     private suspend fun runToolRound(
         assistantText: String,
@@ -808,17 +801,13 @@ class HarnessService : Service() {
         }
     }
 
-    /**
-     * The written sibling of [respond]: the same tool-round loop, ending in a string instead of
-     * speech. No streaming, no sentence splitting, no barge-in, no [AgentState] — none of which mean
-     * anything for a text message, and all of which is why [respond] could not simply be reused.
-     * The wall face must not so much as flicker because someone texted.
-     */
+    /** The written sibling of [respond]: same tool-round loop, returning a string, touching no UI or audio. */
     private suspend fun respondText(
         history: MutableList<ChatMessage>,
         liveContext: String,
         allowedTools: Set<String>,
     ): String {
+        destructiveCallsThisTurn = 0
         for (round in 0 until MAX_TOOL_ROUNDS) {
             val response = brainClient.processText(history, liveContext, allowedTools)
             if (response.toolCalls.isEmpty()) {
@@ -833,15 +822,7 @@ class HarnessService : Service() {
         return fallback
     }
 
-    /**
-     * A text message arrived: answer it as a conversation, by text. Same brain, same tools, same
-     * stores as the wall device — a different pipe, not a second agent.
-     *
-     * Silence is the right answer twice here, and both are deliberate: a number that isn't a
-     * household member gets **nothing** (a reply would confirm to a stranger that something is
-     * listening, and cost a segment to do it), and so does a sender past their rate limit (answering
-     * a flood feeds it).
-     */
+    /** Answer an inbound text. An unknown number and a rate-limited sender both get silence, not a refusal. */
     private suspend fun handleInboundText(sender: String, body: String) {
         val members = householdManager.members()
         val member = householdManager.resolveMemberByNumber(sender, members)
@@ -862,20 +843,17 @@ class HarnessService : Service() {
         textTurnMutex.withLock {
             try {
                 val session = textSessions.load(sessionKey)
-                // The previous conversation timed out rather than ended — hand it to episodic memory
-                // on the way past, the same way a finished spoken conversation is captured.
                 if (session.staleHistory.isNotEmpty()) captureEpisodic(session.staleHistory)
 
                 val history = session.history
                 history.add(ChatMessage(role = "user", content = body))
-                trimHistory(history)
 
+                // Bounding is TextSessionStore.trimmed's job here, not trimHistory's 10-message cap.
                 val reply = respondText(
                     history,
                     buildLiveContext(textSender = member),
                     AgentTools.textTransport,
                 )
-                trimHistory(history)
                 textSessions.save(sessionKey, history)
 
                 if (reply.isBlank()) {
@@ -1012,9 +990,11 @@ class HarnessService : Service() {
         }
         "add_event" -> {
             val title = tool.arguments["title"]?.takeIf { it.isNotBlank() }
-            val startMillis = tool.arguments["start"]?.let { parseIsoToMillis(it) }
+            val day = tool.arguments["day"]
+            val startMillis = WhenResolver.resolve(day, tool.arguments["time"])
+                ?: tool.arguments["start"]?.let { parseIsoToMillis(it) }
             if (title == null || startMillis == null) {
-                "I couldn't add it — I need at least a title and a start time."
+                "I couldn't add it — I need a title, which day, and what time."
             } else {
                 val duration = tool.arguments["duration_minutes"]?.toIntOrNull()?.takeIf { it > 0 } ?: 60
                 val location = tool.arguments["location"]?.takeIf { it.isNotBlank() }
@@ -1042,17 +1022,24 @@ class HarnessService : Service() {
                 // (e.g. kids), not worth mentioning every time.
                 val missingEmail = if (explicitNames.isNotEmpty()) invited.filter { it.email.isBlank() }.map { it.displayName } else emptyList()
 
-                val id = withContext(Dispatchers.IO) {
-                    calendarManager.addEvent(title, startMillis, duration, location, rrule, invitable.map { it.email })
-                }
-                if (id != null) {
-                    "Added \"$title\"" + (if (rrule != null) ", repeating" else "") +
-                        (location?.let { " at $it" } ?: "") +
-                        (if (invitable.isNotEmpty()) ", invited ${invitable.joinToString(", ") { it.displayName }}" else "") +
-                        "." +
-                        (if (missingEmail.isNotEmpty()) " I couldn't invite ${missingEmail.joinToString(", ")} — no email on file." else "")
+                val existing = withContext(Dispatchers.IO) { calendarManager.findEventsByTitle(title) }
+                    .firstOrNull { kotlin.math.abs(it.startMillis - startMillis) < 60_000L }
+                if (existing != null) {
+                    "\"$title\" is ALREADY on the calendar at ${spellOut(startMillis)} — nothing added, " +
+                        "there is no second copy. If the details need to change, use move_event on it."
                 } else {
-                    "I couldn't add that to the calendar."
+                    val id = withContext(Dispatchers.IO) {
+                        calendarManager.addEvent(title, startMillis, duration, location, rrule, invitable.map { it.email })
+                    }
+                    if (id != null) {
+                        "Added \"$title\" on ${spellOut(startMillis)}" + (if (rrule != null) ", repeating" else "") +
+                            (location?.let { " at $it" } ?: "") +
+                            (if (invitable.isNotEmpty()) ", invited ${invitable.joinToString(", ") { it.displayName }}" else "") +
+                            "." +
+                            (if (missingEmail.isNotEmpty()) " I couldn't invite ${missingEmail.joinToString(", ")} — no email on file." else "")
+                    } else {
+                        "I couldn't add that to the calendar."
+                    }
                 }
             }
         }
@@ -1079,12 +1066,71 @@ class HarnessService : Service() {
             val query = tool.arguments["title"]?.takeIf { it.isNotBlank() }
             if (query == null) {
                 "Which event should I cancel? Tell me its name."
-            } else {
-                val deleted = withContext(Dispatchers.IO) { calendarManager.deleteEventsByTitle(query) }
+            } else withContext(Dispatchers.IO) {
+                val matches = calendarManager.findEventsByTitle(query)
+                val picked = pickEvent(matches, tool.arguments["start"])
+                val all = tool.arguments["all"]?.toBoolean() == true
+                destructiveCallsThisTurn++
                 when {
-                    deleted.isEmpty() -> "I couldn't find an event matching \"$query\" to cancel."
-                    deleted.size == 1 -> "Removed \"${deleted[0]}\" from the calendar."
-                    else -> "Removed ${deleted.size} events matching \"$query\": ${deleted.joinToString(", ")}."
+                    destructiveCallsThisTurn > MAX_DESTRUCTIVE_PER_TURN ->
+                        "STOP — nothing was cancelled. You have already removed " +
+                            "${MAX_DESTRUCTIVE_PER_TURN} things from the calendar in this one turn, " +
+                            "which is as many as you may do without checking. Tell the person what " +
+                            "you have removed so far and what is still left to do, and wait for " +
+                            "them to confirm before removing anything else."
+                    matches.isEmpty() -> "I couldn't find an event matching \"$query\" to cancel."
+                    all -> {
+                        val removed = matches.count { calendarManager.deleteEvent(it.id) }
+                        "Removed all $removed events matching \"$query\"."
+                    }
+                    picked == null -> "STOP — nothing was cancelled, and you must not run any more " +
+                        "calendar calls this turn. Several events match \"$query\". Reply asking " +
+                        "which one, and wait for the answer before doing anything else: " +
+                        describeMatches(matches)
+                    calendarManager.deleteEvent(picked.id) ->
+                        "Removed \"${picked.title}\" (${spellOut(picked.startMillis)})" +
+                            (if (picked.recurring) " and the whole repeating series" else "") + " from the calendar."
+                    else -> "I couldn't remove \"${picked.title}\" — the calendar refused the change."
+                }
+            }
+        }
+        "move_event" -> {
+            val query = tool.arguments["title"]?.takeIf { it.isNotBlank() }
+            if (query == null) {
+                "Which event should I change? Tell me its name."
+            } else withContext(Dispatchers.IO) {
+                val matches = calendarManager.findEventsByTitle(query)
+                val picked = pickEvent(matches, tool.arguments["start"])
+                val newStart = WhenResolver.resolve(tool.arguments["new_day"], tool.arguments["new_time"])
+                    ?: tool.arguments["new_start"]?.let { parseIsoToMillis(it) }
+                    // A time with no day means "same day, new time".
+                    ?: WhenResolver.parseTime(tool.arguments["new_time"])?.let { t ->
+                        picked?.let {
+                            Instant.ofEpochMilli(it.startMillis).atZone(ZoneId.systemDefault())
+                                .with(t).toInstant().toEpochMilli()
+                        }
+                    }
+                val duration = tool.arguments["duration_minutes"]?.toIntOrNull()?.takeIf { it > 0 }
+                val location = tool.arguments["location"]?.takeIf { it.isNotBlank() }
+                val newTitle = tool.arguments["new_title"]?.takeIf { it.isNotBlank() }
+                when {
+                    matches.isEmpty() -> "There's no event matching \"$query\" on the calendar to change."
+                    picked == null -> "STOP — nothing was changed, and you must not run any more " +
+                        "calendar calls this turn. Several events match \"$query\". Reply asking " +
+                        "which one, and wait for the answer: " + describeMatches(matches)
+                    newStart == null && duration == null && location == null && newTitle == null ->
+                        "Nothing to change — tell me what about \"${picked.title}\" is different now."
+                    calendarManager.moveEvent(picked.id, picked.recurring, newStart, duration, location, newTitle) -> {
+                        val what = listOfNotNull(
+                            newStart?.let { "now ${spellOut(it)}" },
+                            duration?.let { "$it minutes long" },
+                            location?.let { "at $it" },
+                            newTitle?.let { "called \"$it\"" },
+                        ).joinToString(", ")
+                        "Updated \"${picked.title}\": $what." +
+                            if (picked.recurring) " That's a repeating event, so every occurrence moved." else ""
+                    }
+                    else -> "I couldn't change \"${picked.title}\" — the calendar refused the update."
                 }
             }
         }
@@ -1209,6 +1255,29 @@ class HarnessService : Service() {
     }
 
     /** Household member emails, lowercased — the calendar's organizer allowlist (see [CalendarManager.events]). */
+    /** The only match, or the one whose start was named. Null = ambiguous, and the caller must ask. */
+    private fun pickEvent(
+        matches: List<CalendarManager.EventMatch>,
+        startArg: String?,
+    ): CalendarManager.EventMatch? {
+        if (matches.size == 1) return matches.first()
+        val wanted = startArg?.let { parseIsoToMillis(it) } ?: return null
+        return matches.firstOrNull { kotlin.math.abs(it.startMillis - wanted) < 60_000L }
+    }
+
+    /** Weekday-first timestamp; every calendar result names the day it landed on, not an ISO echo. */
+    private fun spellOut(millis: Long): String =
+        Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
+            .format(DateTimeFormatter.ofPattern("EEEE d MMMM, h:mm a", Locale.ENGLISH))
+
+    /** The ambiguity list; the ISO start is what the model hands back to pick a row. */
+    private fun describeMatches(matches: List<CalendarManager.EventMatch>): String =
+        matches.joinToString("; ") { m ->
+            val iso = Instant.ofEpochMilli(m.startMillis).atZone(ZoneId.systemDefault())
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm"))
+            "\"${m.title}\" ${spellOut(m.startMillis)} (start=$iso)" + if (m.recurring) " (repeating)" else ""
+        }
+
     private fun trustedOrganizerEmails(members: List<Member>): Set<String> =
         members.mapNotNull { it.email.takeIf { e -> e.isNotBlank() }?.lowercase() }.toSet()
 
@@ -1262,9 +1331,7 @@ class HarnessService : Service() {
      * unambiguous. Runs off the main thread (location + calendar are content-provider reads).
      */
     /**
-     * @param textSender set on the SMS transport to the member who sent the message. It replaces the
-     * voice path's soft speaker guess (inbound SMS gives identity for free, and the wall device's
-     * mic has nothing to do with it) and appends the written-medium addendum — see
+     * @param textSender on the SMS transport: replaces the voice speaker guess and appends
      * [TeyaPersona.textTransportBlock].
      */
     private suspend fun buildLiveContext(textSender: Member? = null): String = withContext(Dispatchers.IO) {
@@ -1286,6 +1353,7 @@ class HarnessService : Service() {
             d.format(dayFmt) + (if (d == today) " (today)" else "")
         }
         lines += "This week: ${weekLine(monday)}"
+        lines += "Next week: ${weekLine(monday.plusWeeks(1))}"
         lines += "Last week: ${weekLine(monday.minusWeeks(1))}"
 
         lastKnownLocation()?.let { loc ->
@@ -1379,9 +1447,7 @@ class HarnessService : Service() {
         // identification failures are swallowed (no speaker line that turn) rather than breaking
         // the conversation. See pendingSpeakerAudio/pendingCommandAudio/currentTurnSpeaker's doc
         // comments.
-        // On the text transport none of this applies: who sent the message is known for certain
-        // from their number, and the mic's current speaker guess (a voice conversation may well be
-        // running at the wall right now) belongs to that other conversation, not this one.
+        // Text has certain identity from the number, and the mic's guess belongs to another conversation.
         val speaker = if (textSender != null) "" else {
             val wakeAudio = pendingSpeakerAudio
             if (wakeAudio != null) {
@@ -1504,13 +1570,7 @@ class HarnessService : Service() {
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // Microphone only, and it must stay a subset of the manifest's
-                // android:foregroundServiceType or startForeground throws and the service silently
-                // never becomes foreground at all. It used to also pass PHONE_CALL, which stopped
-                // being declared when the inbound-call half was removed (2026-09-09) — every start
-                // since then threw IllegalArgumentException, caught and logged below, leaving a
-                // background service that Android is free to kill (and that can no longer legally
-                // start itself from the SMS receiver).
+                // Must stay a subset of the manifest's android:foregroundServiceType, or this throws.
                 startForeground(
                     NOTIFICATION_ID,
                     notification,

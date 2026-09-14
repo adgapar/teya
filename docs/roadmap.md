@@ -148,6 +148,34 @@ rendered straight from `AgentTools.withheldFromText` so the prompt can't drift f
 _• Also fixed: the sent-`PendingIntent` log read its result backwards — `-1` is `Activity.RESULT_OK`,
 not a failure (`SmsManager`'s error codes are the small positive ones)._
 
+_2026-09-14, later: **calendar tool fixes.** SMS made the existing calendar bugs easy to hit — an
+afternoon of texting produced duplicate events, "Friday" football on Saturday, and one 270-char
+message that ran 8 `cancel_event` + 6 `add_event` calls in 4 seconds._
+_• **`move_event` added.** There was no way to change an event, so every correction became a
+duplicate. Handles the recurring-`DURATION` vs one-off-`DTEND` split. (Pattern note: create needs
+*edit*, not just an inverse.)_
+_• **`cancel_event` no longer bulk-deletes.** Was one `DELETE ... WHERE TITLE LIKE '%q%'`; now
+`findEventsByTitle` → `deleteEvent(id)`, and >1 match deletes nothing and returns the list with
+exact `start=` values. `all=true` is opt-in; LIKE wildcards escaped._
+_• **Dates resolved in code** (`calendar/WhenResolver`, `WhenResolverTest`). Tools take a day word
+("friday", "tomorrow") + time instead of an ISO datetime the model computed — it wrote Sat 19 Sep
+for Friday, and Tue/Thu for Mon/Wed. Results now spell the weekday back._
+_• **Duplicate guard** in `add_event` (same title within a minute of the same start → refused) and
+**`MAX_DESTRUCTIVE_PER_TURN = 3`** before a turn must stop and report._
+_• **Text sessions persist tool rounds.** They were dropped, so a disambiguation list was gone by
+the next text (invented dates) and Teya had no record of her own actions (re-adds). Also the voice
+loop's 10-message cap was being applied to hour-long threads — every inbound logged `Processing 9
+messages`. Trim keeps call/result pairs intact (an orphaned result 400s the request)._
+_• **Evals** (`app/src/test/.../evals/`) — live Mistral calls asserting which tools get chosen, one
+case per failure above. Opt-in on `MISTRAL_API_KEY`. 8/8 pass. One of them is deliberately aimed at
+the recovery rather than the model's restraint: prompting Teya to check the events already in her
+context before adding does **not** work reliably (strengthening the wording only moved the
+behaviour — she began calling `get_events` first when the calendar was empty, and still skipped the
+check when the event was actually there), so the duplicate guarantee is the store's refusal, and
+what the eval pins is that she reports it and doesn't retry. Same lesson as the dates: a check the
+code can do must not be delegated to the model. Note also the live state only carries **7 days**,
+so beyond that she genuinely cannot know what exists — the code guard is the only defence there._
+
 ## ✅ Done
 
 - Android app + always-on foreground service (`HarnessService`), **particle-field voice face** (`AgentFace`), centred live transcript.

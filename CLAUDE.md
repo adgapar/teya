@@ -64,6 +64,14 @@ Key files:
 - Models: chat `mistral-small-latest`; STT `voxtral-mini-latest`; TTS `voxtral-mini-tts-latest`, voice `fr_marie_happy`
   (catalog: `docs/mistral-voices.md`).
 
+## Evals (live, against Mistral)
+`app/src/test/kotlin/com/teya/agent/evals/` — real calls to the real model with the real persona +
+`AgentTools`, asserting on **which tools it decides to call and with what arguments**. Every case is
+a failure that actually happened on a family's calendar. Opt-in: with no `MISTRAL_API_KEY` (env or
+`.env`) they all skip, so `./gradlew test` and CI stay green and free.
+`./gradlew testDebugUnitTest --tests "com.teya.agent.evals.*"` · one is **known-failing on purpose**
+(see its doc comment) — a red eval here is a finding, not a broken build.
+
 ## Build / install / test  (device is on wireless adb)
 - Install: `./gradlew installDebug --offline`  · Compile-check only: `./gradlew assembleDebug --offline`
 - adb drops off periodically → `No connected devices!`; ask the user to reconnect (USB / re-toggle wireless debugging).

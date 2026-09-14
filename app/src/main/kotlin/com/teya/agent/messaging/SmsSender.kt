@@ -19,7 +19,6 @@ import com.teya.agent.household.Member
  * Outbound SMS — Teya's second transport, so what she knows is reachable from outside the house
  * (the shopping list is only useful in the supermarket aisle). Native SMS, not a messenger bot:
  * everyone already has a phone number and there is nothing for the family to install or configure.
- * Full design + why SMS beat the alternatives: `thoughts/shared/plans/2026-08-02-sms-transport.md`.
  *
  * Recipients are **household members**, resolved by the name the family actually uses, exactly as
  * `telephony.TelephonyActuator` resolves who may be called — one roster, one source of numbers.
@@ -27,9 +26,7 @@ import com.teya.agent.household.Member
  * Teya does not need to be the default SMS app: sending needs only SEND_SMS. (Same trap the call
  * feature hit with ROLE_DIALER — no role required.)
  *
- * This class is the sending half only; the inbound half — someone texting Teya and getting an
- * answer — arrives via [SmsReceiver] and is answered by `HarnessService.handleInboundText`, which
- * comes back here through [sendTo].
+ * Sending half only; inbound arrives via [SmsReceiver] and comes back here through [sendTo].
  */
 class SmsSender(
     private val context: Context,
@@ -64,11 +61,7 @@ class SmsSender(
         return sendTo(member, body)
     }
 
-    /**
-     * Send to an already-resolved member — the inbound transport's reply path, where the recipient
-     * came from the sender's own number rather than a name the model said (see
-     * [HouseholdManager.resolveMemberByNumber]). Same checks, one dispatch.
-     */
+    /** Send to an already-resolved member — the reply path, where the recipient came from their own number. */
     suspend fun sendTo(member: Member, body: String): Result {
         if (body.isBlank()) return Result.EmptyBody
         if (!hasWorkingSim()) return Result.NoSim
@@ -115,8 +108,7 @@ class SmsSender(
         var remaining = partCount
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
-                // Activity.RESULT_OK (-1) is success here, NOT 0 — SmsManager's own RESULT_ERROR_*
-                // codes are the small positive ones, so a plain number in the log reads backwards.
+                // SmsManager reports success as Activity.RESULT_OK (-1); its errors are small positives.
                 val outcome = if (resultCode == android.app.Activity.RESULT_OK) "OK" else "FAILED ($resultCode)"
                 Log.d(TAG, "SMS part result: $outcome")
                 if (--remaining <= 0) runCatching { ctx.unregisterReceiver(this) }

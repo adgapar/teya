@@ -6,10 +6,7 @@ interface BrainClient {
      * @param liveContext optional "live device state" (current time, location, …) the harness
      * refreshes each turn and the provider folds into the system prompt, so the model already
      * knows these facts and needn't spend a tool round-trip fetching them.
-     * @param allowedTools when non-null, only these tool names are offered to the model this call.
-     * The inbound-SMS transport uses it to withhold the irreversible/outward-facing tools, since a
-     * text's sender is authenticated by nothing stronger than a spoofable caller ID (see
-     * `thoughts/shared/plans/2026-08-02-sms-transport.md` → Security). Null = every tool.
+     * @param allowedTools when non-null, only these tool names are offered to the model; null = all.
      */
     suspend fun processText(
         history: List<ChatMessage>,

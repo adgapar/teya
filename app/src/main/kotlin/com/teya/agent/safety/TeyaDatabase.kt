@@ -99,7 +99,7 @@ abstract class TeyaDatabase : RoomDatabase() {
             }
         }
 
-        /** v4→v5: add `text_session` (the SMS transport's per-member conversation state). */
+        /** v4→v5: add `text_session`. */
         private val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(

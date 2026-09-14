@@ -228,7 +228,6 @@ class MainActivity : ComponentActivity() {
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.CALL_PHONE,
             Manifest.permission.SEND_SMS,
-            // The inbound text transport — without it a texted question reaches nothing.
             Manifest.permission.RECEIVE_SMS,
             // Household members live in Contacts; location feeds the ambient "home"/weather context.
             // Requested here too so the upgrade path (onboarding already done) still grants them.

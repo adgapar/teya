@@ -201,26 +201,110 @@ class CalendarManager(private val context: Context) {
         }
     }
 
-    /**
-     * Delete events whose title contains [query] (case-insensitive), scoped to Teya's own target
-     * calendar so we never touch birthdays/other apps' calendars. Deleting a recurring event's row
-     * removes the whole series. Returns the titles removed.
-     */
-    fun deleteEventsByTitle(query: String): List<String> = try {
+    /** A stored event row, not an instance: [startMillis] is a series' DTSTART, not its next occurrence. */
+    data class EventMatch(
+        val id: Long,
+        val title: String,
+        val startMillis: Long,
+        val recurring: Boolean,
+    )
+
+    /** Events whose title contains [query], scoped to Teya's own calendar so a search never reaches birthdays. */
+    fun findEventsByTitle(query: String): List<EventMatch> = try {
         val calId = targetCalendarId()
         val selection = "${CalendarContract.Events.CALENDAR_ID} = ? AND ${CalendarContract.Events.TITLE} LIKE ?"
-        val args = arrayOf(calId.toString(), "%$query%")
-        val titles = mutableListOf<String>()
-        resolver.query(CalendarContract.Events.CONTENT_URI, arrayOf(CalendarContract.Events.TITLE), selection, args, null)
-            ?.use { c -> while (c.moveToNext()) titles.add(c.getString(0) ?: "(untitled)") }
-        if (titles.isNotEmpty()) resolver.delete(CalendarContract.Events.CONTENT_URI, selection, args)
-        titles
+        // A title's own % or _ would otherwise make this a match-everything query.
+        val escaped = query.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+        val args = arrayOf(calId.toString(), "%$escaped%")
+        val matches = mutableListOf<EventMatch>()
+        resolver.query(
+            CalendarContract.Events.CONTENT_URI,
+            arrayOf(
+                CalendarContract.Events._ID,
+                CalendarContract.Events.TITLE,
+                CalendarContract.Events.DTSTART,
+                CalendarContract.Events.RRULE,
+            ),
+            "$selection ESCAPE '!'", args, "${CalendarContract.Events.DTSTART} ASC",
+        )?.use { c ->
+            while (c.moveToNext()) {
+                matches.add(EventMatch(
+                    id = c.getLong(0),
+                    title = c.getString(1) ?: "(untitled)",
+                    startMillis = c.getLong(2),
+                    recurring = !c.getString(3).isNullOrBlank(),
+                ))
+            }
+        }
+        matches
     } catch (e: SecurityException) {
-        Log.w(TAG, "Calendar write permission not granted", e)
+        Log.w(TAG, "Calendar read permission not granted", e)
         emptyList()
     } catch (e: Exception) {
-        Log.e(TAG, "Failed to delete events", e)
+        Log.e(TAG, "Failed to search events", e)
         emptyList()
+    }
+
+    /** Deletes one row; for a recurring event that is the whole series. */
+    fun deleteEvent(id: Long): Boolean = try {
+        resolver.delete(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id), null, null) > 0
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to delete event", e)
+        false
+    }
+
+    /** Writes only the non-null fields. Moving a recurring event moves the whole series. */
+    fun moveEvent(
+        id: Long,
+        recurring: Boolean,
+        newStartMillis: Long?,
+        durationMinutes: Int?,
+        location: String?,
+        title: String?,
+    ): Boolean = try {
+        val values = ContentValues().apply {
+            newStartMillis?.let {
+                put(CalendarContract.Events.DTSTART, it)
+                put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+            }
+            title?.let { put(CalendarContract.Events.TITLE, it) }
+            location?.let { put(CalendarContract.Events.EVENT_LOCATION, it) }
+            if (recurring) {
+                durationMinutes?.let { put(CalendarContract.Events.DURATION, "P${it * 60}S") }
+            } else if (durationMinutes != null || newStartMillis != null) {
+                // A one-off stores DTEND, not DURATION, so it has to move with DTSTART.
+                val start = newStartMillis ?: eventStart(id)
+                val minutes = durationMinutes ?: existingDurationMinutes(id) ?: 60
+                if (start != null) put(CalendarContract.Events.DTEND, start + minutes * 60_000L)
+            }
+        }
+        if (values.size() == 0) false
+        else resolver.update(
+            ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id), values, null, null
+        ) > 0
+    } catch (e: SecurityException) {
+        Log.w(TAG, "Calendar write permission not granted", e)
+        false
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to move event", e)
+        false
+    }
+
+    private fun eventStart(id: Long): Long? = readEventLongs(id)?.first
+
+    private fun existingDurationMinutes(id: Long): Int? = readEventLongs(id)?.let { (start, end) ->
+        if (end > start) ((end - start) / 60_000L).toInt() else null
+    }
+
+    private fun readEventLongs(id: Long): Pair<Long, Long>? = try {
+        resolver.query(
+            ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id),
+            arrayOf(CalendarContract.Events.DTSTART, CalendarContract.Events.DTEND),
+            null, null, null,
+        )?.use { c -> if (c.moveToFirst()) c.getLong(0) to c.getLong(1) else null }
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to read event times", e)
+        null
     }
 
     /** A synced (e.g. Google) writable calendar if present; else a Teya-owned local one; cached. */

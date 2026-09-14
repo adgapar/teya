@@ -88,6 +88,12 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    testOptions {
+        unitTests {
+            // The evals build a real MistralClient, which logs through android.util.Log.
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {

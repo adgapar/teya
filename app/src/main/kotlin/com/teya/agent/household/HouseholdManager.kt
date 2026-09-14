@@ -93,16 +93,9 @@ class HouseholdManager(context: Context) {
     }
 
     /**
-     * Resolve an inbound phone number to a household member — the text transport's identity check
-     * (who is allowed to talk to Teya by SMS, and who the reply goes back to).
-     *
-     * Numbers must be *compared*, never string-matched: the same person is `0612345678` in Contacts
-     * and `+33612345678` on an inbound message. [PhoneNumberUtils.compare] is the platform's own
-     * lenient trailing-digit comparison, which is exactly the pragmatic rule wanted here.
-     *
-     * Worth being clear about what this is: authentication by caller ID, which is spoofable. It's
-     * proportionate for a home appliance, and it's why the inbound path withholds the irreversible
-     * and outward-facing tools (see `thoughts/shared/plans/2026-08-02-sms-transport.md` → Security).
+     * Resolve an inbound phone number to a household member — the text transport's peer check.
+     * [PhoneNumberUtils.compare] is a lenient trailing-digit match, so `0612345678` and
+     * `+33612345678` are one person.
      */
     fun resolveMemberByNumber(number: String, members: List<Member>): Member? {
         val incoming = number.trim()

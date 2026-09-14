@@ -66,7 +66,6 @@ class MistralClient(
         MistralTool(function = MistralFunctionDef(it.name, it.description, it.parameters))
     }
 
-    /** The tool list for one call — everything, or only [allowedTools] (see [processText]). */
     private fun toolsFor(allowedTools: Set<String>?): List<MistralTool> =
         if (allowedTools == null) mistralTools
         else mistralTools.filter { it.function.name in allowedTools }
