@@ -264,10 +264,31 @@ not a failure (`SmsManager`'s error codes are the small positive ones)._
 
 1. ✅ **Calls + SMS verified live on the SIM** (2026-09-14) — a real call rang, a real text arrived,
    a text to the device was answered by text, and the withheld-tool refusal held. See the dated
-   block above. Open follow-on: **the call hands the screen to the platform dialer** — hosting it
-   inside Teya's own interface needs `ROLE_DIALER` + an `InCallService`, which means owning the
-   device's entire telephony UX (incoming calls included). Not started; decide before building.
-2. **Make interruption work well** — ✅ continuous mid-sentence barge-in during Teya's own speech
+   block above.
+2. **Host the call inside Teya** — today `place_call` fires `ACTION_CALL` and the platform dialer
+   takes the screen; Teya is gone until the call ends and someone says the wake word again. Making
+   the call happen *in her interface* has exactly one supported route: an **`InCallService` while
+   holding `ROLE_DIALER`** — i.e. Teya becomes the device's default phone app. (`MANAGE_OWN_CALLS`/
+   `ConnectionService` is for self-managed VoIP, not the SIM, so it does not apply here. This is
+   audit **C2**, finally in scope.)
+   - **The shortcut doesn't work, so don't reach for it**: floating Teya's face over the dialer via
+     `SYSTEM_ALERT_WINDOW` (already granted, already used by `WebViewAecHost`) and driving it off
+     call state is easy, but `TelecomManager.endCall()` has been restricted to the default dialer
+     since Android 9 — the hang-up button would be a lie, and it breaks the first time a kid taps it.
+   - **What taking the role actually costs**: the whole telephony UX, *including incoming calls*.
+     No stock dialer is left behind as a fallback, so without a ringing/answer screen an inbound
+     call becomes unanswerable; emergency calls must be explicitly handed back to the system. Plus
+     call states, audio routing (speaker-by-default suits a wall device), mute, DTMF, and the
+     hold/second-call edge cases.
+   - **Why it's now worth it anyway**: [[device-form-factor]] says a wall appliance is not a number
+     anyone dials — but the SIM changed that fact. The device *has* a number, and anyone Teya calls
+     can call back, so an incoming-call screen is owed either way; the only question is whose. And
+     the prize isn't cosmetic: with an `InCallService` Teya stays resident *during* the call, which
+     is what unlocks "Teya, hang up" by voice and a call screen a five-year-old can actually read.
+   - **Not started.** Wants its own design doc in `thoughts/shared/plans/` first (the SMS transport
+     doc is the template), settling the incoming-call decision before any code — including whether
+     Teya answers inbound calls herself, silences them, or just shows who's calling.
+3. **Make interruption work well** — ✅ continuous mid-sentence barge-in during Teya's own speech
    now ships as the default, via a WebView/Chromium-hosted AEC (`getUserMedia`'s own echo
    cancellation). `NativeAec3` (vendored WebRTC AEC3, never achieved real suppression on this
    device) has been removed entirely, along with every kill-switch flag — this is no longer an
@@ -276,12 +297,12 @@ not a failure (`SmsManager`'s error codes are the small positive ones)._
    sentences) remains as the automatic fallback if the WebView host fails to start. Full phased
    history: `thoughts/shared/plans/2026-07-11-webview-chromium-aec-barge-in.md`.
    Full status + experiment trail: **`docs/experiments.md`**.
-3. **Wake word** — ✅ done: our own commercial-use-clear "hey_teya" model shipped and validated live
+4. **Wake word** — ✅ done: our own commercial-use-clear "hey_teya" model shipped and validated live
    (5/5 detections incl. ~1.5m far-field), openWakeWord/`hey_jarvis` removed entirely. Remaining:
    more validation sessions across different rooms/times/speakers; true whole-room likely still
    needs a mic array. Tuning knobs live in Admin's Voice tuning section (`ConfigManager`).
-4. **Security pass** — no plaintext key fallback (**C4**), `allowBackup=false` (**H1**), gate PII logs behind `BuildConfig.DEBUG` (**H2**).
-5. **Resource leaks** — close TFLite interpreters + `HttpClient` in `onDestroy` (**H3/H4**).
+5. **Security pass** — no plaintext key fallback (**C4**), `allowBackup=false` (**H1**), gate PII logs behind `BuildConfig.DEBUG` (**H2**).
+6. **Resource leaks** — close TFLite interpreters + `HttpClient` in `onDestroy` (**H3/H4**).
 
 ## 🏠 Household setup & personalization
 
@@ -415,6 +436,10 @@ Open-Meteo), with location from the household profile or native device location.
    an answer back, on the same brain, tools and stores through a different pipe (2026-09-14, phases
    2–4; see the dated block above). **All verified live on 2026-09-14.**
 8. Device state & control — battery, volume/DND, open-app/launch intents.
+9. **In-call presence** — the call hosted inside Teya rather than handed to the dialer
+   (`ROLE_DIALER` + `InCallService`, audit C2). This is the one capability that deliberately breaks
+   the "stay resident — don't hand off the screen" rule by *removing* the handoff instead of
+   accepting it. See Next item 2 for the full shape and its cost.
 
 ## 🧊 Backlog / ideas
 
