@@ -1357,11 +1357,17 @@ class HarnessService : Service() {
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Microphone only, and it must stay a subset of the manifest's
+                // android:foregroundServiceType or startForeground throws and the service silently
+                // never becomes foreground at all. It used to also pass PHONE_CALL, which stopped
+                // being declared when the inbound-call half was removed (2026-09-09) — every start
+                // since then threw IllegalArgumentException, caught and logged below, leaving a
+                // background service that Android is free to kill (and that can no longer legally
+                // start itself from the SMS receiver).
                 startForeground(
                     NOTIFICATION_ID,
                     notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
-                            ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
                 )
             } else {
                 startForeground(NOTIFICATION_ID, notification)
