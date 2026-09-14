@@ -44,14 +44,14 @@ There's no auto-updater — for a new version, come back to Releases, download t
 Right now, that's:
 
 - **Shopping list** — "we're out of milk" gets added without being asked twice.
-- **Calendar** — add an event by voice, recurring or not, and it invites the rest of the household by email automatically.
+- **Calendar** — add, change, or cancel by voice or text, recurring or not; invites the household by email. A reminder before the event stays on Teya's calendar (Google does not copy it onto invitees).
 - **Timers & alarms** — set one, and it announces out loud, in its own voice, when time's up.
 - **Reminders** — "remind me to call the plumber in twenty minutes" or "remind me to bring cupcakes to the school run" becomes a timer or a quiet calendar entry, whichever actually fits.
 - **Expenses** — "12 euros for fruit" gets logged and categorized on the spot; ask "how much have we spent this month" and it adds the numbers up exactly, never guessing.
 - **Calls** — "Call Grandma," spoken by a five-year-old who can't navigate a dialer, places a normal, hands-free cellular call, but only to someone in the household: no path to dialing an unknown, arbitrary, or premium number.
 - **Text messages, both ways** — everything above is bolted to a wall, which is no help to the person standing in the supermarket aisle. So Teya sends texts ("text Dad the shopping list") and answers them: text the house from anywhere and you get a reply, from the same assistant, with the same lists, calendar and memory behind it. Plain SMS, so there is nothing to install and no account to make. Only household numbers get an answer, and the two things that reach people outside the conversation — placing a call and sending a text as the family — are deliberately not available over text, because a text message isn't proof of who sent it.
 
-The biggest beneficiary is whoever in the house carries the mental load: the appointments, the meals, the logistics, the school admin nobody else tracks. Teya becomes a second brain for the household, running quietly in the background. The fuller list, including what's still ahead, lives in [docs/roadmap.md](./docs/roadmap.md).
+The biggest beneficiary is whoever in the house carries the mental load: the appointments, the meals, the logistics, the school admin nobody else tracks. Teya becomes a second brain for the household, running quietly in the background. What's still ahead lives in [docs/roadmap.md](./docs/roadmap.md).
 
 It's locked down by design: a boxed home appliance fixed in place, running on fresh accounts created solely to operate it, never the family's personal Google, social, or banking logins. **There's nothing personal on it to hijack or steal.** Combined with calls and texts reaching only the household itself, that's what makes it safe to leave on a wall within reach of kids and guests.
 
@@ -119,5 +119,5 @@ This started as a solo build, but the codebase and roadmap are open. If somethin
 ### Documents
 
 - **[How and why I built a home AI assistant](https://www.adgapar.dev/how-and-why-i-built-a-home-ai-assistant/)** — the longer write-up: motivation, hardware choice, and the engineering challenges behind it.
-- **[docs/roadmap.md](./docs/roadmap.md)** — status: what's built, verified live, and what's next.
+- **[docs/roadmap.md](./docs/roadmap.md)** — what's next. What's built is this README.
 - **[LICENSE](./LICENSE)** — Apache-2.0.
